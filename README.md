@@ -42,6 +42,11 @@ aqi-sentinel/
 |-- pipeline/
 |   |-- generate_demo_data.py
 |   |-- build_features.py
+|   |-- build_real_features.py
+|   |-- cpcb_csv_adapter.py
+|   |-- ingest_cpcb_csv.py
+|   |-- openaq_client.py
+|   |-- audit_openaq_bengaluru.py
 |   `-- storage.py
 |-- ml/
 |   |-- common.py
@@ -51,7 +56,8 @@ aqi-sentinel/
 |   `-- artifacts/
 |-- data/
 |   |-- raw/
-|   `-- processed/
+|   |-- processed/
+|   `-- reports/
 |-- tests/
 |-- requirements.txt
 |-- .env.example
@@ -235,6 +241,111 @@ No Bengaluru stations returned: verify the bounding box, API key, and current Op
 Insufficient historical coverage: try a longer lookback or import official CPCB CSV data for comparison.
 
 API schema mismatch: parsing is isolated in `pipeline/openaq_client.py` and `pipeline/audit_openaq_bengaluru.py`; update those adapters if OpenAQ changes field names.
+
+## Milestone 2B - Real Hebbal CPCB/KSPCB Forecasting
+
+This phase ingests a real 15-minute CPCB/KSPCB station export for Hebbal, Bengaluru, trains a real 24-hour PM2.5 forecasting model, and exposes the forecast through a dedicated FastAPI endpoint.
+
+This phase does not replace synthetic Milestone 1 data, add weather reanalysis, build a frontend, add agents/LLMs, or introduce a database.
+
+### Purpose and Scope
+
+Convert a real official-style Hebbal KSPCB 15-minute air-quality CSV into a validated hourly dataset, train and evaluate a real 24-hour PM2.5 forecasting model, and expose its forecast through `GET /forecast/real/hebbal`.
+
+### Raw Input
+
+```text
+data/raw/cpcb/hebbal_bengaluru_kspcb_15m.csv
+```
+
+**Warning**: Never modify this raw source CSV. All cleaning is written to `data/processed/real/`.
+
+### Raw Header Inspection
+
+```powershell
+python -c "import pandas as pd; df = pd.read_csv(r'data\raw\cpcb\hebbal_bengaluru_kspcb_15m.csv', nrows=0); print(list(df.columns))"
+```
+
+### Pipeline Commands
+
+Run these from `aqi-sentinel/`:
+
+```powershell
+cd E:\1ETAI\aqi-sentinel
+
+python -m pipeline.ingest_cpcb_csv `
+  --input data\raw\cpcb\hebbal_bengaluru_kspcb_15m.csv `
+  --station-id cpcb_hebbal `
+  --station-name "Hebbal, Bengaluru - KSPCB" `
+  --source-timezone Asia/Kolkata
+
+python -m pipeline.build_real_features
+
+python -m ml.train_persistence_baseline --dataset real_hebbal
+python -m ml.train_lightgbm --dataset real_hebbal
+python -m ml.evaluate --dataset real_hebbal
+```
+
+### Read Quality Reports
+
+```powershell
+cat data\reports\hebbal_cpcb_data_quality.md
+```
+
+### Run Tests
+
+```powershell
+pytest
+```
+
+### Start FastAPI
+
+```powershell
+uvicorn backend.app.main:app --reload
+```
+
+### Endpoints
+
+- `http://127.0.0.1:8000/health`
+- `http://127.0.0.1:8000/forecast/stations` (synthetic)
+- `http://127.0.0.1:8000/forecast/real/hebbal` (real Hebbal)
+- `http://127.0.0.1:8000/docs`
+
+### Timestamp Timezone Assumption
+
+Raw timestamps are timezone-naive IST station readings. They are localized to `Asia/Kolkata` and converted to UTC before storage.
+
+### Hourly Aggregation Rules
+
+| Field | Aggregation |
+|---|---|
+| PM2.5 | median |
+| PM10 | median |
+| NO2 | median |
+| Temperature | mean |
+| Relative Humidity | mean |
+| Wind Speed | mean |
+| Rainfall | sum (interval rainfall) |
+
+PM2.5 requires at least 2 valid 15-minute observations per hour; hours with fewer are set to null.
+
+### Exact-24-Hour Lag Rule
+
+`pm25_lag_24h` uses exact timestamp alignment via merge, not positional shift. If the exact 24-hour-earlier timestamp is absent, the lag is null and the row is dropped from training features.
+
+### Artifact Separation
+
+All real Hebbal artifacts are written to `ml/artifacts/real_hebbal/` and `data/processed/real/`. Synthetic Milestone 1 artifacts in `ml/artifacts/` and `data/processed/` are never modified.
+
+### Fallback Logic
+
+- If real processed data or evaluation artifacts are missing, the endpoint returns HTTP 503 with instructions.
+- If LightGBM was not selected (its test RMSE was not lower than persistence), the endpoint serves exact 24-hour persistence with `forecast_engine = "persistence_fallback"`.
+- The endpoint never silently returns synthetic results.
+
+### Current Limitation
+
+One station validates the real-data pipeline; it does not yet prove citywide generalization. Next phase: add several official station exports and train a multi-station Bengaluru model.
 
 ## Future Phases
 
