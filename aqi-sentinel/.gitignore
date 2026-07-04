@@ -8,8 +8,13 @@ pytest-cache-files-*/
 .env
 
 data/raw/*.csv
+data/raw/openaq/*.json
 data/processed/*.parquet
+data/reports/*.csv
+data/reports/*.md
 ml/artifacts/*
 !ml/artifacts/.gitkeep
 !data/raw/.gitkeep
+!data/raw/openaq/.gitkeep
 !data/processed/.gitkeep
+!data/reports/.gitkeep

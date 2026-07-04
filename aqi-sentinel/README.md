@@ -146,6 +146,96 @@ Evaluation writes `ml/artifacts/evaluation_metrics.json` with the selected servi
 
 If processed data or evaluation artifacts do not exist, the API returns a clear 503 response telling you which pipeline step is missing.
 
+## Milestone 2A - OpenAQ Real Data Audit
+
+This phase discovers and audits real OpenAQ v3 monitoring data for Bengaluru. It answers whether OpenAQ has enough PM2.5 history, continuity, and pollutant completeness to support a later real-data forecasting milestone.
+
+This phase does not retrain the model, replace synthetic data, change the serving API, add ERA5/CDS weather, use OSM/H3, build a frontend, add agents, or introduce a database.
+
+### Secure Setup
+
+Create a local `.env` from `.env.example`:
+
+```powershell
+cd E:\1ETAI\aqi-sentinel
+Copy-Item .env.example .env
+notepad .env
+```
+
+Set these variables locally:
+
+```text
+OPENAQ_API_KEY=
+OPENAQ_BASE_URL=https://api.openaq.org/v3
+OPENAQ_TIMEOUT_SECONDS=30
+OPENAQ_MAX_RETRIES=4
+OPENAQ_LOOKBACK_DAYS=365
+```
+
+Never commit `.env`. API keys are read from environment variables only and sent through the documented OpenAQ `X-API-Key` request header.
+
+### Audit Commands
+
+Run the default 365-day audit:
+
+```powershell
+E:\1ETAI\.venv\Scripts\python.exe -m pipeline.audit_openaq_bengaluru --lookback-days 365
+```
+
+Run a shorter audit and bypass cached raw responses:
+
+```powershell
+E:\1ETAI\.venv\Scripts\python.exe -m pipeline.audit_openaq_bengaluru --lookback-days 180 --refresh
+```
+
+Run all tests, including Milestone 1:
+
+```powershell
+E:\1ETAI\.venv\Scripts\python.exe -m pytest
+```
+
+### Generated Files
+
+```text
+data/raw/openaq/*.json
+data/processed/bengaluru_openaq_station_hourly.parquet
+data/reports/openaq_bengaluru_locations.csv
+data/reports/openaq_bengaluru_sensors.csv
+data/reports/openaq_bengaluru_station_audit.csv
+data/reports/openaq_bengaluru_station_audit.md
+```
+
+Raw JSON responses are cached by resource, run timestamp, and page. Cached files are reused unless `--refresh` is passed. Raw saved payloads contain response bodies only, never request headers or authorization details.
+
+### Classification Rules
+
+Recommended:
+- covered days >= 180
+- PM2.5 completeness >= 70%
+- longest continuous PM2.5 run >= 30 days
+
+Usable with caveats:
+- covered days >= 90
+- PM2.5 completeness >= 50%
+- longest continuous PM2.5 run >= 7 days
+
+Not suitable:
+- anything below those thresholds
+
+No model retraining happens here because this phase only audits whether real station data is suitable. Real-data training belongs in Milestone 2B after station selection is defensible.
+
+### Troubleshooting
+
+API key missing: create `.env` from `.env.example` and set `OPENAQ_API_KEY`.
+
+HTTP 429/rate limit: rerun later, reduce lookback, or rely on cached raw responses. The client uses bounded retries and respects `Retry-After`.
+
+No Bengaluru stations returned: verify the bounding box, API key, and current OpenAQ coverage. OpenAQ may not include all official station data.
+
+Insufficient historical coverage: try a longer lookback or import official CPCB CSV data for comparison.
+
+API schema mismatch: parsing is isolated in `pipeline/openaq_client.py` and `pipeline/audit_openaq_bengaluru.py`; update those adapters if OpenAQ changes field names.
+
 ## Future Phases
 
-Later milestones can add OpenAQ observations, ERA5 weather, OSM road and land-use signals, H3 spatial grids, map views, inspection-priority agents, evidence attribution, and multilingual public health advisories.
+Later milestones will use audited OpenAQ observations for real-data training, then add ERA5 weather, OSM road and land-use signals, H3 spatial grids, map views, inspection-priority intelligence, evidence attribution, and multilingual public-health advisories.
