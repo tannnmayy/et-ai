@@ -18,3 +18,9 @@ ml/artifacts/*
 !data/raw/openaq/.gitkeep
 !data/processed/.gitkeep
 !data/reports/.gitkeep
+
+
+data/raw/cpcb/*.csv
+data/processed/*.parquet
+ml/artifacts/*
+!ml/artifacts/.gitkeep
