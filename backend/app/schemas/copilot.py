@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from backend.app.config import ADVISORY_PROFILES, SUPPORTED_LANGUAGES
+
+
+class CopilotQueryRequest(BaseModel):
+    query: str = Field(description="User's natural language query")
+    city: str = Field(default="bengaluru", description="City name")
+    station_id: str = Field(default="", description="Station ID (required for station-specific queries)")
+    profile: str = Field(default="general", description="Advisory profile")
+    language: str = Field(default="en", description="Language code")
+    top_k: int = Field(default=5, ge=1, le=20, description="Number of top results")
+
+
+class AgentToolResult(BaseModel):
+    tool: str
+    arguments: dict[str, Any]
+    success: bool
+
+
+class CopilotAuditEvent(BaseModel):
+    tool: str
+    arguments: dict[str, Any]
+    success: bool
+
+
+class CopilotAuditTrail(BaseModel):
+    request_id: str
+    timestamp: str
+    detected_intent: str
+    selected_agent: str
+    tools_called: list[CopilotAuditEvent]
+    llm_mode: str
+    fallback_used: bool
+    warnings: list[str]
+
+
+class AgentErrorResponse(BaseModel):
+    detail: str
+    error_type: str | None = None
+
+
+class CopilotResponse(BaseModel):
+    request_id: str
+    intent: str
+    selected_agent: str
+    answer: str
+    structured_data: dict[str, Any] | None = None
+    warnings: list[str] = Field(default_factory=list)
+    audit_trail: CopilotAuditTrail
+    llm_mode: str
+    fallback_used: bool

@@ -42,11 +42,6 @@ aqi-sentinel/
 |-- pipeline/
 |   |-- generate_demo_data.py
 |   |-- build_features.py
-|   |-- build_real_features.py
-|   |-- cpcb_csv_adapter.py
-|   |-- ingest_cpcb_csv.py
-|   |-- openaq_client.py
-|   |-- audit_openaq_bengaluru.py
 |   `-- storage.py
 |-- ml/
 |   |-- common.py
@@ -56,8 +51,7 @@ aqi-sentinel/
 |   `-- artifacts/
 |-- data/
 |   |-- raw/
-|   |-- processed/
-|   `-- reports/
+|   `-- processed/
 |-- tests/
 |-- requirements.txt
 |-- .env.example
@@ -242,111 +236,383 @@ Insufficient historical coverage: try a longer lookback or import official CPCB 
 
 API schema mismatch: parsing is isolated in `pipeline/openaq_client.py` and `pipeline/audit_openaq_bengaluru.py`; update those adapters if OpenAQ changes field names.
 
-## Milestone 2B - Real Hebbal CPCB/KSPCB Forecasting
-
-This phase ingests a real 15-minute CPCB/KSPCB station export for Hebbal, Bengaluru, trains a real 24-hour PM2.5 forecasting model, and exposes the forecast through a dedicated FastAPI endpoint.
-
-This phase does not replace synthetic Milestone 1 data, add weather reanalysis, build a frontend, add agents/LLMs, or introduce a database.
-
-### Purpose and Scope
-
-Convert a real official-style Hebbal KSPCB 15-minute air-quality CSV into a validated hourly dataset, train and evaluate a real 24-hour PM2.5 forecasting model, and expose its forecast through `GET /forecast/real/hebbal`.
-
-### Raw Input
-
-```text
-data/raw/cpcb/hebbal_bengaluru_kspcb_15m.csv
-```
-
-**Warning**: Never modify this raw source CSV. All cleaning is written to `data/processed/real/`.
-
-### Raw Header Inspection
-
-```powershell
-python -c "import pandas as pd; df = pd.read_csv(r'data\raw\cpcb\hebbal_bengaluru_kspcb_15m.csv', nrows=0); print(list(df.columns))"
-```
-
-### Pipeline Commands
-
-Run these from `aqi-sentinel/`:
-
-```powershell
-cd E:\1ETAI\aqi-sentinel
-
-python -m pipeline.ingest_cpcb_csv `
-  --input data\raw\cpcb\hebbal_bengaluru_kspcb_15m.csv `
-  --station-id cpcb_hebbal `
-  --station-name "Hebbal, Bengaluru - KSPCB" `
-  --source-timezone Asia/Kolkata
-
-python -m pipeline.build_real_features
-
-python -m ml.train_persistence_baseline --dataset real_hebbal
-python -m ml.train_lightgbm --dataset real_hebbal
-python -m ml.evaluate --dataset real_hebbal
-```
-
-### Read Quality Reports
-
-```powershell
-cat data\reports\hebbal_cpcb_data_quality.md
-```
-
-### Run Tests
-
-```powershell
-pytest
-```
-
-### Start FastAPI
-
-```powershell
-uvicorn backend.app.main:app --reload
-```
-
-### Endpoints
-
-- `http://127.0.0.1:8000/health`
-- `http://127.0.0.1:8000/forecast/stations` (synthetic)
-- `http://127.0.0.1:8000/forecast/real/hebbal` (real Hebbal)
-- `http://127.0.0.1:8000/docs`
-
-### Timestamp Timezone Assumption
-
-Raw timestamps are timezone-naive IST station readings. They are localized to `Asia/Kolkata` and converted to UTC before storage.
-
-### Hourly Aggregation Rules
-
-| Field | Aggregation |
-|---|---|
-| PM2.5 | median |
-| PM10 | median |
-| NO2 | median |
-| Temperature | mean |
-| Relative Humidity | mean |
-| Wind Speed | mean |
-| Rainfall | sum (interval rainfall) |
-
-PM2.5 requires at least 2 valid 15-minute observations per hour; hours with fewer are set to null.
-
-### Exact-24-Hour Lag Rule
-
-`pm25_lag_24h` uses exact timestamp alignment via merge, not positional shift. If the exact 24-hour-earlier timestamp is absent, the lag is null and the row is dropped from training features.
-
-### Artifact Separation
-
-All real Hebbal artifacts are written to `ml/artifacts/real_hebbal/` and `data/processed/real/`. Synthetic Milestone 1 artifacts in `ml/artifacts/` and `data/processed/` are never modified.
-
-### Fallback Logic
-
-- If real processed data or evaluation artifacts are missing, the endpoint returns HTTP 503 with instructions.
-- If LightGBM was not selected (its test RMSE was not lower than persistence), the endpoint serves exact 24-hour persistence with `forecast_engine = "persistence_fallback"`.
-- The endpoint never silently returns synthetic results.
-
-### Current Limitation
-
-One station validates the real-data pipeline; it does not yet prove citywide generalization. Next phase: add several official station exports and train a multi-station Bengaluru model.
-
 ## Future Phases
 
 Later milestones will use audited OpenAQ observations for real-data training, then add ERA5 weather, OSM road and land-use signals, H3 spatial grids, map views, inspection-priority intelligence, evidence attribution, and multilingual public-health advisories.
+
+## Milestone 3A - Forecast Intelligence and Deterministic Decision Support
+
+This milestone adds a deterministic intelligence layer on top of the existing forecast system. It converts validated station forecasts into structured evidence, confidence assessments, inspection rankings, citizen advisories, and city briefings. All outputs are fully deterministic, offline-testable, and require no LLM, agent, MCP, RAG/vector databases, external APIs, or paid services.
+
+### Architecture
+
+```text
+Existing forecast system (Milestones 1-2C)
+            |
+            v
+  artifact_adapter.py (single source of truth)
+            |
+            +--> forecast_evidence_service.py
+            +--> confidence_service.py
+            +--> inspection_priority_service.py
+            +--> citizen_advisory_service.py
+            +--> city_briefing_service.py
+            |
+            v
+  routers/intelligence.py (FastAPI endpoints)
+```
+
+### Artifact Adapter (`backend/app/services/artifact_adapter.py`)
+
+The artifact adapter is the intelligence layer's single source of truth. Every Milestone 3A service reads existing model/data/quality artifacts only through this adapter. No other service independently parses model artifacts, processed parquet files, quality reports, or evaluation files.
+
+**Adapter methods and their artifact sources:**
+
+| Method | Reads From |
+|--------|-----------|
+| `get_station_snapshot(station_id)` | `evaluation_metrics.json`, `persistence_baseline.json`, `station_manifest.json`, per-station features parquet |
+| `list_station_snapshots(city)` | Same as above, iterates all stations |
+| `get_city_station_snapshots(city)` | Same as above, filters by city |
+| `get_station_recent_observations(station_id, lookback_hours)` | Per-station features parquet (pm25, pm10, no2, temperature_c, relative_humidity, rainfall_mm columns) |
+| `get_station_quality(station_id)` | `station_manifest.json` quality_details |
+| `get_station_evaluation(station_id)` | `evaluation_metrics.json` per_station + `persistence_baseline.json` per_station |
+| `get_lightgbm_explanation_context(station_id)` | Per-station features parquet (lag values, rolling stats, temporal features, weather context) |
+
+**Domain errors:** `UnsupportedCityError`, `UnknownStationError`, `MissingArtifactError`, `NoValidForecastError`
+
+### SHAP Decision
+
+SHAP is not installed in the current environment. The project-wide explanation mode is **`model_context_fallback`**. For LightGBM forecasts, recent PM2.5 trends, lag values, rolling statistics, temporal context, and available pollutant/weather data are returned as transparent model context (not causal drivers). For persistence forecasts, the explanation method is **`exact_24h_reference`**. This decision is consistent across all stations.
+
+### Forecast Evidence (`/intelligence/stations/{station_id}/evidence`)
+
+Returns structured evidence explaining each station's forecast including:
+- `explanation_method`: "exact_24h_reference" (persistence) or "model_context_fallback" (LightGBM)
+- `expected_change_pm25`: predicted minus latest observed PM2.5
+- `expected_change_direction`: improving / stable / worsening / unavailable
+- `model_validation_summary`: selected engine, test rows, RMSE improvement
+- `evidence_items`: structured for/against items with factors and weights
+- `caveats`: data quality and model uncertainty warnings
+- Persistence evidence explicitly states it was selected because it outperformed LightGBM on held-out data
+
+### Forecast Confidence (`/intelligence/stations/{station_id}/confidence`)
+
+Data-reliability confidence scoring (start at 100):
+- **Freshness penalty:** >3h: -20, >12h: -35 (highest applicable only)
+- **Completeness penalty:** <75%: -15, <50%: -25 (highest applicable only)
+- **Gap penalty:** >6h: -20, >24h: -30 (highest applicable only)
+- **Quality penalty:** "Usable with caveats": -15, "Not suitable": -40
+- **No penalty for persistence selection**
+- Levels: High (>=80), Medium (55-79), Low (25-54), Unavailable (<25)
+
+### Inspection Priority (`/intelligence/cities/{city}/inspection-priorities`)
+
+Deterministic municipal inspection ranking scoring 0-100:
+- **Forecast severity (max 45):** Good=0, Satisfactory=8, Moderate=18, Poor=30, Very Poor=40, Severe=45
+- **Worsening (max 20):** >=40ug/m3: 20, >=25: 15, >=10: 8
+- **Recent elevated PM2.5 (max 15):** >=150: 15, >=100: 10, >=60: 5
+- **Confidence adjustment:** High=+10, Medium=+5, Low=-10, Unavailable=-20
+- **Quality adjustment:** "Usable with caveats"=-5, "Not suitable"=-20
+- Priority levels: Critical (>=70), High (50-69), Moderate (30-49), Watch (<30)
+
+Every result includes a mandatory `investigation_disclaimer`:
+> "Suggested inspection focus is an investigation hypothesis based on forecast and station signals. It is not proof that a specific source caused the pollution."
+
+Station-specific inspection focus (e.g., Peenya: industrial compliance; Silk Board: traffic congestion) is configured centrally in `config.py`.
+
+### Citizen Advisory (`/intelligence/stations/{station_id}/advisory`)
+
+Deterministic health advisory with 6 profiles: general, child, elderly, respiratory, outdoor_worker, school.
+
+Languages: English (mandatory), Hindi, Kannada. Hindi and Kannada currently fall back to English with `translation_fallback = true`.
+
+Each response includes: `headline`, `recommendations`, `caution_note`, `data_quality_note`, `confidence_level`, and `medical_disclaimer` ("This is general air-quality guidance, not medical advice.").
+
+### City Briefing (`/intelligence/cities/{city}/briefing`)
+
+Deterministic city operational briefing including:
+- `city_risk_level`: uses configured precedence (Severe > Very Poor > Poor > Moderate > Good > Unavailable)
+- `stations_by_risk_category`, `stations_by_confidence_level`
+- `lightgbm_selected_count`, `persistence_selected_count`
+- `top_priorities`: ranked station list
+- `operational_recommendations`: prioritization, verification, communication actions
+- `data_limitations`: low-confidence stations, persistence stations, stale observations, coverage disclaimer
+- `station_summaries`: per-station snapshot with engine, confidence, quality
+
+### City Registry (Multi-City Ready)
+
+`SUPPORTED_CITIES` in `config.py` currently contains only Bengaluru. All services accept a `city` parameter. Unsupported cities return 404: "No validated station dataset is registered for this city."
+
+### New Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /intelligence/stations/{station_id}/evidence` | Forecast evidence and explanation |
+| `GET /intelligence/stations/{station_id}/confidence` | Forecast confidence score |
+| `GET /intelligence/stations/{station_id}/advisory?profile=general&language=en` | Citizen health advisory |
+| `GET /intelligence/cities/{city}/inspection-priorities?top_k=5` | Inspection priority ranking |
+| `GET /intelligence/cities/{city}/briefing` | City operational briefing |
+| `GET /intelligence/inspection-priorities?top_k=5` | Bengaluru convenience alias |
+| `GET /intelligence/city-briefing` | Bengaluru convenience alias |
+
+### Safety Limitations
+
+- No LLM, LangGraph, MCP, RAG, external APIs, or paid services are used.
+- No persistence confidence penalty exists.
+- Every inspection result contains the required investigation disclaimer.
+- Advisory language never claims causation.
+- All thresholds are centralized in `config.py`.
+- Existing synthetic and real forecast endpoints are unchanged.
+
+### Commands
+
+Run the full test suite:
+
+```powershell
+cd E:\1ETAI
+.\.venv\Scripts\Activate.ps1
+python -m pytest tests/ -q
+```
+
+Start the API:
+
+```powershell
+cd E:\1ETAI
+.\.venv\Scripts\Activate.ps1
+uvicorn backend.app.main:app --reload
+```
+
+Open Swagger docs: `http://127.0.0.1:8000/docs`
+
+Test intelligence endpoints:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/intelligence/stations/cpcb_hebbal/evidence
+Invoke-RestMethod http://127.0.0.1:8000/intelligence/stations/cpcb_hebbal/confidence
+Invoke-RestMethod "http://127.0.0.1:8000/intelligence/stations/cpcb_hebbal/advisory?profile=elderly&language=en"
+Invoke-RestMethod "http://127.0.0.1:8000/intelligence/cities/bengaluru/inspection-priorities?top_k=5"
+Invoke-RestMethod http://127.0.0.1:8000/intelligence/cities/bengaluru/briefing
+```
+
+## Milestone 3B — Agentic Intelligence Layer
+
+This milestone adds a small, credible multi-agent system on top of the deterministic Milestone 3A services. The agent layer makes AQI Sentinel visibly agentic while remaining evidence-first, testable, and safe.
+
+### Architecture
+
+```text
+User Query
+     |
+     v
+Orchestrator (intent detection + routing)
+     |
+     +--> Forecast Evidence Agent
+     |      - tool_get_forecast_evidence()
+     |      - tool_get_forecast_confidence()
+     |      - fallback_renderer (default)
+     |
+     +--> Enforcement Planning Agent
+     |      - tool_get_inspection_priorities()
+     |      - tool_get_forecast_evidence() / confidence()
+     |      - investigation disclaimer enforced
+     |
+     +--> Citizen Advisory Agent
+     |      - tool_get_citizen_advisory()
+     |      - tool_get_forecast_confidence()
+     |      - medical disclaimer enforced
+     |
+     +--> City Briefing Agent
+            - tool_get_city_briefing()
+            - tool_get_inspection_priorities()
+            - data limitations enforced
+```
+
+### Five-Role Architecture
+
+| Role | Agent | Purpose |
+|------|-------|---------|
+| Orchestrator | `orchestrator.py` | Intent detection, input validation, routing, response validation |
+| Forecast Evidence | `forecast_evidence_agent.py` | Forecast explanation and confidence |
+| Enforcement Planning | `enforcement_planning_agent.py` | Ranked inspection priorities |
+| Citizen Advisory | `citizen_advisory_agent.py` | Health guidance by profile/language |
+| City Briefing | `city_briefing_agent.py` | City operational summary |
+
+### Deterministic Intent Routing
+
+Intent detection uses explicit keyword rules and route-based delegation — no LLM required. Supported intents:
+
+- `station_explanation` — "why is Peenya forecast to worsen?"
+- `station_confidence` — "how reliable is Silk Board's forecast?"
+- `inspection_plan` — "what are the inspection priorities?"
+- `citizen_guidance` — "is it safe to go outside?"
+- `city_briefing` — "give me a Bengaluru briefing"
+- `unsupported` — fallback for unrecognized queries
+
+### Direct Python Tool Calls
+
+All agents call existing Milestone 3A services directly (not via HTTP):
+
+| Tool | Service Function | Source |
+|------|-----------------|--------|
+| `tool_get_forecast_evidence(station_id)` | `get_forecast_evidence()` | `forecast_evidence_service.py` |
+| `tool_get_forecast_confidence(station_id)` | `get_forecast_confidence()` | `confidence_service.py` |
+| `tool_get_inspection_priorities(city, top_k)` | `get_inspection_priorities()` | `inspection_priority_service.py` |
+| `tool_get_citizen_advisory(station_id, profile, language)` | `get_citizen_advisory()` | `citizen_advisory_service.py` |
+| `tool_get_city_briefing(city)` | `get_city_briefing()` | `city_briefing_service.py` |
+
+### LLM Abstraction
+
+`backend/app/agents/llm_provider.py` provides a provider-agnostic abstraction:
+
+- **Deterministic mode** (default): No LLM call. Uses `fallback_renderer.py` for natural-language responses from structured data.
+- **Hosted LLM mode** (optional): Reads config from environment variables only. No keys are hardcoded.
+  - `AQI_SENTINEL_LLM_API_KEY` — API key
+  - `AQI_SENTINEL_LLM_PROVIDER` — `openai`, `anthropic`, or `google`
+  - `AQI_SENTINEL_LLM_MODEL` — model name
+
+If no key is present, deterministic mode is used automatically. If an LLM call fails, the system falls back to deterministic rendering.
+
+The LLM may only summarize structured tool output. It never receives unrestricted file, shell, database, or network access.
+
+### Deterministic Fallback (Default Offline Mode)
+
+`backend/app/agents/fallback_renderer.py` generates polished but strictly bounded answers from tool results:
+
+- **Station explanation**: station name, PM2.5, risk category, engine, explanation method, expected change, confidence, caveats. Never invents causes.
+- **Inspection plan**: ranked stations with scores/risk/forecast, investigation focus, mandatory disclaimer.
+- **Citizen guidance**: advisory headline, recommendations, confidence note, medical disclaimer.
+- **City briefing**: city risk, station coverage, top priorities, data limitations.
+
+### Audit Trail
+
+Every request returns an audit trail with:
+
+- `request_id` — unique request identifier
+- `timestamp` — UTC timestamp
+- `detected_intent` — identified intent
+- `selected_agent` — routed agent name
+- `tools_called` — list of tool names, arguments, and success/failure
+- `llm_mode` — `deterministic`, `hosted`, or `fallback`
+- `fallback_used` — whether fallback rendering was triggered
+- `warnings` — validation warnings
+
+Chain-of-thought or hidden reasoning is never exposed.
+
+### Guardrails
+
+Every agent response retains:
+- `forecast_engine` when a forecast is discussed
+- `confidence_level` when a forecast is discussed
+- `data-quality caveat` where present
+- Investigation disclaimer for enforcement outputs
+- Medical disclaimer for citizen outputs
+- Data limitations for city outputs
+
+The system never:
+- Changes predicted PM2.5 values
+- Changes RMSE/model selection
+- Invents a forecast
+- States source attribution as fact
+- Gives diagnosis or medical treatment
+- Claims citywide coverage beyond available stations
+- Hides language fallback
+- Omits a required disclaimer
+
+A response validator checks required fields before returning output. If validation fails, the deterministic fallback renderer is used.
+
+### New Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/copilot/query` | Natural language query to the AQI copilot |
+| GET | `/copilot/stations/{station_id}/explain` | Forecast explanation for a station |
+| GET | `/copilot/stations/{station_id}/guidance` | Citizen health guidance for a station |
+| GET | `/copilot/cities/{city}/inspection-plan` | Inspection plan for a city |
+| GET | `/copilot/cities/{city}/briefing` | City briefing |
+
+### Files Added
+
+```
+backend/app/agents/
+├── __init__.py
+├── state.py                 # Typed state object
+├── llm_provider.py          # LLM provider abstraction
+├── fallback_renderer.py     # Deterministic response rendering
+├── tools.py                 # Tool layer (direct service calls)
+├── audit.py                 # Audit trail
+├── orchestrator.py          # Intent routing + orchestration
+├── forecast_evidence_agent.py
+├── enforcement_planning_agent.py
+├── citizen_advisory_agent.py
+└── city_briefing_agent.py
+
+backend/app/schemas/copilot.py   # Copilot Pydantic models
+backend/app/routers/copilot.py   # Copilot FastAPI routes
+tests/test_copilot.py            # Comprehensive agent tests
+```
+
+### Safety Limitations
+
+- No LLM, LangGraph, MCP, RAG, external APIs, or paid services are required for default operation.
+- No forecasting values are generated by an LLM.
+- No external API is required for default operation.
+- No MCP, RAG, frontend, Docker, database, deployment, or paid service was added.
+- LLM, when enabled, only summarizes structured tool output.
+- All existing forecasting and intelligence services are unchanged semantically.
+
+### Commands
+
+Run the full test suite (Milestones 1-3B, zero failures):
+
+```powershell
+cd E:\1ETAI
+.\.venv\Scripts\Activate.ps1
+python -m pytest tests/ -q
+```
+
+Start the API:
+
+```powershell
+cd E:\1ETAI
+.\.venv\Scripts\Activate.ps1
+uvicorn backend.app.main:app --reload
+```
+
+Test copilot endpoints:
+
+```powershell
+# POST query
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/copilot/query -Body '{"query":"Why is Peenya a priority?","station_id":"cpcb_peenya","city":"bengaluru"}' -ContentType "application/json" | ConvertTo-Json -Depth 10
+
+# Station explanation
+Invoke-RestMethod http://127.0.0.1:8000/copilot/stations/cpcb_peenya/explain | ConvertTo-Json -Depth 10
+
+# Station guidance
+Invoke-RestMethod "http://127.0.0.1:8000/copilot/stations/cpcb_hebbal/guidance?profile=elderly&language=en" | ConvertTo-Json -Depth 10
+
+# City inspection plan
+Invoke-RestMethod "http://127.0.0.1:8000/copilot/cities/bengaluru/inspection-plan?top_k=3" | ConvertTo-Json -Depth 10
+
+# City briefing
+Invoke-RestMethod http://127.0.0.1:8000/copilot/cities/bengaluru/briefing | ConvertTo-Json -Depth 10
+```
+
+### Enabling Optional Hosted LLM Mode
+
+Set environment variables (do not commit secrets):
+
+```powershell
+$env:AQI_SENTINEL_LLM_API_KEY = "your-api-key"
+$env:AQI_SENTINEL_LLM_PROVIDER = "openai"     # openai, anthropic, or google
+$env:AQI_SENTINEL_LLM_MODEL = "gpt-4o-mini"
+```
+
+Or add to a `.env` file (never committed):
+
+```text
+AQI_SENTINEL_LLM_API_KEY=your-api-key
+AQI_SENTINEL_LLM_PROVIDER=openai
+AQI_SENTINEL_LLM_MODEL=gpt-4o-mini
+```
+
+If no key is present, the system operates in fully offline deterministic mode.
