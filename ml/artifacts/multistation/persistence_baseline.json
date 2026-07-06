@@ -1,0 +1,40 @@
+{
+  "model": "persistence_baseline",
+  "dataset": "real_multistation",
+  "rule": "prediction at t+24h equals observed PM2.5 at t",
+  "validation_rows": 5414,
+  "validation_rmse": 18.37951682923308,
+  "validation_mae": 11.000929996305873,
+  "per_station": {
+    "cpcb_bapujinagar": {
+      "validation_rows": 1162,
+      "validation_rmse": 24.8637,
+      "validation_mae": 17.0878
+    },
+    "cpcb_hebbal": {
+      "validation_rows": 646,
+      "validation_rmse": 22.182,
+      "validation_mae": 12.517
+    },
+    "cpcb_hombegowda": {
+      "validation_rows": 1160,
+      "validation_rmse": 11.6688,
+      "validation_mae": 7.3983
+    },
+    "cpcb_jayanagar5": {
+      "validation_rows": 527,
+      "validation_rmse": 21.6114,
+      "validation_mae": 11.2078
+    },
+    "cpcb_peenya": {
+      "validation_rows": 1179,
+      "validation_rmse": 11.3185,
+      "validation_mae": 7.8448
+    },
+    "cpcb_silkboard": {
+      "validation_rows": 740,
+      "validation_rmse": 17.9169,
+      "validation_mae": 10.648
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "model": "persistence_baseline",
+  "rule": "prediction at t+24h equals observed PM2.5 at t",
+  "validation_rows": 1923,
+  "validation_rmse": 15.76903099209134,
+  "validation_mae": 11.725855434217369
+}

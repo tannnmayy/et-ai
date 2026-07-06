@@ -1,0 +1,8 @@
+{
+  "model": "persistence_baseline",
+  "dataset": "real_hebbal",
+  "rule": "prediction at t+24h equals observed PM2.5 at t",
+  "validation_rows": 898,
+  "validation_rmse": 24.09372937301784,
+  "validation_mae": 14.400890868596882
+}

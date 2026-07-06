@@ -1,0 +1,251 @@
+sensor_id,location_id,location_name,parameter,raw_parameter_name,units,is_relevant_for_audit
+1518,412,"Peenya, Bengaluru - KSPCB",no2,no2,µg/m³,True
+13853,412,"Peenya, Bengaluru - KSPCB",so2,so2,µg/m³,False
+13852,412,"Peenya, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+722,412,"Peenya, Bengaluru - KSPCB",co,co,µg/m³,False
+1048,594,"BTM Layout, Bengaluru - KSPCB",co,co,µg/m³,False
+13836,594,"BTM Layout, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+4886,594,"BTM Layout, Bengaluru - KSPCB",o3,o3,µg/m³,False
+1427,594,"BTM Layout, Bengaluru - KSPCB",no2,no2,µg/m³,True
+13837,594,"BTM Layout, Bengaluru - KSPCB",so2,so2,µg/m³,False
+14096,797,City Railway Station - KSPCB,so2,so2,µg/m³,False
+1383,797,City Railway Station - KSPCB,no2,no2,µg/m³,True
+1384,797,City Railway Station - KSPCB,co,co,µg/m³,False
+1382,797,City Railway Station - KSPCB,pm10,pm10,µg/m³,True
+5349,2589,SaneguravaHalli - KSPCB,no2,no2,µg/m³,True
+14129,2589,SaneguravaHalli - KSPCB,so2,so2,µg/m³,False
+5348,2589,SaneguravaHalli - KSPCB,pm10,pm10,µg/m³,True
+5350,2589,SaneguravaHalli - KSPCB,co,co,µg/m³,False
+5380,2592,"BWSSB Kadabesanahalli, Bengaluru - KSPCB",no2,no2,µg/m³,True
+13898,2592,"BWSSB Kadabesanahalli, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+5375,2592,"BWSSB Kadabesanahalli, Bengaluru - KSPCB",o3,o3,µg/m³,False
+5381,2592,"BWSSB Kadabesanahalli, Bengaluru - KSPCB",co,co,µg/m³,False
+13888,2592,"BWSSB Kadabesanahalli, Bengaluru - KSPCB",so2,so2,µg/m³,False
+14636,5547,"BWSSB Kadabesanahalli, Bengaluru - CPCB",no2,no2,µg/m³,True
+14640,5547,"BWSSB Kadabesanahalli, Bengaluru - CPCB",o3,o3,µg/m³,False
+14634,5547,"BWSSB Kadabesanahalli, Bengaluru - CPCB",so2,so2,µg/m³,False
+14637,5547,"BWSSB Kadabesanahalli, Bengaluru - CPCB",co,co,µg/m³,False
+1303004,5547,"BWSSB Kadabesanahalli, Bengaluru - CPCB",pm10,pm10,µg/m³,True
+14641,5547,"BWSSB Kadabesanahalli, Bengaluru - CPCB",pm25,pm25,µg/m³,True
+12235359,5548,"BTM Layout, Bengaluru - CPCB",o3,o3,µg/m³,False
+12235356,5548,"BTM Layout, Bengaluru - CPCB",co,co,ppb,False
+12235363,5548,"BTM Layout, Bengaluru - CPCB",so2,so2,ppb,False
+12235364,5548,"BTM Layout, Bengaluru - CPCB",temperature,temperature,c,False
+12235360,5548,"BTM Layout, Bengaluru - CPCB",pm10,pm10,µg/m³,True
+12235361,5548,"BTM Layout, Bengaluru - CPCB",pm25,pm25,µg/m³,True
+12235357,5548,"BTM Layout, Bengaluru - CPCB",no,no,ppb,False
+12235358,5548,"BTM Layout, Bengaluru - CPCB",no2,no2,ppb,True
+12235362,5548,"BTM Layout, Bengaluru - CPCB",relativehumidity,relativehumidity,%,False
+14341818,5548,"BTM Layout, Bengaluru - CPCB",windspeed,wind_speed,m/s,False
+14341817,5548,"BTM Layout, Bengaluru - CPCB",winddirection,wind_direction,deg,False
+14341816,5548,"BTM Layout, Bengaluru - CPCB",nox,nox,ppb,False
+14639,5548,"BTM Layout, Bengaluru - CPCB",no2,no2,µg/m³,True
+14635,5548,"BTM Layout, Bengaluru - CPCB",pm25,pm25,µg/m³,True
+1305377,5548,"BTM Layout, Bengaluru - CPCB",pm10,pm10,µg/m³,True
+14642,5548,"BTM Layout, Bengaluru - CPCB",so2,so2,µg/m³,False
+14657,5548,"BTM Layout, Bengaluru - CPCB",co,co,µg/m³,False
+14658,5548,"BTM Layout, Bengaluru - CPCB",o3,o3,µg/m³,False
+12235374,5574,"City Railway Station, Bengaluru - KSPCB",co,co,ppb,False
+12235376,5574,"City Railway Station, Bengaluru - KSPCB",no2,no2,ppb,True
+12235377,5574,"City Railway Station, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235378,5574,"City Railway Station, Bengaluru - KSPCB",so2,so2,ppb,False
+12235375,5574,"City Railway Station, Bengaluru - KSPCB",no,no,ppb,False
+14340832,5574,"City Railway Station, Bengaluru - KSPCB",nox,nox,ppb,False
+14779,5574,"City Railway Station, Bengaluru - KSPCB",co,co,µg/m³,False
+14773,5574,"City Railway Station, Bengaluru - KSPCB",no2,no2,µg/m³,True
+14775,5574,"City Railway Station, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+14732,5574,"City Railway Station, Bengaluru - KSPCB",so2,so2,µg/m³,False
+14859,5607,"Peenya, Bengaluru - CPCB",pm25,pm25,µg/m³,True
+14862,5607,"Peenya, Bengaluru - CPCB",so2,so2,µg/m³,False
+14850,5607,"Peenya, Bengaluru - CPCB",no2,no2,µg/m³,True
+40537,5607,"Peenya, Bengaluru - CPCB",o3,o3,µg/m³,False
+15270,5607,"Peenya, Bengaluru - CPCB",co,co,µg/m³,False
+1303005,5607,"Peenya, Bengaluru - CPCB",pm10,pm10,µg/m³,True
+12235373,5607,"Peenya, Bengaluru - CPCB",temperature,temperature,c,False
+12235365,5607,"Peenya, Bengaluru - CPCB",co,co,ppb,False
+12235370,5607,"Peenya, Bengaluru - CPCB",pm25,pm25,µg/m³,True
+12235371,5607,"Peenya, Bengaluru - CPCB",relativehumidity,relativehumidity,%,False
+12235368,5607,"Peenya, Bengaluru - CPCB",o3,o3,µg/m³,False
+12235367,5607,"Peenya, Bengaluru - CPCB",no2,no2,ppb,True
+12235369,5607,"Peenya, Bengaluru - CPCB",pm10,pm10,µg/m³,True
+12235372,5607,"Peenya, Bengaluru - CPCB",so2,so2,ppb,False
+12235366,5607,"Peenya, Bengaluru - CPCB",no,no,ppb,False
+14340829,5607,"Peenya, Bengaluru - CPCB",nox,nox,ppb,False
+14340830,5607,"Peenya, Bengaluru - CPCB",winddirection,wind_direction,deg,False
+14340831,5607,"Peenya, Bengaluru - CPCB",windspeed,wind_speed,m/s,False
+12235380,5644,"Sanegurava Halli, Bengaluru - KSPCB",no,no,ppb,False
+12235381,5644,"Sanegurava Halli, Bengaluru - KSPCB",no2,no2,ppb,True
+12235385,5644,"Sanegurava Halli, Bengaluru - KSPCB",temperature,temperature,c,False
+12235382,5644,"Sanegurava Halli, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235384,5644,"Sanegurava Halli, Bengaluru - KSPCB",so2,so2,ppb,False
+12235383,5644,"Sanegurava Halli, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12235379,5644,"Sanegurava Halli, Bengaluru - KSPCB",co,co,ppb,False
+14341820,5644,"Sanegurava Halli, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14341819,5644,"Sanegurava Halli, Bengaluru - KSPCB",nox,nox,ppb,False
+14341821,5644,"Sanegurava Halli, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+15033,5644,"Sanegurava Halli, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+15035,5644,"Sanegurava Halli, Bengaluru - KSPCB",no2,no2,µg/m³,True
+15032,5644,"Sanegurava Halli, Bengaluru - KSPCB",so2,so2,µg/m³,False
+15039,5644,"Sanegurava Halli, Bengaluru - KSPCB",co,co,µg/m³,False
+12235269,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",so2,so2,ppb,False
+12235268,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12235264,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",no2,no2,ppb,True
+12235266,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235267,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+12235265,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12235262,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",co,co,ppb,False
+12235263,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",no,no,ppb,False
+12235270,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",temperature,temperature,c,False
+14340804,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+14340803,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14340802,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",nox,nox,ppb,False
+20175,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",no2,no2,µg/m³,True
+20173,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",co,co,µg/m³,False
+20155,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",o3,o3,µg/m³,False
+20162,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+20152,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",so2,so2,µg/m³,False
+20172,6973,"Jayanagar 5th Block, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235241,6974,"Bapuji Nagar, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12235239,6974,"Bapuji Nagar, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235237,6974,"Bapuji Nagar, Bengaluru - KSPCB",no2,no2,ppb,True
+12235243,6974,"Bapuji Nagar, Bengaluru - KSPCB",temperature,temperature,c,False
+12235235,6974,"Bapuji Nagar, Bengaluru - KSPCB",co,co,ppb,False
+12235236,6974,"Bapuji Nagar, Bengaluru - KSPCB",no,no,ppb,False
+12235240,6974,"Bapuji Nagar, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+12235238,6974,"Bapuji Nagar, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12235242,6974,"Bapuji Nagar, Bengaluru - KSPCB",so2,so2,ppb,False
+14340795,6974,"Bapuji Nagar, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+14340794,6974,"Bapuji Nagar, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14340793,6974,"Bapuji Nagar, Bengaluru - KSPCB",nox,nox,ppb,False
+20166,6974,"Bapuji Nagar, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+20169,6974,"Bapuji Nagar, Bengaluru - KSPCB",no2,no2,µg/m³,True
+20165,6974,"Bapuji Nagar, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+20167,6974,"Bapuji Nagar, Bengaluru - KSPCB",o3,o3,µg/m³,False
+20164,6974,"Bapuji Nagar, Bengaluru - KSPCB",so2,so2,µg/m³,False
+20153,6974,"Bapuji Nagar, Bengaluru - KSPCB",co,co,µg/m³,False
+12235282,6975,"Silk Board, Bengaluru - KSPCB",no2,no2,ppb,True
+12235284,6975,"Silk Board, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235288,6975,"Silk Board, Bengaluru - KSPCB",temperature,temperature,c,False
+12235283,6975,"Silk Board, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12235286,6975,"Silk Board, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12235280,6975,"Silk Board, Bengaluru - KSPCB",co,co,ppb,False
+12235287,6975,"Silk Board, Bengaluru - KSPCB",so2,so2,ppb,False
+12235285,6975,"Silk Board, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+12235281,6975,"Silk Board, Bengaluru - KSPCB",no,no,ppb,False
+14340806,6975,"Silk Board, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14340807,6975,"Silk Board, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+14340805,6975,"Silk Board, Bengaluru - KSPCB",nox,nox,ppb,False
+20161,6975,"Silk Board, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+20171,6975,"Silk Board, Bengaluru - KSPCB",co,co,µg/m³,False
+20168,6975,"Silk Board, Bengaluru - KSPCB",o3,o3,µg/m³,False
+20154,6975,"Silk Board, Bengaluru - KSPCB",no2,no2,µg/m³,True
+20156,6975,"Silk Board, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+20176,6975,"Silk Board, Bengaluru - KSPCB",so2,so2,µg/m³,False
+12235253,6983,"Hombegowda Nagar, Bengaluru - KSPCB",co,co,ppb,False
+12235259,6983,"Hombegowda Nagar, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12235257,6983,"Hombegowda Nagar, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235260,6983,"Hombegowda Nagar, Bengaluru - KSPCB",so2,so2,ppb,False
+12235254,6983,"Hombegowda Nagar, Bengaluru - KSPCB",no,no,ppb,False
+12235255,6983,"Hombegowda Nagar, Bengaluru - KSPCB",no2,no2,ppb,True
+12235258,6983,"Hombegowda Nagar, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+12235256,6983,"Hombegowda Nagar, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12235261,6983,"Hombegowda Nagar, Bengaluru - KSPCB",temperature,temperature,c,False
+14340801,6983,"Hombegowda Nagar, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+14340799,6983,"Hombegowda Nagar, Bengaluru - KSPCB",nox,nox,ppb,False
+14340800,6983,"Hombegowda Nagar, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+20196,6983,"Hombegowda Nagar, Bengaluru - KSPCB",no2,no2,µg/m³,True
+20199,6983,"Hombegowda Nagar, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+20197,6983,"Hombegowda Nagar, Bengaluru - KSPCB",o3,o3,µg/m³,False
+20200,6983,"Hombegowda Nagar, Bengaluru - KSPCB",so2,so2,µg/m³,False
+20198,6983,"Hombegowda Nagar, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+20195,6983,"Hombegowda Nagar, Bengaluru - KSPCB",co,co,µg/m³,False
+12235251,6984,"Hebbal, Bengaluru - KSPCB",so2,so2,ppb,False
+12235250,6984,"Hebbal, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12235248,6984,"Hebbal, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12235244,6984,"Hebbal, Bengaluru - KSPCB",co,co,ppb,False
+12235252,6984,"Hebbal, Bengaluru - KSPCB",temperature,temperature,c,False
+12235247,6984,"Hebbal, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12235246,6984,"Hebbal, Bengaluru - KSPCB",no2,no2,ppb,True
+12235245,6984,"Hebbal, Bengaluru - KSPCB",no,no,ppb,False
+12235249,6984,"Hebbal, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+14340797,6984,"Hebbal, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14340798,6984,"Hebbal, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+14340796,6984,"Hebbal, Bengaluru - KSPCB",nox,nox,ppb,False
+20212,6984,"Hebbal, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+20224,6984,"Hebbal, Bengaluru - KSPCB",co,co,µg/m³,False
+20210,6984,"Hebbal, Bengaluru - KSPCB",so2,so2,µg/m³,False
+20222,6984,"Hebbal, Bengaluru - KSPCB",no2,no2,µg/m³,True
+20213,6984,"Hebbal, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+20221,6984,"Hebbal, Bengaluru - KSPCB",o3,o3,µg/m³,False
+1321837,229473,blore_India_07_14_official,pm25,pm25,µg/m³,True
+7970796,2498781,SiriJaya,pm1,pm1,µg/m³,False
+7971081,2498781,SiriJaya,pm10,pm10,µg/m³,True
+7951362,2498781,SiriJaya,temperature,temperature,c,False
+7951363,2498781,SiriJaya,pm25,pm25,µg/m³,True
+7979259,2498781,SiriJaya,pm10,pm10,µg/m³,True
+7972171,2498781,SiriJaya,relativehumidity,relativehumidity,%,False
+7972174,2498781,SiriJaya,um003,um003,particles/cm³,False
+7979312,2498781,SiriJaya,pm1,pm1,µg/m³,False
+14406994,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",o3,o3,µg/m³,False
+14406992,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",no2,no2,ppb,True
+14406997,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",temperature,temperature,c,False
+14406996,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",so2,so2,ppb,False
+14406993,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",nox,nox,ppb,False
+14411592,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",pm10,pm10,µg/m³,True
+14406991,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",no,no,ppb,False
+14406990,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",co,co,ppb,False
+14406995,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",pm25,pm25,µg/m³,True
+14753588,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",relativehumidity,relativehumidity,%,False
+14753589,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",winddirection,wind_direction,deg,False
+14753590,3409312,"BWSSB Kadabesanahalli, Bengaluru - CPCB",windspeed,wind_speed,m/s,False
+12237573,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+12237576,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",temperature,temperature,c,False
+12237571,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12237572,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12237569,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",no,no,ppb,False
+12237570,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",no2,no2,ppb,True
+12237575,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",so2,so2,ppb,False
+12237574,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12237568,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",co,co,ppb,False
+14341340,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",nox,nox,ppb,False
+14341341,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14341342,3409385,"RVCE-Mailasandra, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+12237596,3409388,"Kasturi Nagar, Bengaluru - KSPCB",no,no,ppb,False
+12237601,3409388,"Kasturi Nagar, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12237602,3409388,"Kasturi Nagar, Bengaluru - KSPCB",so2,so2,ppb,False
+12237598,3409388,"Kasturi Nagar, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12237603,3409388,"Kasturi Nagar, Bengaluru - KSPCB",temperature,temperature,c,False
+12237597,3409388,"Kasturi Nagar, Bengaluru - KSPCB",no2,no2,ppb,True
+12237595,3409388,"Kasturi Nagar, Bengaluru - KSPCB",co,co,ppb,False
+12237599,3409388,"Kasturi Nagar, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12237600,3409388,"Kasturi Nagar, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+14341350,3409388,"Kasturi Nagar, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14341349,3409388,"Kasturi Nagar, Bengaluru - KSPCB",nox,nox,ppb,False
+14341351,3409388,"Kasturi Nagar, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+12237647,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",so2,so2,ppb,False
+12237640,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",co,co,ppb,False
+12237644,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",pm10,pm10,µg/m³,True
+12237643,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",o3,o3,µg/m³,False
+12237641,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",no,no,ppb,False
+12237646,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",relativehumidity,relativehumidity,%,False
+12237648,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",temperature,temperature,c,False
+12237642,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",no2,no2,ppb,True
+12237645,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",pm25,pm25,µg/m³,True
+14341357,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",windspeed,wind_speed,m/s,False
+14341356,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",winddirection,wind_direction,deg,False
+14341355,3409393,"Shivapura_Peenya, Bengaluru - KSPCB",nox,nox,ppb,False
+14551749,6119271,Kumaraswamy Layout,pm1,pm1,µg/m³,False
+14551750,6119271,Kumaraswamy Layout,pm25,pm25,µg/m³,True
+14551751,6119271,Kumaraswamy Layout,relativehumidity,relativehumidity,%,False
+14551752,6119271,Kumaraswamy Layout,temperature,temperature,c,False
+14551753,6119271,Kumaraswamy Layout,um003,um003,particles/cm³,False
+14754074,6146655,Bellandur,pm1,pm1,µg/m³,False
+14754075,6146655,Bellandur,pm25,pm25,µg/m³,True
+14754076,6146655,Bellandur,relativehumidity,relativehumidity,%,False
+14754077,6146655,Bellandur,temperature,temperature,c,False
+14754078,6146655,Bellandur,um003,um003,particles/cm³,False
+15203554,6206921,Koramangala,pm1,pm1,µg/m³,False
+15203555,6206921,Koramangala,pm25,pm25,µg/m³,True
+15203556,6206921,Koramangala,relativehumidity,relativehumidity,%,False
+15203557,6206921,Koramangala,temperature,temperature,c,False
+15203558,6206921,Koramangala,um003,um003,particles/cm³,False

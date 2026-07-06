@@ -1,0 +1,97 @@
+{
+  "accepted_station_ids": [
+    "cpcb_hebbal",
+    "cpcb_hombegowda",
+    "cpcb_jayanagar5",
+    "cpcb_silkboard",
+    "cpcb_peenya",
+    "cpcb_bapujinagar"
+  ],
+  "excluded_station_ids": [],
+  "quality_details": {
+    "cpcb_hebbal": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 90.0,
+      "longest_continuous_pm25_run_hours": 674,
+      "classification": "Usable with caveats",
+      "recommendation": "The station has enough PM2.5 history for pipeline validation, but gaps or missing auxiliary sensors should be interpreted cautiously."
+    },
+    "cpcb_hombegowda": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 94.72,
+      "longest_continuous_pm25_run_hours": 801,
+      "classification": "Recommended for real-data training",
+      "recommendation": "Coverage, PM2.5 completeness, and continuity meet the recommended thresholds for 24-hour PM2.5 training."
+    },
+    "cpcb_jayanagar5": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 90.55,
+      "longest_continuous_pm25_run_hours": 814,
+      "classification": "Recommended for real-data training",
+      "recommendation": "Coverage, PM2.5 completeness, and continuity meet the recommended thresholds for 24-hour PM2.5 training."
+    },
+    "cpcb_silkboard": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 86.61,
+      "longest_continuous_pm25_run_hours": 587,
+      "classification": "Usable with caveats",
+      "recommendation": "The station has enough PM2.5 history for pipeline validation, but gaps or missing auxiliary sensors should be interpreted cautiously."
+    },
+    "cpcb_peenya": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 92.25,
+      "longest_continuous_pm25_run_hours": 747,
+      "classification": "Recommended for real-data training",
+      "recommendation": "Coverage, PM2.5 completeness, and continuity meet the recommended thresholds for 24-hour PM2.5 training."
+    },
+    "cpcb_bapujinagar": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 81.78,
+      "longest_continuous_pm25_run_hours": 1093,
+      "classification": "Recommended for real-data training",
+      "recommendation": "Coverage, PM2.5 completeness, and continuity meet the recommended thresholds for 24-hour PM2.5 training."
+    }
+  },
+  "feature_metadata": {
+    "dataset": "real_hebbal",
+    "selected_features": [
+      "pm25_lag_1h",
+      "pm25_lag_3h",
+      "pm25_lag_6h",
+      "pm25_lag_12h",
+      "pm25_lag_24h",
+      "hour",
+      "weekday",
+      "month",
+      "hour_sin",
+      "hour_cos",
+      "weekday_sin",
+      "weekday_cos",
+      "pm10_lag_1h",
+      "pm10_lag_24h",
+      "no2_lag_1h",
+      "no2_lag_24h",
+      "temperature_c",
+      "relative_humidity",
+      "rainfall_mm",
+      "pm25_roll_mean_3h",
+      "pm25_roll_mean_6h",
+      "pm25_roll_mean_24h",
+      "pm25_roll_std_24h"
+    ],
+    "excluded_features": {
+      "wind_speed_mps": "completeness 29.3% below 60% threshold"
+    },
+    "completeness_threshold_percent": 60.0,
+    "timestamp_gap_policy": "exact timestamp alignment; no forward fill"
+  },
+  "per_station_feature_paths": {
+    "cpcb_hebbal": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_hebbal\\cpcb_hebbal_features_24h.parquet",
+    "cpcb_hombegowda": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_hombegowda\\cpcb_hombegowda_features_24h.parquet",
+    "cpcb_jayanagar5": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_jayanagar5\\cpcb_jayanagar5_features_24h.parquet",
+    "cpcb_silkboard": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_silkboard\\cpcb_silkboard_features_24h.parquet",
+    "cpcb_peenya": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_peenya\\cpcb_peenya_features_24h.parquet",
+    "cpcb_bapujinagar": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_bapujinagar\\cpcb_bapujinagar_features_24h.parquet"
+  },
+  "unified_features_path": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\bengaluru_multistation_features_24h.parquet"
+}

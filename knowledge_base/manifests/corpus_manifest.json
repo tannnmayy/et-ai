@@ -1,0 +1,64 @@
+{
+  "metadata_version": "1.0",
+  "created_at": "2026-07-06T00:00:00Z",
+  "documents": [
+    {
+      "document_id": "cpcb_aqi_categories_2023",
+      "title": "CPCB National Air Quality Index: Categories and Health Advisory",
+      "organization": "Central Pollution Control Board",
+      "source_type": "standard",
+      "jurisdiction": "India",
+      "publication_date": "2023-01-15",
+      "source_url": "https://cpcb.nic.in/National-Air-Quality-Index/",
+      "local_path": "demo_cpcb_aqi_guidelines.md",
+      "sha256": "abc123def456demo",
+      "language": "en",
+      "demo_only": true,
+      "allowed_for_citation": false,
+      "notes": "DEMO DOCUMENT — Not an official CPCB publication. Replace with actual CPCB document before enabling citations."
+    },
+    {
+      "document_id": "who_air_quality_2021",
+      "title": "WHO Global Air Quality Guidelines: Particulate Matter (PM2.5 and PM10)",
+      "organization": "World Health Organization",
+      "source_type": "health_guidance",
+      "jurisdiction": "Global",
+      "publication_date": "2021-09-22",
+      "source_url": "https://www.who.int/publications/i/item/9789240034228",
+      "local_path": "demo_who_air_quality.md",
+      "sha256": "def456abc789demo",
+      "language": "en",
+      "demo_only": true,
+      "allowed_for_citation": false,
+      "notes": "DEMO DOCUMENT — Replace with actual WHO publication before enabling citations."
+    },
+    {
+      "document_id": "ncap_programme_2024",
+      "title": "National Clean Air Programme: City Action Plan Guidelines",
+      "organization": "Ministry of Environment, Forest and Climate Change",
+      "source_type": "policy",
+      "jurisdiction": "India",
+      "publication_date": "2024-03-01",
+      "source_url": "https://moef.gov.in/ncap/",
+      "local_path": "demo_ncap_programme.md",
+      "sha256": "ghi789jkl012demo",
+      "language": "en",
+      "demo_only": true,
+      "allowed_for_citation": false,
+      "notes": "DEMO DOCUMENT — Replace with actual NCAP document before enabling citations."
+    },
+    {
+      "document_id": "demo_only_sample_001",
+      "title": "Sample Demo Document — Not for Citation",
+      "organization": "AQI Sentinel",
+      "source_type": "advisory",
+      "jurisdiction": "Global",
+      "local_path": "demo_only_sample.md",
+      "sha256": "mno345pqr678demo",
+      "language": "en",
+      "demo_only": true,
+      "allowed_for_citation": false,
+      "notes": "Explicitly marked demo_only and not allowed for citation. Used only for pipeline testing."
+    }
+  ]
+}

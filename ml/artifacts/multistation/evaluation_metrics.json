@@ -1,0 +1,111 @@
+{
+  "task": "PM2.5 24-hour forecasting",
+  "dataset": "real_multistation",
+  "city": "Bengaluru",
+  "split_strategy": "chronological 70/15/15 by unique timestamp (global)",
+  "split_boundaries": {
+    "train_end": "2025-09-12 20:00:00+00:00",
+    "validation_end": "2025-11-06 07:00:00+00:00",
+    "test_end": "2025-12-30 18:00:00+00:00"
+  },
+  "selected_features": [
+    "pm25_lag_1h",
+    "pm25_lag_3h",
+    "pm25_lag_6h",
+    "pm25_lag_12h",
+    "pm25_lag_24h",
+    "hour",
+    "weekday",
+    "month",
+    "hour_sin",
+    "hour_cos",
+    "weekday_sin",
+    "weekday_cos",
+    "pm10_lag_1h",
+    "pm10_lag_24h",
+    "no2_lag_1h",
+    "no2_lag_24h",
+    "temperature_c",
+    "relative_humidity",
+    "rainfall_mm",
+    "pm25_roll_mean_3h",
+    "pm25_roll_mean_6h",
+    "pm25_roll_mean_24h",
+    "pm25_roll_std_24h",
+    "is_station_cpcb_bapujinagar",
+    "is_station_cpcb_hebbal",
+    "is_station_cpcb_hombegowda",
+    "is_station_cpcb_jayanagar5",
+    "is_station_cpcb_peenya",
+    "is_station_cpcb_silkboard"
+  ],
+  "total_test_rows": 5614,
+  "overall_persistence": {
+    "rmse": 21.1573,
+    "mae": 14.7107
+  },
+  "overall_lightgbm": {
+    "rmse": 25.2938,
+    "mae": 18.4892
+  },
+  "overall_rmse_improvement_percent": -19.55,
+  "lgbm_wins_count": 2,
+  "persistence_wins_count": 4,
+  "per_station": {
+    "cpcb_bapujinagar": {
+      "test_rows": 37,
+      "persistence_rmse": 29.2419,
+      "persistence_mae": 25.8243,
+      "lightgbm_rmse": 36.9475,
+      "lightgbm_mae": 34.6227,
+      "rmse_improvement_percent": -26.35,
+      "model_selected_for_serving": "persistence"
+    },
+    "cpcb_hebbal": {
+      "test_rows": 1174,
+      "persistence_rmse": 28.8601,
+      "persistence_mae": 21.5324,
+      "lightgbm_rmse": 33.3949,
+      "lightgbm_mae": 27.0236,
+      "rmse_improvement_percent": -15.71,
+      "model_selected_for_serving": "persistence"
+    },
+    "cpcb_hombegowda": {
+      "test_rows": 1190,
+      "persistence_rmse": 13.9559,
+      "persistence_mae": 10.937,
+      "lightgbm_rmse": 12.7245,
+      "lightgbm_mae": 10.4029,
+      "rmse_improvement_percent": 8.82,
+      "model_selected_for_serving": "lightgbm"
+    },
+    "cpcb_jayanagar5": {
+      "test_rows": 940,
+      "persistence_rmse": 22.0332,
+      "persistence_mae": 16.5426,
+      "lightgbm_rmse": 31.2366,
+      "lightgbm_mae": 26.829,
+      "rmse_improvement_percent": -41.77,
+      "model_selected_for_serving": "persistence"
+    },
+    "cpcb_peenya": {
+      "test_rows": 1159,
+      "persistence_rmse": 11.5469,
+      "persistence_mae": 7.8508,
+      "lightgbm_rmse": 8.801,
+      "lightgbm_mae": 5.8663,
+      "rmse_improvement_percent": 23.78,
+      "model_selected_for_serving": "lightgbm"
+    },
+    "cpcb_silkboard": {
+      "test_rows": 1114,
+      "persistence_rmse": 24.3569,
+      "persistence_mae": 16.7751,
+      "lightgbm_rmse": 30.4409,
+      "lightgbm_mae": 23.6928,
+      "rmse_improvement_percent": -24.98,
+      "model_selected_for_serving": "persistence"
+    }
+  },
+  "station_count": 6
+}

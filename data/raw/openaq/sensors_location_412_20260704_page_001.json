@@ -1,0 +1,235 @@
+{
+  "meta": {
+    "name": "openaq-api",
+    "website": "/",
+    "page": 1,
+    "limit": 100,
+    "found": 4
+  },
+  "results": [
+    {
+      "id": 1518,
+      "name": "no2 \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 5,
+        "name": "no2",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "NO\u2082 mass"
+      },
+      "datetimeFirst": {
+        "utc": "2016-03-22T03:15:00Z",
+        "local": "2016-03-22T08:45:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-22T02:45:00Z",
+        "local": "2018-02-22T08:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 21489,
+        "observedInterval": "5372:15:00",
+        "percentComplete": 2148900.0,
+        "percentCoverage": 537225.0,
+        "datetimeFrom": {
+          "utc": "2016-03-22T03:15:00Z",
+          "local": "2016-03-22T08:45:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        },
+        "value": 25.02,
+        "coordinates": {
+          "latitude": 13.0339,
+          "longitude": 77.51321111
+        }
+      },
+      "summary": {
+        "min": 0.01,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 999.99,
+        "avg": 25.667249755688974,
+        "sd": null
+      }
+    },
+    {
+      "id": 13853,
+      "name": "so2 \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 6,
+        "name": "so2",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "SO\u2082 mass"
+      },
+      "datetimeFirst": {
+        "utc": "2017-06-19T19:45:00Z",
+        "local": "2017-06-20T01:15:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-22T02:45:00Z",
+        "local": "2018-02-22T08:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 6293,
+        "observedInterval": "1573:15:00",
+        "percentComplete": 629300.0,
+        "percentCoverage": 157325.0,
+        "datetimeFrom": {
+          "utc": "2017-06-19T19:45:00Z",
+          "local": "2017-06-20T01:15:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        },
+        "value": 3.83,
+        "coordinates": {
+          "latitude": 13.0339,
+          "longitude": 77.51321111
+        }
+      },
+      "summary": {
+        "min": 0.01,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 327.44,
+        "avg": 4.938002542507537,
+        "sd": null
+      }
+    },
+    {
+      "id": 13852,
+      "name": "pm25 \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 2,
+        "name": "pm25",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "PM2.5"
+      },
+      "datetimeFirst": {
+        "utc": "2017-02-18T21:15:00Z",
+        "local": "2017-02-19T02:45:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-22T02:45:00Z",
+        "local": "2018-02-22T08:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 10043,
+        "observedInterval": "2510:45:00",
+        "percentComplete": 1004300.0,
+        "percentCoverage": 251075.0,
+        "datetimeFrom": {
+          "utc": "2017-02-18T21:15:00Z",
+          "local": "2017-02-19T02:45:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        },
+        "value": 43.79,
+        "coordinates": {
+          "latitude": 13.0339,
+          "longitude": 77.51321111
+        }
+      },
+      "summary": {
+        "min": -15.0,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 999.99,
+        "avg": 44.591306382554876,
+        "sd": null
+      }
+    },
+    {
+      "id": 722,
+      "name": "co \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 4,
+        "name": "co",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "CO mass"
+      },
+      "datetimeFirst": {
+        "utc": "2016-03-22T03:15:00Z",
+        "local": "2016-03-22T08:45:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-22T02:45:00Z",
+        "local": "2018-02-22T08:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 20309,
+        "observedInterval": "5077:15:00",
+        "percentComplete": 2030900.0,
+        "percentCoverage": 507725.0,
+        "datetimeFrom": {
+          "utc": "2016-03-22T03:15:00Z",
+          "local": "2016-03-22T08:45:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-22T02:45:00Z",
+          "local": "2018-02-22T08:15:00+05:30"
+        },
+        "value": 970.0,
+        "coordinates": {
+          "latitude": 13.0339,
+          "longitude": 77.51321111
+        }
+      },
+      "summary": {
+        "min": 20.0,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 13200.0,
+        "avg": 716.0451031562361,
+        "sd": null
+      }
+    }
+  ]
+}

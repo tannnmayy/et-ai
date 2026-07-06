@@ -1,0 +1,33 @@
+{
+  "dataset": "real_hebbal",
+  "selected_features": [
+    "pm25_lag_1h",
+    "pm25_lag_3h",
+    "pm25_lag_6h",
+    "pm25_lag_12h",
+    "pm25_lag_24h",
+    "hour",
+    "weekday",
+    "month",
+    "hour_sin",
+    "hour_cos",
+    "weekday_sin",
+    "weekday_cos",
+    "pm10_lag_1h",
+    "pm10_lag_24h",
+    "no2_lag_1h",
+    "no2_lag_24h",
+    "temperature_c",
+    "relative_humidity",
+    "rainfall_mm",
+    "pm25_roll_mean_3h",
+    "pm25_roll_mean_6h",
+    "pm25_roll_mean_24h",
+    "pm25_roll_std_24h"
+  ],
+  "excluded_features": {
+    "wind_speed_mps": "completeness 29.3% below 60% threshold"
+  },
+  "completeness_threshold_percent": 60.0,
+  "timestamp_gap_policy": "exact timestamp alignment; no forward fill"
+}

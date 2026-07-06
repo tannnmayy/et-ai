@@ -6,12 +6,17 @@ from typing import Any
 from backend.app.agents.audit import AuditTrail
 from backend.app.agents.fallback_renderer import render_inspection_plan
 from backend.app.agents.state import AgentState
-from backend.app.agents.tools import tool_get_inspection_priorities, tool_get_forecast_evidence, tool_get_forecast_confidence
+from backend.app.agents.tools import (
+    tool_get_forecast_confidence,
+    tool_get_forecast_evidence,
+    tool_get_inspection_priorities,
+    tool_search_policy_guidance,
+)
 from backend.app.config import INVESTIGATION_DISCLAIMER
 
 logger = logging.getLogger(__name__)
 
-PERMITTED_TOOLS = ["tool_get_inspection_priorities", "tool_get_forecast_evidence", "tool_get_forecast_confidence"]
+PERMITTED_TOOLS = ["tool_get_inspection_priorities", "tool_get_forecast_evidence", "tool_get_forecast_confidence", "tool_search_policy_guidance"]
 
 
 def run_enforcement_planning_agent(state: AgentState, audit: AuditTrail) -> None:
@@ -44,6 +49,35 @@ def run_enforcement_planning_agent(state: AgentState, audit: AuditTrail) -> None
         caveats = station.get("caveats", [])
         if INVESTIGATION_DISCLAIMER not in caveats:
             caveats.append(INVESTIGATION_DISCLAIMER)
+
+    focus_queries = set()
+    for s in ranked:
+        focus = s.get("recommended_inspection_focus", "")
+        if "dust" in focus.lower():
+            focus_queries.add("particulate dust control measures inspection")
+        if "traffic" in focus.lower() or "congestion" in focus.lower():
+            focus_queries.add("traffic emission combustion source control")
+        if "industrial" in focus.lower():
+            focus_queries.add("industrial emission compliance inspection")
+
+    citations: list[dict] = []
+    if focus_queries:
+        guidance_query = " ".join(focus_queries)
+        guidance_data = tool_search_policy_guidance(guidance_query, top_k=2)
+        audit.record_tool_call(
+            "tool_search_policy_guidance",
+            {"query": guidance_query, "top_k": 2},
+            "_tool_error" not in guidance_data,
+        )
+        if "_tool_error" not in guidance_data and not guidance_data.get("no_authoritative_result"):
+            for r in guidance_data.get("results", []):
+                citations.append({
+                    "citation_label": r.get("citation_label"),
+                    "title": r.get("title"),
+                    "organization": r.get("organization"),
+                    "excerpt": r.get("excerpt", "")[:200],
+                })
+            inspection_data["citations"] = citations
 
     state.response = render_inspection_plan(inspection_data)
     state.structured_data = inspection_data

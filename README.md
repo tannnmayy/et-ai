@@ -616,3 +616,182 @@ AQI_SENTINEL_LLM_MODEL=gpt-4o-mini
 ```
 
 If no key is present, the system operates in fully offline deterministic mode.
+
+## Milestone 3C — Grounded Policy and Health Knowledge Service
+
+This milestone adds a local, curated policy and health knowledge service. It retrieves relevant passages from authoritative source documents and returns structured citations for agents and APIs.
+
+This is a **grounded retrieval system**, not a general web-search system and not an LLM knowledge substitute. The system never invents citations, never cites documents that were not retrieved, and never claims an official source supports a statement if it does not.
+
+### Why a Curated Local Corpus
+
+Rather than searching the web at runtime, AQI Sentinel maintains a deliberately small, curated local corpus of official documents. This ensures:
+- All citations are traceable to source organization and title.
+- No external web calls or paid APIs at runtime.
+- Documents must be manually approved by the developer before they become citable.
+- Demo documents (used for testing) are clearly marked and never appear in user-facing citations.
+
+### Document Eligibility Rules
+
+Every document has two eligibility flags:
+- `demo_only: true/false` — Demo documents are used only for pipeline and test validation.
+- `allowed_for_citation: true/false` — Documents must have this set to `true` to appear in user-facing results.
+
+A document is retrievable for citation only when both conditions are met:
+- `allowed_for_citation = true`
+- `demo_only = false`
+
+### Semantic vs Lexical Retrieval
+
+Two retrieval modes are supported:
+
+1. **Semantic mode** (`KNOWLEDGE_RETRIEVAL_MODE=semantic`):
+   - Uses `sentence-transformers/all-MiniLM-L6-v2` for embedding.
+   - Requires the model to be cached locally (downloaded once on first index build).
+   - Cosine similarity ranking.
+
+2. **Lexical fallback mode** (`KNOWLEDGE_RETRIEVAL_MODE=lexical`, **default**):
+   - Uses scikit-learn TF-IDF vectorization.
+   - Works fully offline with no model download.
+   - Cosine similarity ranking on TF-IDF vectors.
+
+The project defaults to lexical mode for immediate offline operation. To switch to semantic mode, set `KNOWLEDGE_RETRIEVAL_MODE=semantic` in `backend/app/config.py`.
+
+### Adding a Real Official Document
+
+1. Place the document file (`.pdf`, `.txt`, or `.md`) in `knowledge_base/raw/`.
+2. Register it in `knowledge_base/manifests/corpus_manifest.json` with complete metadata.
+3. Set `demo_only: false` and `allowed_for_citation: true`.
+4. Compute the SHA-256 hash and set the `sha256` field.
+5. Rebuild the index:
+
+```powershell
+cd E:\1ETAI
+python -m pipeline.build_knowledge_index
+```
+
+### Required Manifest Metadata
+
+```json
+{
+  "document_id": "unique_id",
+  "title": "Full Document Title",
+  "organization": "Publishing Organization",
+  "source_type": "policy | health_guidance | standard | advisory",
+  "jurisdiction": "India | Karnataka | Bengaluru | Global",
+  "publication_date": "2023-01-15",
+  "source_url": "https://example.org/doc",
+  "local_path": "filename.pdf",
+  "sha256": "64-character-hex-hash",
+  "language": "en",
+  "demo_only": false,
+  "allowed_for_citation": true,
+  "notes": "Optional notes"
+}
+```
+
+### Index Build Command
+
+```powershell
+cd E:\1ETAI
+python -m pipeline.build_knowledge_index
+```
+
+Artifacts created:
+```
+knowledge_base/processed/chunks.jsonl        # All chunks with metadata
+knowledge_base/indexes/index_metadata.json    # Index metadata
+knowledge_base/indexes/tfidf_vectorizer.joblib # TF-IDF vectorizer (lexical mode)
+knowledge_base/indexes/tfidf_matrix.joblib    # TF-IDF matrix (lexical mode)
+knowledge_base/indexes/chunk_data.joblib      # Chunk data for retrieval
+knowledge_base/reports/index_report.json      # Structured report
+knowledge_base/reports/index_report.md        # Human-readable report
+```
+
+### Retrieval Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/guidance/search?q={query}&top_k=3` | Search for policy/health guidance |
+| GET | `/guidance/documents` | List citation-eligible documents |
+| GET | `/guidance/status` | Knowledge base index status |
+
+### Agent Integration
+
+Agents now call `tool_search_policy_guidance()` to retrieve supporting guidance:
+
+| Agent | When Guidance Is Retrieved | Behavior When None Found |
+|-------|---------------------------|--------------------------|
+| Citizen Advisory | Builds a focused query from risk category + profile | States no authoritative source was found; preserves advisory + disclaimer |
+| Enforcement Planning | Builds query from investigation focus (dust/traffic/industrial) | No change to inspection plan; disclaimer remains |
+| City Briefing | Only when city risk is Poor or worse | Data limitations and coverage disclaimer remain |
+
+A new **Policy Guidance Agent** handles the `policy_guidance` intent for standalone queries like "What does CPCB say about outdoor activity?"
+
+### Safety Limitations
+
+- No web scraping or external runtime calls were added.
+- Demo-only documents cannot appear as official citations.
+- No LLM generates citations.
+- Retrieved sources support guidance but do not prove station-level pollution causes.
+- Existing forecasting, intelligence, and agent behavior remains semantically unchanged.
+- This milestone does not yet add weather, traffic, routing, MCP, frontend, or external API calls.
+
+### New Files
+
+```
+knowledge_base/
+├── raw/                           # Place official documents here
+│   ├── README.md
+│   ├── demo_cpcb_aqi_guidelines.md
+│   ├── demo_who_air_quality.md
+│   ├── demo_ncap_programme.md
+│   └── demo_only_sample.md
+├── processed/
+│   └── chunks.jsonl
+├── manifests/
+│   └── corpus_manifest.json
+├── indexes/
+│   ├── index_metadata.json
+│   ├── tfidf_vectorizer.joblib
+│   ├── tfidf_matrix.joblib
+│   └── chunk_data.joblib
+├── reports/
+│   ├── index_report.json
+│   └── index_report.md
+└── schemas/
+    └── source_metadata.schema.json
+
+pipeline/build_knowledge_index.py           # Index build pipeline
+backend/app/services/policy_guidance_service.py  # Retrieval service
+backend/app/schemas/guidance.py             # Pydantic models
+backend/app/routers/guidance.py             # FastAPI endpoints
+backend/app/agents/policy_guidance_agent.py # Policy guidance agent
+tests/test_knowledge_base.py               # 40+ tests
+```
+
+### Commands
+
+Run full test suite (all milestones, zero failures):
+```powershell
+cd E:\1ETAI
+python -m pytest tests/ -q
+```
+
+Start FastAPI:
+```powershell
+cd E:\1ETAI
+uvicorn backend.app.main:app --reload
+```
+
+Test guidance endpoints:
+```powershell
+# Index status
+Invoke-RestMethod http://127.0.0.1:8000/guidance/status | ConvertTo-Json -Depth 3
+
+# Search guidance
+Invoke-RestMethod "http://127.0.0.1:8000/guidance/search?q=air+quality+guidelines&top_k=3" | ConvertTo-Json -Depth 10
+
+# List eligible documents
+Invoke-RestMethod http://127.0.0.1:8000/guidance/documents | ConvertTo-Json -Depth 3
+```

@@ -1,0 +1,235 @@
+{
+  "meta": {
+    "name": "openaq-api",
+    "website": "/",
+    "page": 1,
+    "limit": 100,
+    "found": 4
+  },
+  "results": [
+    {
+      "id": 5349,
+      "name": "no2 \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 5,
+        "name": "no2",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "NO\u2082 mass"
+      },
+      "datetimeFirst": {
+        "utc": "2016-03-21T18:30:00Z",
+        "local": "2016-03-22T00:00:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-21T23:45:00Z",
+        "local": "2018-02-22T05:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 18377,
+        "observedInterval": "4594:15:00",
+        "percentComplete": 1837700.0,
+        "percentCoverage": 459425.0,
+        "datetimeFrom": {
+          "utc": "2016-03-21T18:30:00Z",
+          "local": "2016-03-22T00:00:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        },
+        "value": 23.67,
+        "coordinates": {
+          "latitude": 12.9916694,
+          "longitude": 77.5458305555555
+        }
+      },
+      "summary": {
+        "min": 1.05,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 886.6,
+        "avg": 27.68398704902865,
+        "sd": null
+      }
+    },
+    {
+      "id": 14129,
+      "name": "so2 \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 6,
+        "name": "so2",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "SO\u2082 mass"
+      },
+      "datetimeFirst": {
+        "utc": "2017-06-19T19:45:00Z",
+        "local": "2017-06-20T01:15:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-21T23:45:00Z",
+        "local": "2018-02-22T05:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 4701,
+        "observedInterval": "1175:15:00",
+        "percentComplete": 470100.0,
+        "percentCoverage": 117525.0,
+        "datetimeFrom": {
+          "utc": "2017-06-19T19:45:00Z",
+          "local": "2017-06-20T01:15:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        },
+        "value": 3.88,
+        "coordinates": {
+          "latitude": 12.9916694,
+          "longitude": 77.5458305555555
+        }
+      },
+      "summary": {
+        "min": 1.01,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 13.79,
+        "avg": 2.153118485428634,
+        "sd": null
+      }
+    },
+    {
+      "id": 5348,
+      "name": "pm10 \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 1,
+        "name": "pm10",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "PM10"
+      },
+      "datetimeFirst": {
+        "utc": "2016-03-21T18:30:00Z",
+        "local": "2016-03-22T00:00:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-21T23:45:00Z",
+        "local": "2018-02-22T05:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 18240,
+        "observedInterval": "4560:00:00",
+        "percentComplete": 1824000.0,
+        "percentCoverage": 456000.0,
+        "datetimeFrom": {
+          "utc": "2016-03-21T18:30:00Z",
+          "local": "2016-03-22T00:00:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        },
+        "value": 64.75,
+        "coordinates": {
+          "latitude": 12.9916694,
+          "longitude": 77.5458305555555
+        }
+      },
+      "summary": {
+        "min": 1.01,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 999.99,
+        "avg": 54.588913377193236,
+        "sd": null
+      }
+    },
+    {
+      "id": 5350,
+      "name": "co \u00b5g/m\u00b3",
+      "parameter": {
+        "id": 4,
+        "name": "co",
+        "units": "\u00b5g/m\u00b3",
+        "displayName": "CO mass"
+      },
+      "datetimeFirst": {
+        "utc": "2016-03-21T18:30:00Z",
+        "local": "2016-03-22T00:00:00+05:30"
+      },
+      "datetimeLast": {
+        "utc": "2018-02-21T23:45:00Z",
+        "local": "2018-02-22T05:15:00+05:30"
+      },
+      "coverage": {
+        "expectedCount": 1,
+        "expectedInterval": "00:15:00",
+        "observedCount": 18072,
+        "observedInterval": "4518:00:00",
+        "percentComplete": 1807200.0,
+        "percentCoverage": 451800.0,
+        "datetimeFrom": {
+          "utc": "2016-03-21T18:30:00Z",
+          "local": "2016-03-22T00:00:00+05:30"
+        },
+        "datetimeTo": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        }
+      },
+      "latest": {
+        "datetime": {
+          "utc": "2018-02-21T23:45:00Z",
+          "local": "2018-02-22T05:15:00+05:30"
+        },
+        "value": 330.0,
+        "coordinates": {
+          "latitude": 12.9916694,
+          "longitude": 77.5458305555555
+        }
+      },
+      "summary": {
+        "min": 20.0,
+        "q02": null,
+        "q25": null,
+        "median": null,
+        "q75": null,
+        "q98": null,
+        "max": 34820.0,
+        "avg": 502.80876494023903,
+        "sd": null
+      }
+    }
+  ]
+}

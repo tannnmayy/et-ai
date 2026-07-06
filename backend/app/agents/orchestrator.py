@@ -11,6 +11,7 @@ from backend.app.agents.city_briefing_agent import run_city_briefing_agent
 from backend.app.agents.enforcement_planning_agent import run_enforcement_planning_agent
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
 from backend.app.agents.llm_provider import get_llm_provider
+from backend.app.agents.policy_guidance_agent import run_policy_guidance_agent
 from backend.app.agents.state import AgentState, Intent
 from backend.app.config import ADVISORY_PROFILES, SUPPORTED_CITIES, SUPPORTED_LANGUAGES
 from backend.app.services.artifact_adapter import UnknownStationError, _validate_station
@@ -30,6 +31,7 @@ def _detect_intent(
             "inspection_plan": Intent.inspection_plan,
             "citizen_guidance": Intent.citizen_guidance,
             "city_briefing": Intent.city_briefing,
+            "policy_guidance": Intent.policy_guidance,
         }
         return intent_map.get(explicit_intent, Intent.unsupported)
 
@@ -59,6 +61,9 @@ def _detect_intent(
     if has_station and not has_city_query:
         return Intent.station_explanation
 
+    if any(w in q for w in ["policy", "official source", "official guidance", "cpcb says", "who says", "guidance support", "what does", "show the policy"]):
+        return Intent.policy_guidance
+
     if has_city_query:
         return Intent.city_briefing
 
@@ -72,6 +77,7 @@ def _route_intent(intent: Intent) -> str:
         Intent.inspection_plan: "enforcement_planning_agent",
         Intent.citizen_guidance: "citizen_advisory_agent",
         Intent.city_briefing: "city_briefing_agent",
+        Intent.policy_guidance: "policy_guidance_agent",
     }
     return mapping.get(intent, "unknown")
 
@@ -223,6 +229,8 @@ def run_orchestrator(
         run_citizen_advisory_agent(state, audit)
     elif intent == Intent.city_briefing:
         run_city_briefing_agent(state, audit)
+    elif intent == Intent.policy_guidance:
+        run_policy_guidance_agent(state, audit)
 
     response_warnings = _validate_response(state)
     for w in response_warnings:

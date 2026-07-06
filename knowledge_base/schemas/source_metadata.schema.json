@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Corpus Document Metadata",
+  "type": "object",
+  "required": [
+    "document_id",
+    "title",
+    "organization",
+    "source_type",
+    "jurisdiction",
+    "local_path",
+    "sha256",
+    "language",
+    "demo_only",
+    "allowed_for_citation"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string",
+      "description": "Unique identifier for the document"
+    },
+    "title": {
+      "type": "string",
+      "description": "Full document title"
+    },
+    "organization": {
+      "type": "string",
+      "description": "Publishing organization"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["policy", "health_guidance", "standard", "advisory"],
+      "description": "Category of the document"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "enum": ["India", "Karnataka", "Bengaluru", "Global"],
+      "description": "Applicable jurisdiction"
+    },
+    "publication_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of publication (optional)"
+    },
+    "source_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Source URL (optional)"
+    },
+    "local_path": {
+      "type": "string",
+      "description": "Relative path from knowledge_base/raw/"
+    },
+    "sha256": {
+      "type": "string",
+      "description": "SHA-256 hash of the source file"
+    },
+    "language": {
+      "type": "string",
+      "enum": ["en", "hi", "kn"],
+      "description": "Document language"
+    },
+    "demo_only": {
+      "type": "boolean",
+      "description": "True if this is a demo/test document, not an official source"
+    },
+    "allowed_for_citation": {
+      "type": "boolean",
+      "description": "True if this document may be cited in user-facing responses"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes about the document"
+    }
+  }
+}

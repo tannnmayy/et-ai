@@ -1,0 +1,16 @@
+{
+  "task": "PM2.5 24-hour forecasting",
+  "city": "Bengaluru",
+  "split_strategy": "chronological 70/15/15 by unique timestamp",
+  "test_rows": 1923,
+  "persistence": {
+    "rmse": 16.9903,
+    "mae": 12.717
+  },
+  "lightgbm": {
+    "rmse": 11.7974,
+    "mae": 8.2495
+  },
+  "rmse_improvement_percent": 30.56,
+  "model_selected_for_serving": "lightgbm"
+}

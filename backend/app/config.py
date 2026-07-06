@@ -163,3 +163,20 @@ ADVISORY_PROFILES: list[str] = [
 SUPPORTED_LANGUAGES: list[str] = ["en", "hi", "kn"]
 
 MEDICAL_DISCLAIMER: str = "This is general air-quality guidance, not medical advice."
+
+# ---------------------------------------------------------------------------
+# Knowledge base / policy guidance
+# ---------------------------------------------------------------------------
+
+KNOWLEDGE_BASE_DIR: str = "knowledge_base"
+KNOWLEDGE_MANIFEST_PATH: str = "manifests/corpus_manifest.json"
+KNOWLEDGE_CHUNKS_PATH: str = "processed/chunks.jsonl"
+KNOWLEDGE_INDEX_DIR: str = "indexes"
+KNOWLEDGE_RETRIEVAL_MODE: str = "lexical"
+KNOWLEDGE_TOP_K_DEFAULT: int = 3
+KNOWLEDGE_TOP_K_MAX: int = 10
+KNOWLEDGE_MIN_RELEVANCE_SCORE: float = 0.05
+KNOWLEDGE_ALLOW_DEMO_CITATIONS: bool = False
+KNOWLEDGE_EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+KNOWLEDGE_CHUNK_SIZE: int = 800
+KNOWLEDGE_CHUNK_OVERLAP: int = 120

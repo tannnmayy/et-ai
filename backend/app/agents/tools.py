@@ -50,3 +50,16 @@ def tool_get_city_briefing(city: str = "bengaluru") -> dict[str, Any]:
         return get_city_briefing(city)
     except UnsupportedCityError as e:
         return {"_tool_error": str(e), "_error_type": "UnsupportedCityError"}
+
+
+def tool_search_policy_guidance(
+    query: str,
+    city: str | None = None,
+    source_types: list[str] | None = None,
+    top_k: int = 3,
+) -> dict[str, Any]:
+    from backend.app.services.policy_guidance_service import search_policy_guidance
+    try:
+        return search_policy_guidance(query, city=city, source_types=source_types, top_k=top_k)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}

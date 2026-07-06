@@ -1,36 +1,8 @@
-# Python
+@"
 .venv/
 __pycache__/
-*.py[cod]
-.mypy_cache/
-.ruff_cache/
-
-# Testing
-.pytest_cache/
-pytest-cache-files-*/
-
-# Environment
+*.pyc
 .env
 .env.*
 !.env.example
-
-# Data (regeneratable)
-data/raw/*.csv
-data/raw/openaq/*.json
-data/processed/*.parquet
-data/reports/*.csv
-data/reports/*.md
-
-# CPCB data
-data/raw/cpcb/*.csv
-data/processed/real/
-
-# Model artifacts (regeneratable)
-ml/artifacts/*
-!ml/artifacts/.gitkeep
-
-# Keep placeholders
-!data/raw/.gitkeep
-!data/raw/openaq/.gitkeep
-!data/processed/.gitkeep
-!data/reports/.gitkeep
+"@ | Out-File -Encoding utf8 .gitignore
