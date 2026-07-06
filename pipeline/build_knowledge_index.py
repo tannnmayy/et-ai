@@ -45,6 +45,31 @@ def _extract_text(path: Path) -> str:
         raise ValueError(f"Unsupported file type: {suffix}")
 
 
+def _extract_text_with_pages(path: Path) -> list[tuple[int | None, str]]:
+    """Extract text from a file, preserving page numbers for PDFs.
+
+    Returns a list of (page_number, page_text) tuples.
+    page_number is 1-indexed for PDFs, None for non-PDF files.
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            import fitz
+            doc = fitz.open(str(path))
+            pages: list[tuple[int | None, str]] = []
+            for i, page in enumerate(doc):
+                text = page.get_text()
+                if text.strip():
+                    pages.append((i + 1, text))
+            doc.close()
+            return pages if pages else [(None, "")]
+        except ImportError:
+            raise RuntimeError("PyMuPDF not installed. Install with: pip install pymupdf")
+    else:
+        text = path.read_text(encoding="utf-8")
+        return [(None, text)]
+
+
 def _extract_sections(text: str) -> list[dict]:
     lines = text.split("\n")
     sections: list[dict] = []
@@ -194,37 +219,52 @@ def build_index(
         doc_id = doc["document_id"]
         file_path = kb_raw / doc["local_path"]
         try:
-            text = _extract_text(file_path)
+            pages = _extract_text_with_pages(file_path)
             actual_hash = _compute_sha256(file_path)
             if actual_hash != doc.get("sha256", ""):
                 logger.warning("Hash mismatch for %s: file=%s manifest=%s", doc_id, actual_hash, doc.get("sha256"))
                 doc["sha256_actual"] = actual_hash
 
-            sections = _extract_sections(text)
             chunk_index = 0
-            for section in sections:
-                chunks = _chunk_text(section["content"], section["heading"], None)
-                for chunk in chunks:
-                    chunk_id = f"{doc_id}_chunk_{chunk_index:04d}"
-                    char_count = len(chunk["text"])
-                    all_chunks.append({
-                        "chunk_id": chunk_id,
-                        "document_id": doc_id,
-                        "text": chunk["text"],
-                        "page_number": chunk["page_number"],
-                        "section_heading": chunk["section_heading"],
-                        "chunk_index": chunk_index,
-                        "character_count": char_count,
-                        "title": doc.get("title", ""),
-                        "organization": doc.get("organization", ""),
-                        "source_type": doc.get("source_type", ""),
-                        "jurisdiction": doc.get("jurisdiction", ""),
-                        "publication_date": doc.get("publication_date"),
-                        "source_url": doc.get("source_url"),
-                        "demo_only": doc.get("demo_only", False),
-                        "allowed_for_citation": doc.get("allowed_for_citation", False),
-                    })
-                    chunk_index += 1
+            for page_num, page_text in pages:
+                sections = _extract_sections(page_text)
+                for section in sections:
+                    chunks = _chunk_text(section["content"], section["heading"], page_num)
+                    for chunk in chunks:
+                        chunk_id = f"{doc_id}_chunk_{chunk_index:04d}"
+                        char_count = len(chunk["text"])
+                        chunk_record = {
+                            "chunk_id": chunk_id,
+                            "document_id": doc_id,
+                            "text": chunk["text"],
+                            "page_number": chunk["page_number"],
+                            "section_heading": chunk["section_heading"],
+                            "chunk_index": chunk_index,
+                            "character_count": char_count,
+                            "title": doc.get("title", ""),
+                            "organization": doc.get("organization", ""),
+                            "source_type": doc.get("source_type", ""),
+                            "jurisdiction": doc.get("jurisdiction", ""),
+                            "publication_date": doc.get("publication_date"),
+                            "source_url": doc.get("source_url"),
+                            "demo_only": doc.get("demo_only", False),
+                            "allowed_for_citation": doc.get("allowed_for_citation", False),
+                        }
+                        for key in ("version", "permitted_for_health_context",
+                                    "permitted_for_indian_aqi_thresholds",
+                                    "permitted_for_legal_context",
+                                    "permitted_for_city_context",
+                                    "permitted_for_investigation_hypothesis_context",
+                                    "permitted_for_source_attribution",
+                                    "permitted_for_legal_conclusion",
+                                    "legal_context_only", "required_disclaimer",
+                                    "permitted_for_compliance_verdict",
+                                    "permitted_for_violation_claim",
+                                    "permitted_for_penalty_claim"):
+                            if key in doc:
+                                chunk_record[key] = doc[key]
+                        all_chunks.append(chunk_record)
+                        chunk_index += 1
         except Exception as e:
             extraction_failures.append(f"{doc_id}: {e}")
             logger.error("Extraction failed for %s: %s", doc_id, e)

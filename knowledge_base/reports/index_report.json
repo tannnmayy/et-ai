@@ -1,10 +1,10 @@
 {
-  "index_built_at": "2026-07-06T00:44:51.517651+00:00",
+  "index_built_at": "2026-07-06T17:16:47.285609+00:00",
   "retrieval_mode": "lexical",
-  "total_documents": 4,
-  "eligible_citation_documents": 0,
+  "total_documents": 7,
+  "eligible_citation_documents": 3,
   "excluded_demo_documents": 4,
-  "total_chunks": 26,
+  "total_chunks": 6669,
   "chunk_size": 800,
   "chunk_overlap": 120,
   "extraction_failures": []

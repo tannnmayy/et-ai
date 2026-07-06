@@ -165,6 +165,25 @@ SUPPORTED_LANGUAGES: list[str] = ["en", "hi", "kn"]
 MEDICAL_DISCLAIMER: str = "This is general air-quality guidance, not medical advice."
 
 # ---------------------------------------------------------------------------
+# Knowledge base source guardrails
+# ---------------------------------------------------------------------------
+
+LEGAL_DISCLAIMER: str = (
+    "Regulatory information is provided for general context and is not legal advice. "
+    "Verify current requirements with the relevant authority and Gazette notifications."
+)
+
+WHO_NOT_INDIAN_AQI_NOTE: str = (
+    "WHO guideline values are health-evidence context and do not replace "
+    "India's CPCB AQI categories or Indian AQI thresholds."
+)
+
+SOURCE_NOT_CAUSAL_NOTE: str = (
+    "Retrieved source context supports investigation hypotheses and does not "
+    "prove that a specific source caused pollution at a specific station."
+)
+
+# ---------------------------------------------------------------------------
 # Knowledge base / policy guidance
 # ---------------------------------------------------------------------------
 

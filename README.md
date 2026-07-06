@@ -1,5 +1,5 @@
 # AQI Sentinel
-
+''
 AQI Sentinel is an AI-powered urban air-quality intelligence platform for Bengaluru, India. Milestone 1 builds the local forecasting foundation: synthetic station data, leakage-safe features, a 24-hour PM2.5 model, a persistence baseline, evaluation artifacts, and a FastAPI endpoint for latest station forecasts.
 
 This milestone intentionally does not include Docker, databases, frontend maps, paid APIs, external API keys, agents, or LLM calls.
@@ -794,4 +794,59 @@ Invoke-RestMethod "http://127.0.0.1:8000/guidance/search?q=air+quality+guideline
 
 # List eligible documents
 Invoke-RestMethod http://127.0.0.1:8000/guidance/documents | ConvertTo-Json -Depth 3
+```
+
+## Milestone 3C — Activated with Authoritative Documents
+
+The knowledge service now contains three citation-eligible authoritative documents alongside the existing demo documents.
+
+### Authoritative Sources
+
+| Document | Organization | Intended Use | Limitation |
+|----------|-------------|-------------|------------|
+| WHO Global Air Quality Guidelines 2021 | World Health Organization | Health context, exposure reduction, PM2.5/PM10 guidelines | Does not replace Indian AQI/CPCB thresholds |
+| State Action Plan on Air Pollution for Karnataka 2022 | EMPRI / Government of Karnataka | City context, sector analysis, investigation hypotheses | Does not prove station-level causality |
+| Pollution Control Acts, Rules and Notifications, 7th Edition 2021 | CPCB / MoEFCC | General regulatory context, legal framework | Not legal advice; no compliance verdicts |
+
+### Source Guardrails
+
+Every citation returned by the system enforces source-specific guardrails at the service layer:
+
+- **WHO content**: Health-evidence context only. Must not change Indian AQI categories or thresholds. `permitted_for_indian_aqi_thresholds: false`
+- **Karnataka SAPAP-K**: Context and investigation hypotheses. Must not claim source attribution or causality. `permitted_for_source_attribution: false`
+- **CPCB Law Series**: General regulatory context only. Must not provide legal advice, compliance verdicts, or penalty predictions. `legal_context_only: true`
+
+### Adding a Future Document
+
+1. Place the file (`.pdf`, `.txt`, or `.md`) in `knowledge_base/raw/`
+2. Register it in `knowledge_base/manifests/corpus_manifest.json` with metadata
+3. Set `demo_only: false` and `allowed_for_citation: true` for citation-eligible documents
+4. Set appropriate guardrail fields (see schema)
+5. Compute SHA-256 hash and set the `sha256` field
+6. Rebuild the index:
+
+```powershell
+cd E:\1ETAI
+python -m pipeline.build_knowledge_index
+```
+
+### Build Command
+
+```powershell
+cd E:\1ETAI
+python -m pipeline.build_knowledge_index
+```
+
+### Test Commands
+
+Run knowledge base tests:
+```powershell
+cd E:\1ETAI
+python -m pytest tests/test_knowledge_base.py -v
+```
+
+Run full test suite:
+```powershell
+cd E:\1ETAI
+python -m pytest tests/ -q
 ```

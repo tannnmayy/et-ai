@@ -18,6 +18,9 @@ from backend.app.config import (
     KNOWLEDGE_RETRIEVAL_MODE,
     KNOWLEDGE_TOP_K_DEFAULT,
     KNOWLEDGE_TOP_K_MAX,
+    LEGAL_DISCLAIMER,
+    WHO_NOT_INDIAN_AQI_NOTE,
+    SOURCE_NOT_CAUSAL_NOTE,
     get_project_root,
 )
 
@@ -136,6 +139,21 @@ def _build_citation_label(rank: int, doc: dict) -> str:
     return f"[{rank}] {org_abbr}{' (' + year + ')' if year else ''}"
 
 
+def _apply_source_guardrails(results: list[dict]) -> list[dict]:
+    """Attach source-specific guardrails and disclaimers to results."""
+    for r in results:
+        if r.get("permitted_for_health_context"):
+            r["source_guardrail"] = "health_context_only"
+            r["guardrail_note"] = WHO_NOT_INDIAN_AQI_NOTE
+        elif r.get("legal_context_only"):
+            r["source_guardrail"] = "legal_context_only"
+            r["guardrail_note"] = r.get("required_disclaimer") or LEGAL_DISCLAIMER
+        elif r.get("permitted_for_investigation_hypothesis_context"):
+            r["source_guardrail"] = "investigation_hypothesis_only"
+            r["guardrail_note"] = SOURCE_NOT_CAUSAL_NOTE
+    return results
+
+
 def search_policy_guidance(
     query: str,
     city: str | None = None,
@@ -218,7 +236,7 @@ def search_policy_guidance(
         chunk = chunks[idx]
         if chunk.get("demo_only") or not chunk.get("allowed_for_citation"):
             continue
-        eligible_results.append({
+        result_record = {
             "rank": len(eligible_results) + 1,
             "chunk_id": chunk.get("chunk_id", ""),
             "document_id": chunk.get("document_id", ""),
@@ -234,9 +252,21 @@ def search_policy_guidance(
             "relevance_score": round(score, 4),
             "citation_label": _build_citation_label(len(eligible_results) + 1, chunk),
             "allowed_for_citation": True,
-        })
+        }
+        for key in ("permitted_for_health_context", "permitted_for_indian_aqi_thresholds",
+                     "permitted_for_legal_context", "permitted_for_city_context",
+                     "permitted_for_investigation_hypothesis_context",
+                     "permitted_for_source_attribution", "permitted_for_legal_conclusion",
+                     "legal_context_only", "required_disclaimer",
+                     "permitted_for_compliance_verdict", "permitted_for_violation_claim",
+                     "permitted_for_penalty_claim"):
+            if key in chunk:
+                result_record[key] = chunk[key]
+        eligible_results.append(result_record)
         if len(eligible_results) >= top_k:
             break
+
+    eligible_results = _apply_source_guardrails(eligible_results)
 
     warnings: list[str] = []
     no_authoritative = False
@@ -266,7 +296,7 @@ def list_eligible_documents() -> list[dict]:
     eligible = []
     for doc in docs:
         if not doc.get("demo_only", True) and doc.get("allowed_for_citation", False):
-            eligible.append({
+            record = {
                 "document_id": doc.get("document_id"),
                 "title": doc.get("title"),
                 "organization": doc.get("organization"),
@@ -276,7 +306,18 @@ def list_eligible_documents() -> list[dict]:
                 "source_url": doc.get("source_url"),
                 "demo_only": doc.get("demo_only"),
                 "allowed_for_citation": doc.get("allowed_for_citation"),
-            })
+            }
+            for key in ("version", "permitted_for_health_context",
+                        "permitted_for_indian_aqi_thresholds",
+                        "permitted_for_legal_context", "permitted_for_city_context",
+                        "permitted_for_investigation_hypothesis_context",
+                        "permitted_for_source_attribution", "permitted_for_legal_conclusion",
+                        "legal_context_only", "required_disclaimer",
+                        "permitted_for_compliance_verdict", "permitted_for_violation_claim",
+                        "permitted_for_penalty_claim"):
+                if key in doc:
+                    record[key] = doc[key]
+            eligible.append(record)
     return eligible
 
 

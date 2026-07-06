@@ -71,6 +71,58 @@
     "notes": {
       "type": "string",
       "description": "Optional notes about the document"
+    },
+    "version": {
+      "type": "string",
+      "description": "Document version or edition (optional)"
+    },
+    "permitted_for_health_context": {
+      "type": "boolean",
+      "description": "True if this document may be used for health-evidence context"
+    },
+    "permitted_for_indian_aqi_thresholds": {
+      "type": "boolean",
+      "description": "True if this document may modify Indian AQI thresholds (should be false for non-Indian sources)"
+    },
+    "permitted_for_legal_context": {
+      "type": "boolean",
+      "description": "True if this document may be used for legal/regulatory context"
+    },
+    "permitted_for_city_context": {
+      "type": "boolean",
+      "description": "True if this document may be used for city-level context"
+    },
+    "permitted_for_investigation_hypothesis_context": {
+      "type": "boolean",
+      "description": "True if this document may support investigation hypotheses"
+    },
+    "permitted_for_source_attribution": {
+      "type": "boolean",
+      "description": "True if this document may be used for source-level attribution (should be false for most sources)"
+    },
+    "permitted_for_legal_conclusion": {
+      "type": "boolean",
+      "description": "True if this document may support legal conclusions (should be false for most sources)"
+    },
+    "legal_context_only": {
+      "type": "boolean",
+      "description": "True if this document is for general regulatory context only, not legal advice"
+    },
+    "required_disclaimer": {
+      "type": "string",
+      "description": "Exact disclaimer text required when this source is used"
+    },
+    "permitted_for_compliance_verdict": {
+      "type": "boolean",
+      "description": "True if this document may be used to determine compliance (should be false for most sources)"
+    },
+    "permitted_for_violation_claim": {
+      "type": "boolean",
+      "description": "True if this document may be used to claim a violation (should be false for most sources)"
+    },
+    "permitted_for_penalty_claim": {
+      "type": "boolean",
+      "description": "True if this document may be used to predict penalties (should be false for most sources)"
     }
   }
 }
