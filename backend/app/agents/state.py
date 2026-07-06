@@ -12,6 +12,8 @@ class Intent(str, Enum):
     citizen_guidance = "citizen_guidance"
     city_briefing = "city_briefing"
     policy_guidance = "policy_guidance"
+    weather_forecast = "weather_forecast"
+    travel_readiness = "travel_readiness"
     unsupported = "unsupported"
 
 

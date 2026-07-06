@@ -63,3 +63,42 @@ def tool_search_policy_guidance(
         return search_policy_guidance(query, city=city, source_types=source_types, top_k=top_k)
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_weather_forecast(
+    city: str = "bengaluru",
+    horizon_hours: int = 72,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    from backend.app.services.weather_forecast_service import get_weather_forecast
+    try:
+        return get_weather_forecast(city=city, horizon_hours=horizon_hours, refresh=refresh)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_weather_summary(
+    city: str = "bengaluru",
+    period: str = "next_24h",
+    refresh: bool = False,
+) -> dict[str, Any]:
+    from backend.app.services.weather_forecast_service import get_weather_summary
+    try:
+        return get_weather_summary(city=city, period=period, refresh=refresh)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_travel_readiness(
+    city: str = "bengaluru",
+    profile: str = "general",
+    period: str = "next_24h",
+    refresh_weather: bool = False,
+) -> dict[str, Any]:
+    from backend.app.services.travel_readiness_service import get_travel_readiness
+    try:
+        return get_travel_readiness(
+            city=city, profile=profile, period=period, refresh_weather=refresh_weather,
+        )
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}

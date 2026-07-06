@@ -60,8 +60,12 @@ class TestIntentRouting:
         assert intent == Intent.city_briefing
 
     def test_unsupported_query(self) -> None:
-        intent = _detect_intent("What is the weather like?", station_id="")
+        intent = _detect_intent("What is the capital of France?", station_id="")
         assert intent == Intent.unsupported
+
+    def test_weather_forecast_query(self) -> None:
+        intent = _detect_intent("What is the weather like?", station_id="")
+        assert intent == Intent.weather_forecast
 
     def test_deterministic_routing_no_llm(self) -> None:
         intent = _detect_intent("Explain the forecast", station_id="cpcb_peenya")

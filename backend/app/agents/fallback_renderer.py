@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.app.config import INVESTIGATION_DISCLAIMER, MEDICAL_DISCLAIMER
+from backend.app.config import (
+    INVESTIGATION_DISCLAIMER,
+    MEDICAL_DISCLAIMER,
+    SCOPE_AQI_COVERAGE,
+    SCOPE_NO_TRAFFIC,
+    SCOPE_WEATHER_CHANGE,
+)
 
 
 def render_station_explanation(data: dict[str, Any]) -> str:
@@ -168,4 +174,165 @@ def render_city_briefing(data: dict[str, Any]) -> str:
 
     lines.append("")
     lines.append("This briefing represents monitored stations only and does not represent unmonitored areas.")
+    return "\n".join(lines)
+
+
+def render_weather_forecast(data: dict[str, Any]) -> str:
+    city = data.get("city", "Bengaluru").title()
+    provider = data.get("provider", "unknown")
+    status = data.get("source_status", "unknown")
+    freshness = data.get("freshness", "unknown")
+    hourly = data.get("hourly", [])
+
+    lines = [
+        f"Weather Forecast for {city}",
+        f"Source: {provider} ({status}, {freshness})",
+    ]
+
+    if hourly:
+        first = hourly[0]
+        last = hourly[-1]
+        lines.append(f"Period: {first.get('timestamp_local', '')} to {last.get('timestamp_local', '')}")
+        lines.append(f"Hours: {len(hourly)}")
+
+    lines.append("")
+    lines.append("Hourly data available. Use /weather/summary for aggregated information.")
+
+    if data.get("warnings"):
+        lines.append("")
+        lines.append("Warnings:")
+        for w in data["warnings"]:
+            lines.append(f"- {w}")
+
+    return "\n".join(lines)
+
+
+def render_weather_summary(data: dict[str, Any]) -> str:
+    city = data.get("city", "Bengaluru").title()
+    period = data.get("period", "next_24h")
+    risk = data.get("weather_risk_level", "Low")
+    severe = data.get("severe_weather_present", False)
+
+    lines = [
+        f"Weather Summary for {city} ({period.replace('_', ' ')})",
+        f"Weather risk level: {risk}",
+    ]
+
+    t_min = data.get("temperature_min_c")
+    t_max = data.get("temperature_max_c")
+    if t_min is not None and t_max is not None:
+        lines.append(f"Temperature: {t_min:.0f}–{t_max:.0f} °C")
+    elif t_max is not None:
+        lines.append(f"Temperature: up to {t_max:.0f} °C")
+
+    at_min = data.get("apparent_temperature_min_c")
+    at_max = data.get("apparent_temperature_max_c")
+    if at_min is not None and at_max is not None:
+        lines.append(f"Feels like: {at_min:.0f}–{at_max:.0f} °C")
+
+    precip = data.get("total_precipitation_mm", 0)
+    if precip > 0:
+        lines.append(f"Total precipitation: {precip:.1f} mm")
+    prob = data.get("max_precipitation_probability_percent")
+    if prob is not None:
+        lines.append(f"Max rain probability: {prob:.0f}%")
+
+    wind = data.get("max_wind_speed_kmh")
+    if wind is not None and wind > 0:
+        lines.append(f"Max wind speed: {wind:.0f} km/h")
+    gust = data.get("max_wind_gust_kmh")
+    if gust is not None and gust > 0:
+        lines.append(f"Max wind gust: {gust:.0f} km/h")
+
+    desc = data.get("dominant_weather_description", "")
+    if desc and desc != "Unknown":
+        lines.append(f"Conditions: {desc}")
+
+    if severe:
+        lines.append("Severe weather present.")
+
+    reasons = data.get("weather_risk_reasons", [])
+    if reasons:
+        lines.append("")
+        lines.append("Caution reasons:")
+        for r in reasons:
+            lines.append(f"- {r}")
+
+    warnings = data.get("warnings", [])
+    if warnings:
+        lines.append("")
+        lines.append("Warnings:")
+        for w in warnings:
+            lines.append(f"- {w}")
+
+    lines.append("")
+    lines.append(SCOPE_WEATHER_CHANGE)
+    return "\n".join(lines)
+
+
+def render_travel_readiness(data: dict[str, Any]) -> str:
+    city = data.get("city", "bengaluru").title()
+    profile = data.get("profile", "general")
+    period = data.get("period", "next_24h")
+    readiness = data.get("final_readiness", "Unavailable")
+    basis = data.get("readiness_basis", "unavailable")
+
+    lines = [
+        f"Travel Readiness for {city}",
+        f"Profile: {profile}",
+        f"Period: {period.replace('_', ' ')}",
+        f"Readiness: {readiness}",
+        f"Assessment basis: {basis.replace('_', ' ')}",
+    ]
+
+    weather = data.get("weather_component", {})
+    if weather.get("weather_available"):
+        w_risk = weather.get("weather_risk_level", "Low")
+        lines.append(f"Weather risk: {w_risk}")
+        w_summary = weather.get("weather_summary")
+        if w_summary:
+            lines.append(f"Weather: {w_summary}")
+    else:
+        lines.append("Weather data: unavailable")
+
+    aqi = data.get("air_quality_component", {})
+    if aqi.get("aqi_available"):
+        aqi_risk = aqi.get("city_risk_level", "Unavailable")
+        lines.append(f"Air quality risk: {aqi_risk}")
+    else:
+        lines.append("Air quality data: unavailable")
+
+    reasons = data.get("decision_reasons", [])
+    if reasons:
+        lines.append("")
+        lines.append("Decision factors:")
+        for r in reasons:
+            lines.append(f"- {r}")
+
+    precautions = data.get("profile_specific_precautions", [])
+    if precautions:
+        lines.append("")
+        lines.append("Precautions:")
+        for p in precautions:
+            lines.append(f"- {p}")
+
+    limitations = data.get("limitations", [])
+    if limitations:
+        lines.append("")
+        lines.append("Limitations:")
+        for l in limitations:
+            lines.append(f"- {l}")
+
+    disclaimer = data.get("medical_disclaimer")
+    if disclaimer:
+        lines.append("")
+        lines.append(disclaimer)
+
+    warnings = data.get("warnings", [])
+    if warnings:
+        lines.append("")
+        lines.append("Warnings:")
+        for w in warnings:
+            lines.append(f"- {w}")
+
     return "\n".join(lines)

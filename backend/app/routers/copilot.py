@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.agents.orchestrator import run_orchestrator
-from backend.app.config import ADVISORY_PROFILES, SUPPORTED_CITIES, SUPPORTED_LANGUAGES
+from backend.app.config import ADVISORY_PROFILES, SUPPORTED_CITIES, SUPPORTED_LANGUAGES, TRAVEL_PROFILES
 from backend.app.schemas.copilot import CopilotQueryRequest, CopilotResponse
 from backend.app.services.artifact_adapter import (
     MissingArtifactError,
@@ -73,10 +73,11 @@ def copilot_query(body: CopilotQueryRequest) -> CopilotResponse:
     if body.station_id:
         _validate_station_id(body.station_id)
 
-    if body.profile not in ADVISORY_PROFILES:
+    all_profiles = list(set(ADVISORY_PROFILES + TRAVEL_PROFILES))
+    if body.profile not in all_profiles:
         raise HTTPException(
             status_code=422,
-            detail=f"Invalid profile '{body.profile}'. Supported: {', '.join(ADVISORY_PROFILES)}",
+            detail=f"Invalid profile '{body.profile}'. Supported: {', '.join(sorted(all_profiles))}",
         )
     if body.language not in SUPPORTED_LANGUAGES:
         raise HTTPException(
@@ -124,10 +125,11 @@ def copilot_station_guidance(
     language: str = Query(default="en", description="Language code"),
 ) -> CopilotResponse:
     _validate_station_id(station_id)
-    if profile not in ADVISORY_PROFILES:
+    all_profiles = list(set(ADVISORY_PROFILES + TRAVEL_PROFILES))
+    if profile not in all_profiles:
         raise HTTPException(
             status_code=422,
-            detail=f"Invalid profile '{profile}'. Supported: {', '.join(ADVISORY_PROFILES)}",
+            detail=f"Invalid profile '{profile}'. Supported: {', '.join(sorted(all_profiles))}",
         )
     if language not in SUPPORTED_LANGUAGES:
         raise HTTPException(

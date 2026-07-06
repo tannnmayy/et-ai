@@ -837,6 +837,115 @@ cd E:\1ETAI
 python -m pipeline.build_knowledge_index
 ```
 
+## Milestone 4A — Weather Enrichment + Travel Readiness
+
+### What It Does
+
+Adds a real weather forecast layer (via Open-Meteo) and a deterministic travel-readiness assessment that combines weather conditions with existing city-level air-quality data. The system answers questions like "What will Bengaluru weather be like tomorrow?" and "Is tomorrow suitable for outdoor travel?"
+
+### Provider
+
+- **Open-Meteo** (free, no API key required, no paid tier).
+- No Google Maps, Google Traffic, OpenWeatherMap, or any other paid API.
+- Coordinates: Bengaluru (12.9716°N, 77.5946°E).
+- Forecast horizon: next 72 hours of hourly data.
+
+### Weather Fields
+
+| Field | Unit |
+|-------|------|
+| Temperature | °C |
+| Apparent temperature | °C |
+| Relative humidity | % |
+| Precipitation probability | % |
+| Precipitation, rain, showers | mm |
+| Snowfall | cm |
+| Weather code (WMO) | integer |
+| Wind speed, wind gusts | km/h |
+
+### Cache and Fallback
+
+- Local JSON file cache (`cache/weather/`).
+- TTL: 30 minutes for fresh cache.
+- Stale cache usable up to 6 hours if provider is unavailable.
+- Cache metadata records age, source, freshness.
+- Provider failures return stale cache with an explicit warning, or a controlled unavailable response.
+
+### Travel-Readiness Categories
+
+1. **Suitable** — Low weather risk + good/satisfactory AQI.
+2. **Suitable with precautions** — Mild weather or moderate AQI concerns.
+3. **Caution advised** — Elevated weather risk or poor AQI.
+4. **Avoid non-essential outdoor travel** — Severe weather or very-poor/severe AQI.
+
+Decision is based on a transparent 4×6 matrix configured in `config.py`.
+
+### Supported Profiles
+
+- `general`, `elderly`, `child`, `outdoor_worker`, `school`, `two_wheeler`
+
+Each profile receives deterministic, rule-based precautions (e.g., rain gear for two-wheeler, heat caution for outdoor worker).
+
+### Scope Limitations
+
+- No live traffic, route ETA, road closures, or public-transit disruptions.
+- Air-quality assessment reflects monitored-station forecasts, not full citywide coverage.
+- Weather forecasts may change; check again closer to departure.
+
+### API Endpoints
+
+```
+GET /weather/forecast?city=bengaluru&horizon_hours=72&refresh=false
+GET /weather/summary?city=bengaluru&period=tomorrow&refresh=false
+GET /travel/readiness?city=bengaluru&profile=general&period=tomorrow&refresh_weather=false
+```
+
+### Example Commands
+
+```powershell
+cd E:\1ETAI
+
+# Weather forecast
+curl "http://127.0.0.1:8000/weather/forecast?city=bengaluru"
+
+# Weather summary for tomorrow
+curl "http://127.0.0.1:8000/weather/summary?city=bengaluru&period=tomorrow"
+
+# Travel readiness
+curl "http://127.0.0.1:8000/travel/readiness?city=bengaluru&profile=general&period=tomorrow"
+
+# Elderly profile
+curl "http://127.0.0.1:8000/travel/readiness?city=bengaluru&profile=elderly&period=tomorrow"
+```
+
+### Copilot Integration
+
+The deterministic copilot recognises weather and travel intents:
+
+- "What will Bengaluru weather be like tomorrow?" → `weather_forecast`
+- "Is tomorrow good for outdoor travel?" → `travel_readiness`
+- "Should an elderly person travel outdoors tomorrow?" → `travel_readiness`
+- "Should I ride a two-wheeler tomorrow morning?" → `travel_readiness`
+
+No LLM key is required. LLMs may only summarise structured output; they cannot alter weather values, AQI values, readiness categories, limitations, or warnings.
+
+### How to Refresh Weather Cache
+
+Pass `refresh=true` to bypass cache:
+
+```powershell
+curl "http://127.0.0.1:8000/weather/forecast?city=bengaluru&refresh=true"
+```
+
+### How to Run Weather/Travel Tests
+
+```powershell
+cd E:\1ETAI
+python -m pytest tests/test_weather.py -v
+python -m pytest tests/test_travel_readiness.py -v
+python -m pytest tests/test_copilot_weather_travel.py -v
+```
+
 ### Test Commands
 
 Run knowledge base tests:
@@ -850,3 +959,13 @@ Run full test suite:
 cd E:\1ETAI
 python -m pytest tests/ -q
 ```
+
+### Honest Limitations and Future Extension Possibilities
+
+- **City support**: Only Bengaluru. Adding cities requires config updates and provider support.
+- **Traffic/transit**: No live traffic, route ETA, road closures, or public-transit disruptions. This is a city-level outdoor readiness feature, not navigation.
+- **AQI coverage**: Reflects monitored-station forecasts only. Does not represent complete citywide coverage.
+- **Weather accuracy**: Weather forecasts may change; check again closer to departure.
+- **No causal claims**: Travel readiness is a bounded assessment of known weather and AQI signals. It does not claim route safety, road safety, or health safety.
+- **Medical disclaimer**: Applied for elderly, child, school, and outdoor-worker profiles. This is general guidance, not medical advice.
+- **No real-time weather observations**: Weather data is from Open-Meteo forecast models unless explicitly returned and labeled as observed data.

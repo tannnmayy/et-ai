@@ -12,8 +12,14 @@ from backend.app.agents.enforcement_planning_agent import run_enforcement_planni
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
 from backend.app.agents.llm_provider import get_llm_provider
 from backend.app.agents.policy_guidance_agent import run_policy_guidance_agent
+from backend.app.agents.travel_readiness_agent import run_travel_readiness_agent
 from backend.app.agents.state import AgentState, Intent
-from backend.app.config import ADVISORY_PROFILES, SUPPORTED_CITIES, SUPPORTED_LANGUAGES
+from backend.app.config import (
+    ADVISORY_PROFILES,
+    SUPPORTED_CITIES,
+    SUPPORTED_LANGUAGES,
+    TRAVEL_PROFILES,
+)
 from backend.app.services.artifact_adapter import UnknownStationError, _validate_station
 
 logger = logging.getLogger(__name__)
@@ -32,6 +38,8 @@ def _detect_intent(
             "citizen_guidance": Intent.citizen_guidance,
             "city_briefing": Intent.city_briefing,
             "policy_guidance": Intent.policy_guidance,
+            "weather_forecast": Intent.weather_forecast,
+            "travel_readiness": Intent.travel_readiness,
         }
         return intent_map.get(explicit_intent, Intent.unsupported)
 
@@ -61,6 +69,12 @@ def _detect_intent(
     if has_station and not has_city_query:
         return Intent.station_explanation
 
+    if any(w in q for w in ["travel", "go outside", "go out", "bike", "two-wheeler", "two wheeler", "commute", "outing", "ride"]):
+        return Intent.travel_readiness
+
+    if any(w in q for w in ["weather", "rain", "temperature", "humidity", "windy", "wind speed", "sunny", "storm", "thunder"]):
+        return Intent.weather_forecast
+
     if any(w in q for w in ["policy", "official source", "official guidance", "cpcb says", "who says", "guidance support", "what does", "show the policy"]):
         return Intent.policy_guidance
 
@@ -78,6 +92,8 @@ def _route_intent(intent: Intent) -> str:
         Intent.citizen_guidance: "citizen_advisory_agent",
         Intent.city_briefing: "city_briefing_agent",
         Intent.policy_guidance: "policy_guidance_agent",
+        Intent.weather_forecast: "travel_readiness_agent",
+        Intent.travel_readiness: "travel_readiness_agent",
     }
     return mapping.get(intent, "unknown")
 
@@ -95,7 +111,8 @@ def _validate_input(state: AgentState) -> list[str]:
         except UnknownStationError:
             warnings.append(f"Station '{state.station_id}' is unknown")
 
-    if state.profile not in ADVISORY_PROFILES:
+    all_profiles = list(set(ADVISORY_PROFILES + TRAVEL_PROFILES))
+    if state.profile not in all_profiles:
         warnings.append(f"Profile '{state.profile}' is not valid. Using default: general")
         state.profile = "general"
 
@@ -189,7 +206,7 @@ def run_orchestrator(
 
     if intent == Intent.unsupported:
         state.selected_agent = "none"
-        state.response = "I could not determine what you are asking about. Please ask about air quality forecasts, evidence, confidence, inspection priorities, health advisories, or city briefings."
+        state.response = "I could not determine what you are asking about. Please ask about air quality forecasts, evidence, confidence, inspection priorities, health advisories, city briefings, weather forecasts, or travel readiness."
         state.structured_data = {}
         audit.set_agent("none")
         llm = get_llm_provider()
@@ -231,6 +248,8 @@ def run_orchestrator(
         run_city_briefing_agent(state, audit)
     elif intent == Intent.policy_guidance:
         run_policy_guidance_agent(state, audit)
+    elif intent == Intent.weather_forecast or intent == Intent.travel_readiness:
+        run_travel_readiness_agent(state, audit)
 
     response_warnings = _validate_response(state)
     for w in response_warnings:
@@ -248,6 +267,9 @@ def run_orchestrator(
                 render_city_briefing,
                 render_inspection_plan,
                 render_station_explanation,
+                render_travel_readiness,
+                render_weather_forecast,
+                render_weather_summary,
             )
             if intent == Intent.station_explanation:
                 state.response = render_station_explanation(state.structured_data or {})
@@ -259,6 +281,10 @@ def run_orchestrator(
                 state.response = render_citizen_advisory(state.structured_data or {})
             elif intent == Intent.city_briefing:
                 state.response = render_city_briefing(state.structured_data or {})
+            elif intent == Intent.weather_forecast:
+                state.response = render_weather_forecast(state.structured_data or {})
+            elif intent == Intent.travel_readiness:
+                state.response = render_travel_readiness(state.structured_data or {})
 
     if llm.is_available and not response_warnings:
         llm_response = llm.summarize(

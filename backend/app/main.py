@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from backend.app.config import SERVICE_NAME
-from backend.app.routers import copilot, forecasts, guidance, health, intelligence
+from backend.app.routers import copilot, forecasts, guidance, health, intelligence, travel, weather
 
 
 app = FastAPI(
@@ -17,6 +17,8 @@ app.include_router(forecasts.router)
 app.include_router(intelligence.router)
 app.include_router(copilot.router)
 app.include_router(guidance.router)
+app.include_router(weather.router)
+app.include_router(travel.router)
 
 
 @app.get("/", include_in_schema=False)

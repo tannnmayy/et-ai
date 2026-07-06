@@ -199,3 +199,162 @@ KNOWLEDGE_ALLOW_DEMO_CITATIONS: bool = False
 KNOWLEDGE_EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
 KNOWLEDGE_CHUNK_SIZE: int = 800
 KNOWLEDGE_CHUNK_OVERLAP: int = 120
+
+# ---------------------------------------------------------------------------
+# Weather provider configuration
+# ---------------------------------------------------------------------------
+
+WEATHER_PROVIDER: str = "open_meteo"
+WEATHER_CITY_DEFAULT: str = "bengaluru"
+WEATHER_BENGALURU_LATITUDE: float = 12.9716
+WEATHER_BENGALURU_LONGITUDE: float = 77.5946
+WEATHER_FORECAST_HORIZON_HOURS: int = 72
+WEATHER_HTTP_TIMEOUT_SECONDS: int = 15
+WEATHER_MAX_RETRIES: int = 3
+WEATHER_CACHE_TTL_MINUTES: int = 30
+WEATHER_STALE_CACHE_MAX_HOURS: int = 6
+WEATHER_CACHE_DIRECTORY: str = "cache/weather"
+WEATHER_HTTP_USER_AGENT: str = "AQISentinel/1.0"
+
+# ---------------------------------------------------------------------------
+# Open-Meteo hourly field names (provider-specific)
+# ---------------------------------------------------------------------------
+
+OPEN_METEO_HOURLY_FIELDS: list[str] = [
+    "temperature_2m",
+    "apparent_temperature",
+    "relative_humidity_2m",
+    "precipitation_probability",
+    "precipitation",
+    "rain",
+    "showers",
+    "snowfall",
+    "weather_code",
+    "wind_speed_10m",
+    "wind_gusts_10m",
+]
+
+# ---------------------------------------------------------------------------
+# Weather-risk thresholds
+# ---------------------------------------------------------------------------
+
+WEATHER_PRECIP_PROB_CAUTION: float = 60.0
+WEATHER_PRECIP_AMOUNT_CAUTION_MM: float = 2.0
+WEATHER_PRECIP_AMOUNT_HIGH_RISK_MM: float = 10.0
+WEATHER_WIND_SPEED_CAUTION_KMH: float = 30.0
+WEATHER_WIND_GUST_CAUTION_KMH: float = 45.0
+WEATHER_HEAT_CAUTION_C: float = 35.0
+WEATHER_HEAT_HIGH_RISK_C: float = 40.0
+
+SEVERE_WEATHER_CODES: set[int] = {65, 67, 75, 82, 85, 86, 95, 96, 99}
+
+WEATHER_CODE_DESCRIPTIONS: dict[int, str] = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snowfall",
+    73: "Moderate snowfall",
+    75: "Heavy snowfall",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail",
+}
+
+# ---------------------------------------------------------------------------
+# Weather risk levels
+# ---------------------------------------------------------------------------
+
+WEATHER_RISK_LEVELS: list[str] = [
+    "Low", "Moderate", "High", "Severe",
+]
+
+# ---------------------------------------------------------------------------
+# Travel-readiness profiles and profiles supported across the project
+# ---------------------------------------------------------------------------
+
+TRAVEL_PROFILES: list[str] = [
+    "general", "child", "elderly", "outdoor_worker", "school", "two_wheeler",
+]
+
+# ---------------------------------------------------------------------------
+# Scope / limitation strings (reusable, single source)
+# ---------------------------------------------------------------------------
+
+SCOPE_NO_TRAFFIC: str = (
+    "This assessment does not include live traffic, route ETA, "
+    "road closures, accidents, or public-transit disruptions."
+)
+
+SCOPE_AQI_COVERAGE: str = (
+    "Air-quality assessment reflects available monitored-station forecasts "
+    "and does not represent complete citywide coverage."
+)
+
+SCOPE_WEATHER_CHANGE: str = (
+    "Weather forecasts may change; check again closer to departure."
+)
+
+# ---------------------------------------------------------------------------
+# Travel-readiness decision matrix
+#   Keys: (weather_risk, aqi_risk)
+#   Values: readiness category
+# ---------------------------------------------------------------------------
+
+TRAVEL_READINESS_CATEGORIES: list[str] = [
+    "Suitable",
+    "Suitable with precautions",
+    "Caution advised",
+    "Avoid non-essential outdoor travel",
+]
+
+TRAVEL_READINESS_MATRIX: dict[tuple[str, str], str] = {
+    ("Low", "Good"): "Suitable",
+    ("Low", "Satisfactory"): "Suitable",
+    ("Low", "Moderate"): "Suitable with precautions",
+    ("Low", "Poor"): "Caution advised",
+    ("Low", "Very Poor"): "Caution advised",
+    ("Low", "Severe"): "Caution advised",
+    ("Moderate", "Good"): "Suitable with precautions",
+    ("Moderate", "Satisfactory"): "Suitable with precautions",
+    ("Moderate", "Moderate"): "Caution advised",
+    ("Moderate", "Poor"): "Caution advised",
+    ("Moderate", "Very Poor"): "Avoid non-essential outdoor travel",
+    ("Moderate", "Severe"): "Avoid non-essential outdoor travel",
+    ("High", "Good"): "Caution advised",
+    ("High", "Satisfactory"): "Caution advised",
+    ("High", "Moderate"): "Caution advised",
+    ("High", "Poor"): "Avoid non-essential outdoor travel",
+    ("High", "Very Poor"): "Avoid non-essential outdoor travel",
+    ("High", "Severe"): "Avoid non-essential outdoor travel",
+    ("Severe", "Good"): "Avoid non-essential outdoor travel",
+    ("Severe", "Satisfactory"): "Avoid non-essential outdoor travel",
+    ("Severe", "Moderate"): "Avoid non-essential outdoor travel",
+    ("Severe", "Poor"): "Avoid non-essential outdoor travel",
+    ("Severe", "Very Poor"): "Avoid non-essential outdoor travel",
+    ("Severe", "Severe"): "Avoid non-essential outdoor travel",
+}
+
+# ---------------------------------------------------------------------------
+# Weather summary periods
+# ---------------------------------------------------------------------------
+
+WEATHER_SUMMARY_PERIODS: list[str] = ["next_24h", "tomorrow"]
