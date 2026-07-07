@@ -19,3 +19,6 @@ backend/cache/
 
 # ML artifacts
 ml/artifacts/
+
+# Runtime caches
+backend/cache/
