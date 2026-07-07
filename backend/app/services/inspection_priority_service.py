@@ -25,6 +25,7 @@ from backend.app.services.artifact_adapter import (
     UnknownStationError,
     UnsupportedCityError,
     _validate_city,
+    get_station_geospatial_context,
     get_station_recent_observations,
     get_station_snapshot,
     list_station_snapshots,
@@ -168,6 +169,29 @@ def get_inspection_priorities(city: str = "bengaluru", top_k: int = 5) -> dict:
         )
         caveats = _build_caveats(confidence_level, quality_classification)
 
+        geo_context = get_station_geospatial_context(sid)
+        spatial_investigation_context = None
+        if geo_context.get("geospatial_available", True) and "station_id" in geo_context:
+            spatial_investigation_context = {
+                "road_density_context": {
+                    "road_density_m_per_sq_km": geo_context.get("road_context", {}).get("road_density_m_per_sq_km"),
+                    "nearest_major_road_distance_m": geo_context.get("road_context", {}).get("nearest_major_road_distance_m"),
+                    "road_feature_coverage_status": geo_context.get("road_context", {}).get("road_feature_coverage_status", "unavailable"),
+                },
+                "landuse_context": {
+                    "industrial_landuse_fraction": geo_context.get("landuse_context", {}).get("industrial_landuse_fraction"),
+                    "green_space_fraction": geo_context.get("landuse_context", {}).get("green_space_fraction"),
+                    "landuse_feature_coverage_status": geo_context.get("landuse_context", {}).get("landuse_feature_coverage_status", "unavailable"),
+                },
+                "investigation_context": {
+                    "construction_feature_count_within_radius": geo_context.get("investigation_context", {}).get("construction_feature_count_within_radius"),
+                    "mapped_industrial_or_facility_count_within_radius": geo_context.get("investigation_context", {}).get("mapped_industrial_or_facility_count_within_radius"),
+                    "investigation_context_coverage_status": geo_context.get("investigation_context", {}).get("investigation_context_coverage_status", "unavailable"),
+                },
+                "data_completeness_score": geo_context.get("data_completeness_score"),
+                "limitations": geo_context.get("limitations", []),
+            }
+
         ranked.append({
             "station_id": sid,
             "station_name": snap["station_name"],
@@ -185,6 +209,7 @@ def get_inspection_priorities(city: str = "bengaluru", top_k: int = 5) -> dict:
             "rationale": rationale,
             "caveats": caveats,
             "investigation_disclaimer": INVESTIGATION_DISCLAIMER,
+            "spatial_investigation_context": spatial_investigation_context,
         })
 
     ranked.sort(key=lambda x: (x["priority_score"], x["predicted_pm25"]), reverse=True)

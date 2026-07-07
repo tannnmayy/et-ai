@@ -3,13 +3,13 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from backend.app.config import SERVICE_NAME
-from backend.app.routers import copilot, forecasts, guidance, health, intelligence, travel, weather
+from backend.app.routers import copilot, forecasts, geospatial, guidance, health, intelligence, travel, weather
 
 
 app = FastAPI(
     title="AQI Sentinel API",
     description="Local demo API for Bengaluru PM2.5 24-hour forecasts.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.include_router(health.router)
@@ -19,6 +19,7 @@ app.include_router(copilot.router)
 app.include_router(guidance.router)
 app.include_router(weather.router)
 app.include_router(travel.router)
+app.include_router(geospatial.router)
 
 
 @app.get("/", include_in_schema=False)

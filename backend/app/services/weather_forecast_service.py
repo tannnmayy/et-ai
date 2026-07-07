@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
-CACHE_SCHEMA_VERSION = "1.0"
+CACHE_SCHEMA_VERSION = "1.1"
 
 
 # ---------------------------------------------------------------------------
@@ -88,15 +88,17 @@ def _write_cache(city: str, data: dict[str, Any]) -> None:
 
 
 def _build_cache_entry(
-    city: str, normalized: dict[str, Any]
+    city: str, normalized: dict[str, Any], requested_horizon_hours: int = 0
 ) -> dict[str, Any]:
     now = datetime.now(tz=IST)
+    hourly = normalized.get("hourly", [])
+    actual_hours = len(hourly) if requested_horizon_hours <= 0 else max(len(hourly), requested_horizon_hours)
     return {
         "schema_version": CACHE_SCHEMA_VERSION,
         "retrieved_at": now.isoformat(),
         "city": city,
         "provider": WEATHER_PROVIDER,
-        "forecast_horizon_hours": WEATHER_FORECAST_HORIZON_HOURS,
+        "forecast_horizon_hours": actual_hours,
         "data": normalized,
     }
 
@@ -123,6 +125,36 @@ def _cache_is_usable_stale(entry: dict[str, Any]) -> bool:
         return False
     age = datetime.now(tz=IST) - retrieved
     return age.total_seconds() < WEATHER_STALE_CACHE_MAX_HOURS * 3600
+
+
+def _cache_coverage_hours(entry: dict[str, Any]) -> int:
+    """Return how many hours of forecast the cached entry actually covers."""
+    data = entry.get("data", {})
+    hourly = data.get("hourly", [])
+    if not hourly:
+        return 0
+    if len(hourly) >= 2:
+        first_ts = hourly[0].get("timestamp_local", "")
+        last_ts = hourly[-1].get("timestamp_local", "")
+        if first_ts and last_ts:
+            try:
+                fdt = datetime.fromisoformat(first_ts)
+                ldt = datetime.fromisoformat(last_ts)
+                if fdt.tzinfo is None:
+                    fdt = fdt.replace(tzinfo=IST)
+                if ldt.tzinfo is None:
+                    ldt = ldt.replace(tzinfo=IST)
+                span = (ldt - fdt).total_seconds() / 3600 + 1
+                return max(len(hourly), int(span))
+            except (ValueError, TypeError):
+                pass
+    return len(hourly)
+
+
+def _cache_is_sufficient(entry: dict[str, Any], needed_hours: int) -> bool:
+    """Check whether cached forecast covers at least needed_hours of data."""
+    coverage = _cache_coverage_hours(entry)
+    return coverage >= needed_hours
 
 
 def _age_minutes(entry: dict[str, Any]) -> float:
@@ -423,27 +455,25 @@ def get_weather_forecast(
 
     if not refresh:
         entry = _read_cache(city_key)
-        if entry and _cache_is_fresh(entry):
+        if entry and _cache_is_fresh(entry) and _cache_is_sufficient(entry, horizon_hours):
             data = entry["data"]
             data["source_status"] = "live_provider"
             data["cache_used"] = True
             data["freshness"] = "fresh"
             data["age_minutes"] = _age_minutes(entry)
-            if "age_minutes" in data:
-                data["age_minutes"] = _age_minutes(entry)
             return dict(data)
 
     retrieved_at = datetime.now(tz=IST)
     try:
         raw = fetch_open_meteo_forecast(city=city_key, horizon_hours=horizon_hours)
         normalized = _normalize_forecast(raw, city_key, retrieved_at)
-        cache_entry = _build_cache_entry(city_key, normalized)
+        cache_entry = _build_cache_entry(city_key, normalized, horizon_hours)
         _write_cache(city_key, cache_entry)
         return dict(normalized)
     except WeatherProviderError as e:
         logger.warning("Weather provider unavailable: %s", e)
         entry = _read_cache(city_key)
-        if entry and _cache_is_usable_stale(entry):
+        if entry and _cache_is_usable_stale(entry) and _cache_is_sufficient(entry, horizon_hours):
             data = entry["data"]
             data["source_status"] = "stale_cache_fallback"
             data["cache_used"] = True

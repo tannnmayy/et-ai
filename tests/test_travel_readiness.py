@@ -398,3 +398,39 @@ class TestTravelReadiness:
         assert result.city == "bengaluru"
         assert result.final_readiness == "Suitable with precautions"
         assert result.readiness_basis == "weather_and_air_quality"
+
+    def test_travel_readiness_tomorrow_uses_weather_and_aqi(self):
+        """Travel readiness for period=tomorrow uses weather when both data sources exist."""
+        with patch(
+            "backend.app.services.travel_readiness_service.get_weather_summary",
+            return_value={
+                "city": "bengaluru",
+                "period": "tomorrow",
+                "provider": WEATHER_PROVIDER,
+                "source_status": "live_provider",
+                "cache_used": False,
+                "freshness": "fresh",
+                "weather_risk_level": "Low",
+                "weather_risk_reasons": [],
+                "severe_weather_present": False,
+                "temperature_min_c": 25.0,
+                "temperature_max_c": 30.0,
+                "total_precipitation_mm": 0.0,
+                "max_precipitation_probability_percent": 10.0,
+                "max_wind_speed_kmh": 12.0,
+                "max_wind_gust_kmh": 20.0,
+                "dominant_weather_code": 0,
+                "dominant_weather_description": "Clear sky",
+                "warnings": [],
+            },
+        ), patch(
+            "backend.app.services.travel_readiness_service.get_city_briefing",
+            return_value=_make_briefing(city_risk="Good"),
+        ):
+            result = get_travel_readiness(
+                city="bengaluru", profile="general", period="tomorrow",
+            )
+            assert result["readiness_basis"] == "weather_and_air_quality"
+            assert result["weather_component"]["weather_available"] is True
+            assert result["period"] == "tomorrow"
+            assert result["final_readiness"] is not None

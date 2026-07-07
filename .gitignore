@@ -1,8 +1,21 @@
-@"
 .venv/
 __pycache__/
 *.pyc
 .env
 .env.*
 !.env.example
-"@ | Out-File -Encoding utf8 .gitignore
+
+# OSM raw data (large downloads)
+data/raw/geospatial/
+
+# Geospatial processed artifacts (reproducible)
+data/processed/geospatial/
+
+# Geospatial reports (reproducible)
+data/reports/geospatial/
+
+# Cache files
+backend/cache/
+
+# ML artifacts
+ml/artifacts/

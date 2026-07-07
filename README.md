@@ -969,3 +969,271 @@ python -m pytest tests/ -q
 - **No causal claims**: Travel readiness is a bounded assessment of known weather and AQI signals. It does not claim route safety, road safety, or health safety.
 - **Medical disclaimer**: Applied for elderly, child, school, and outdoor-worker profiles. This is general guidance, not medical advice.
 - **No real-time weather observations**: Weather data is from Open-Meteo forecast models unless explicitly returned and labeled as observed data.
+
+## Milestone 5A — Geospatial Evidence Foundation for AQI Sentinel
+
+### What It Does
+
+Builds a bounded, reproducible geospatial evidence layer using OpenStreetMap and H3 hexagonal spatial indexing. It provides station-area context for enforcement hypotheses and future multimodal forecasting, without claiming causality.
+
+### Data Sources
+
+| Source | Purpose | API Key Required |
+|--------|---------|-----------------|
+| OpenStreetMap via OSMnx | Roads, land-use, green spaces, construction, industrial/facility context | No |
+| H3 (Uber) | Hexagonal spatial indexing at resolution 9 (~0.1 km² hexagons) | No |
+| Station registry | Canonical station coordinates from OpenAQ location audit | No |
+
+**No Google Maps, Google Air Quality, or any Google API is used in this milestone.**
+
+### Spatial Feature Principles
+
+- Spatial features are **contextual evidence and investigation signals only**.
+- The system never claims a specific industry, construction site, road, facility, or mapped object caused pollution.
+- The system never claims a legal violation, emission breach, or compliance failure.
+- Every enforcement-facing response includes the existing investigation disclaimer.
+- Every response discloses that OpenStreetMap coverage/tags can be incomplete or outdated.
+- The system distinguishes "mapped nearby context" from "verified registered emission source."
+
+### Files Added/Changed
+
+```
+NEW:  data/reference/bengaluru_station_registry.csv
+NEW:  pipeline/geospatial/__init__.py
+NEW:  pipeline/geospatial/h3_utils.py
+NEW:  pipeline/geospatial/osm_client.py
+NEW:  pipeline/build_geospatial_context.py
+NEW:  backend/app/schemas/geospatial.py
+NEW:  backend/app/services/geospatial_evidence_service.py
+NEW:  backend/app/routers/geospatial.py
+NEW:  backend/app/agents/spatial_context_agent.py
+NEW:  tests/test_geospatial.py
+MOD:  requirements.txt
+MOD:  backend/app/config.py
+MOD:  backend/app/main.py
+MOD:  backend/app/services/artifact_adapter.py
+MOD:  backend/app/services/inspection_priority_service.py
+MOD:  backend/app/services/city_briefing_service.py
+MOD:  backend/app/agents/state.py
+MOD:  backend/app/agents/tools.py
+MOD:  backend/app/agents/orchestrator.py
+```
+
+### Dependencies Added and Compatibility
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| h3 | 4.5.0 | H3 core library for hexagonal spatial indexing |
+| osmnx | 2.1.0 | OSM data acquisition and caching |
+| geopandas | 1.1.4 | GeoDataFrame support (pulled by OSMnx) |
+| shapely | 2.1.2 | Geometry operations (pulled by OSMnx) |
+| pyproj | 3.7.2 | CRS transformations for metric area/distance |
+
+All dependencies are pinned conservatively and compatible with Python 3.11.
+
+### Station Registry
+
+`data/reference/bengaluru_station_registry.csv` contains 6 supported Bengaluru stations:
+
+| station_id | display_name | latitude | longitude | source |
+|-----------|-------------|----------|-----------|--------|
+| cpcb_hebbal | Hebbal Bengaluru - KSPCB | 13.029152 | 77.585901 | OpenAQ location_id 6984 |
+| cpcb_hombegowda | Hombegowda Nagar - KSPCB | 12.938539 | 77.590100 | OpenAQ location_id 6983 |
+| cpcb_jayanagar5 | Jayanagar 5th Block - KSPCB | 12.920984 | 77.584908 | OpenAQ location_id 6973 |
+| cpcb_silkboard | Silk Board - KSPCB | 12.917348 | 77.622813 | OpenAQ location_id 6975 |
+| cpcb_peenya | Peenya - CPCB | 13.027020 | 77.494094 | OpenAQ location_id 5607 |
+| cpcb_bapujinagar | Bapuji Nagar - KSPCB | 12.951913 | 77.539784 | OpenAQ location_id 6974 |
+
+**Validation:** Station IDs are unique, all 6 match the pipeline station registry, all coordinates are within Bengaluru bounds, and every station maps to a valid H3 cell.
+
+### H3 Resolution
+
+**Resolution 9** (~0.1 km² hexagons, ~174 m edge length) is selected for neighbourhood-scale analysis. This is balanced between spatial granularity and computational efficiency for 6 stations.
+
+### OSM Acquisition Strategy
+
+**Acquisition:** OSM data is downloaded only through an explicit CLI build command (`python -m pipeline.geospatial.osm_client`), never at FastAPI request time.
+
+**Cache Behaviour:**
+- Raw snapshots are cached under `data/raw/geospatial/osm/` by category.
+- Valid snapshots (TTL: 30 days) are reused by default.
+- `--refresh` flag bypasses cache and re-downloads.
+- Network failure with no cache raises a clear error.
+- Network failure with stale cache falls back to cached data with a warning.
+- Categories: `roads`, `landuse`, `green_spaces`, `construction`, `industrial_facility`.
+
+### Feature Definitions and Null/Coverage Semantics
+
+#### Road / Mobility Proxies
+
+| Feature | Definition | Null When |
+|---------|-----------|-----------|
+| `total_road_length_m_within_radius` | Sum length of mapped roads within station context radius | No roads intersect buffer |
+| `major_road_length_m_within_radius` | Sum length of major roads (motorway/trunk/primary/secondary) | No major roads intersect |
+| `road_density_m_per_sq_km` | Total road length / buffer area | Buffer area is zero |
+| `nearest_major_road_distance_m` | Distance to nearest mapped major road | No major roads found |
+| `road_feature_coverage_status` | `'complete'` or reason for absence | Always populated |
+
+#### Land-Use Context
+
+| Feature | Definition | Null When |
+|---------|-----------|-----------|
+| `industrial_landuse_fraction` | Industrial area / total mapped land-use area | No land-use features mapped |
+| `commercial_landuse_fraction` | Commercial area / total mapped land-use area | No land-use features mapped |
+| `residential_landuse_fraction` | Residential area / total mapped land-use area | No land-use features mapped |
+| `green_space_fraction` | Green area (parks, forests, etc.) / total mapped area | No green features mapped |
+| `landuse_feature_coverage_status` | `'complete'` or reason for absence | Always populated |
+
+#### Investigation Context
+
+| Feature | Definition | Null When |
+|---------|-----------|-----------|
+| `construction_feature_count_within_radius` | Count of OSM construction-tagged features | No construction features |
+| `mapped_industrial_or_facility_count_within_radius` | Count of OSM industrial/facility features | No industrial features |
+| `nearest_mapped_industrial_or_facility_distance_m` | Distance to nearest industrial feature | No industrial features |
+| `investigation_context_coverage_status` | `'complete'` or reason for absence | Always populated |
+
+**Key rule:** No mapped object → `None` value + coverage status starting with `no_`. Never silently substitute zero.
+
+### Generated Artifacts and Reports
+
+| Artifact | Path | Description |
+|----------|------|-------------|
+| Parquet | `data/processed/geospatial/station_geospatial_context.parquet` | Per-station feature records |
+| Metadata | `data/processed/geospatial/geospatial_build_metadata.json` | Build version, H3 config, OSM snapshot |
+| CSV report | `data/reports/geospatial/geospatial_coverage_report.csv` | Per-station coverage status |
+| MD report | `data/reports/geospatial/geospatial_coverage_report.md` | Human-readable coverage report with feature definitions and disclaimers |
+
+### API Endpoints
+
+```
+GET /geospatial/stations/{station_id}/context?city=bengaluru
+GET /geospatial/cities/{city}/coverage
+```
+
+**Example response** (station context):
+```json
+{
+  "station_id": "cpcb_peenya",
+  "city": "bengaluru",
+  "h3_cell": "8...",
+  "road_context": {
+    "road_density_m_per_sq_km": 12345.67,
+    "nearest_major_road_distance_m": 150.0,
+    "road_feature_coverage_status": "complete"
+  },
+  "landuse_context": {
+    "industrial_landuse_fraction": 0.35,
+    "green_space_fraction": 0.05,
+    "landuse_feature_coverage_status": "complete"
+  },
+  "investigation_context": {
+    "construction_feature_count_within_radius": 3,
+    "mapped_industrial_or_facility_count_within_radius": 5,
+    "investigation_context_coverage_status": "complete"
+  },
+  "data_completeness_score": 1.0,
+  "limitations": [
+    "OpenStreetMap data is community-maintained and may be incomplete...",
+    "Spatial features are contextual evidence and investigation signals only..."
+  ]
+}
+```
+
+### Intelligence Integration
+
+**Inspection priority output** (`/intelligence/cities/{city}/inspection-priorities`) includes an optional `spatial_investigation_context` section for each station. This section is explanatory only:
+- Road-density context
+- Land-use context
+- Mapped construction/facility context
+- Coverage quality
+- Limitations
+
+**The presence of spatial context does not alter priority scores or ranking order.**
+
+**City briefing** (`/intelligence/cities/{city}/briefing`) may include a compact `spatial_coverage_note` field when geospatial artifacts are available.
+
+### Copilot Integration
+
+A new `spatial_context` intent and `spatial_context_agent` handle queries like:
+- "What spatial context exists around Peenya?"
+- "Why is road density relevant near this station?"
+- "Are there mapped construction or industrial-context features near Hebbal?"
+- "What is the geospatial coverage for Bengaluru stations?"
+
+The agent calls the geospatial evidence service through a direct tool wrapper (`tool_get_geospatial_context` / `tool_get_geospatial_city_coverage`), never via HTTP.
+
+All responses include:
+- OSM completeness disclaimer
+- Non-causality disclaimer
+- Coverage quality and limitations
+
+### Build Sequence
+
+Run these commands from the repository root:
+
+```powershell
+# 1. Install geospatial dependencies (first time only)
+pip install -r requirements.txt
+
+# 2. Fetch OSM data for Bengaluru (requires internet, first build)
+python -m pipeline.geospatial.osm_client
+
+# 3. Build geospatial context artifacts
+python -m pipeline.build_geospatial_context
+
+# 4. Run tests (all offline, no network calls)
+python -m pytest tests/ -q
+
+# 5. Start the API
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8010
+```
+
+> **Note:** Step 2 requires internet access for the initial OSM download. Steps 3–5 use local cached data only.
+
+### Test Commands
+
+```powershell
+# Run all geospatial tests
+python -m pytest tests/test_geospatial.py -v
+
+# Run full test suite (376+ tests, all offline)
+python -m pytest tests/ -q
+```
+
+### Manual Validation
+
+After building artifacts and starting the API:
+
+```powershell
+# Station geospatial context
+Invoke-RestMethod http://127.0.0.1:8010/geospatial/stations/cpcb_peenya/context | ConvertTo-Json -Depth 10
+
+# City coverage summary
+Invoke-RestMethod http://127.0.0.1:8010/geospatial/cities/bengaluru/coverage | ConvertTo-Json -Depth 5
+
+# Inspection priorities with spatial context
+Invoke-RestMethod "http://127.0.0.1:8010/intelligence/cities/bengaluru/inspection-priorities?top_k=3" | ConvertTo-Json -Depth 10
+
+# City briefing with spatial coverage note
+Invoke-RestMethod http://127.0.0.1:8010/intelligence/cities/bengaluru/briefing | ConvertTo-Json -Depth 5
+```
+
+### What This Milestone Does Not Do
+
+- Does not integrate Google Maps APIs or Google keys.
+- Does not add a frontend, Docker, database, or MCP server.
+- Does not use satellite imagery, FIRMS, or live traffic.
+- Does not retrain forecast models, alter confidence scoring, or change selected model engines.
+- Does not claim a specific industry, construction site, road, or facility caused pollution.
+- Does not claim legal violations, emission breaches, or compliance failures.
+- Does not provide citywide hyperlocal predictions.
+- Does not claim satellite, live traffic, industrial registry, or source-attribution capabilities.
+- Does not claim that mapped facilities are verified registered emission sources.
+- Does not claim that construction tags are a permit registry.
+- Does not claim road density is live traffic.
+- Does not claim spatial context proves pollution causality.
+- Does not make external calls during import, service execution, API requests, or tests (after OSM snapshot is cached).
+- Does not commit raw massive OSM downloads (`.gitignore` protects `data/raw/geospatial/`).
+- Does not modify existing forecast, evidence, or confidence scoring semantics.
+- Does not touch or expose Google API keys.

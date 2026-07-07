@@ -7,6 +7,7 @@ from backend.app.services.artifact_adapter import (
     NoValidForecastError,
     UnknownStationError,
     UnsupportedCityError,
+    get_station_geospatial_context,
 )
 from backend.app.services.citizen_advisory_service import get_citizen_advisory
 from backend.app.services.city_briefing_service import get_city_briefing
@@ -85,6 +86,23 @@ def tool_get_weather_summary(
     from backend.app.services.weather_forecast_service import get_weather_summary
     try:
         return get_weather_summary(city=city, period=period, refresh=refresh)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_geospatial_context(station_id: str, city: str = "bengaluru") -> dict[str, Any]:
+    """Get geospatial context for a station."""
+    try:
+        return get_station_geospatial_context(station_id, city=city)
+    except (UnsupportedCityError, UnknownStationError, MissingArtifactError, NoValidForecastError) as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_geospatial_city_coverage(city: str = "bengaluru") -> dict[str, Any]:
+    """Get geospatial coverage summary for a city."""
+    from backend.app.services.geospatial_evidence_service import get_city_geospatial_coverage
+    try:
+        return get_city_geospatial_coverage(city)
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 

@@ -17,6 +17,7 @@ from backend.app.services.artifact_adapter import (
     UnsupportedCityError,
     _validate_city,
     get_city_station_snapshots,
+    get_station_geospatial_context,
 )
 from backend.app.services.confidence_service import get_forecast_confidence
 
@@ -236,6 +237,19 @@ def get_city_briefing(city: str = "bengaluru") -> dict:
     op_recs = _operational_recommendations(city_risk, top_priorities, low_conf_stations, persist_stations=[])
     limitations = _data_limitations(len(snapshots), low_conf_stations, [s["station_id"] for s in snapshots if s["forecast_engine"] == "persistence"], stale_stations)
 
+    # Compact aggregate spatial-coverage note
+    spatial_coverage_note = None
+    try:
+        geo_sample = get_station_geospatial_context(snapshots[0]["station_id"])
+        if "road_context" in geo_sample:
+            spatial_coverage_note = (
+                "Geospatial context available for station-area analysis. "
+                "OpenStreetMap-based road, land-use, and investigation features "
+                "are mapped contextual signals, not verified emission sources."
+            )
+    except Exception:
+        pass
+
     return {
         "city": display_name,
         "generated_at": pd.Timestamp.now(tz=timezone.utc).isoformat(),
@@ -250,4 +264,5 @@ def get_city_briefing(city: str = "bengaluru") -> dict:
         "operational_recommendations": op_recs,
         "data_limitations": limitations,
         "station_summaries": station_summaries,
+        "spatial_coverage_note": spatial_coverage_note,
     }

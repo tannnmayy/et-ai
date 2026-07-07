@@ -1,6 +1,6 @@
 # Knowledge Base Index Report
 
-- **Build time:** 2026-07-06T17:16:47.285609+00:00
+- **Build time:** 2026-07-06T22:57:25.392862+00:00
 - **Retrieval mode:** lexical
 - **Total documents:** 7
 - **Eligible citation documents:** 3

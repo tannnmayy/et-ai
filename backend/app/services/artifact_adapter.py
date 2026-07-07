@@ -299,6 +299,28 @@ def get_station_evaluation(station_id: str) -> dict:
     return _get_station_eval(station_id, eval_metrics, persistence)
 
 
+def get_station_geospatial_context(station_id: str, city: str = "bengaluru") -> dict:
+    """Return geospatial context for a station from built artifacts.
+
+    Reads: station_geospatial_context.parquet.
+
+    Returns a dict with road, land-use, investigation features and disclaimers.
+    """
+    from backend.app.services.geospatial_evidence_service import (
+        GeospatialArtifactMissingError,
+        UnknownStationError as GeoUnknownStationError,
+        get_station_geospatial_context as _get_geo_context,
+    )
+    try:
+        return _get_geo_context(station_id, city=city)
+    except (GeoUnknownStationError, GeospatialArtifactMissingError):
+        return {
+            "station_id": station_id,
+            "geospatial_available": False,
+            "note": "Geospatial context not available for this station.",
+        }
+
+
 def get_lightgbm_explanation_context(station_id: str) -> dict | None:
     """Return model context for LightGBM forecasts (model_context_fallback mode).
 

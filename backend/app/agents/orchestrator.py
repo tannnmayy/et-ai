@@ -12,6 +12,7 @@ from backend.app.agents.enforcement_planning_agent import run_enforcement_planni
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
 from backend.app.agents.llm_provider import get_llm_provider
 from backend.app.agents.policy_guidance_agent import run_policy_guidance_agent
+from backend.app.agents.spatial_context_agent import run_spatial_context_agent
 from backend.app.agents.travel_readiness_agent import run_travel_readiness_agent
 from backend.app.agents.state import AgentState, Intent
 from backend.app.config import (
@@ -40,6 +41,7 @@ def _detect_intent(
             "policy_guidance": Intent.policy_guidance,
             "weather_forecast": Intent.weather_forecast,
             "travel_readiness": Intent.travel_readiness,
+            "spatial_context": Intent.spatial_context,
         }
         return intent_map.get(explicit_intent, Intent.unsupported)
 
@@ -62,6 +64,9 @@ def _detect_intent(
 
     if has_city_query and any(w in q for w in ["inspection", "priority", "enforce", "plan", "rank"]):
         return Intent.inspection_plan
+
+    if any(w in q for w in ["spatial", "geospatial", "road density", "land use", "land-use", "industrial context", "construction near", "facility near", "mapped", "nearest road"]):
+        return Intent.spatial_context
 
     if has_city_query and any(w in q for w in ["briefing", "summary", "overview", "situation", "status"]):
         return Intent.city_briefing
@@ -94,6 +99,7 @@ def _route_intent(intent: Intent) -> str:
         Intent.policy_guidance: "policy_guidance_agent",
         Intent.weather_forecast: "travel_readiness_agent",
         Intent.travel_readiness: "travel_readiness_agent",
+        Intent.spatial_context: "spatial_context_agent",
     }
     return mapping.get(intent, "unknown")
 
@@ -248,6 +254,8 @@ def run_orchestrator(
         run_city_briefing_agent(state, audit)
     elif intent == Intent.policy_guidance:
         run_policy_guidance_agent(state, audit)
+    elif intent == Intent.spatial_context:
+        run_spatial_context_agent(state, audit)
     elif intent == Intent.weather_forecast or intent == Intent.travel_readiness:
         run_travel_readiness_agent(state, audit)
 

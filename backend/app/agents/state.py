@@ -14,6 +14,7 @@ class Intent(str, Enum):
     policy_guidance = "policy_guidance"
     weather_forecast = "weather_forecast"
     travel_readiness = "travel_readiness"
+    spatial_context = "spatial_context"
     unsupported = "unsupported"
 
 

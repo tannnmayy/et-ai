@@ -1,0 +1,7 @@
+station_id,display_name,city,latitude,longitude,source,coordinate_source,coordinate_confidence,verification_note
+cpcb_hebbal,Hebbal Bengaluru - KSPCB,bengaluru,13.029152,77.585901,CPCB/KSPCB,OpenAQ location audit,Verified,"Coordinates from OpenAQ location_id 6984; matches known Hebbal station location"
+cpcb_hombegowda,Hombegowda Nagar Bengaluru - KSPCB,bengaluru,12.938539,77.590100,CPCB/KSPCB,OpenAQ location audit,Verified,"Coordinates from OpenAQ location_id 6983; matches known Hombegowda Nagar station location"
+cpcb_jayanagar5,Jayanagar 5th Block Bengaluru - KSPCB,bengaluru,12.920984,77.584908,CPCB/KSPCB,OpenAQ location audit,Verified,"Coordinates from OpenAQ location_id 6973; matches known Jayanagar 5th Block station location"
+cpcb_silkboard,Silk Board Bengaluru - KSPCB,bengaluru,12.917348,77.622813,CPCB/KSPCB,OpenAQ location audit,Verified,"Coordinates from OpenAQ location_id 6975; matches known Silk Board station location"
+cpcb_peenya,Peenya Bengaluru - CPCB,bengaluru,13.027020,77.494094,CPCB,OpenAQ location audit,Verified,"Coordinates from OpenAQ location_id 5607; matches known Peenya station location"
+cpcb_bapujinagar,Bapuji Nagar Bengaluru - KSPCB,bengaluru,12.951913,77.539784,CPCB/KSPCB,OpenAQ location audit,Verified,"Coordinates from OpenAQ location_id 6974; matches known Bapuji Nagar station location"

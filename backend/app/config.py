@@ -358,3 +358,50 @@ TRAVEL_READINESS_MATRIX: dict[tuple[str, str], str] = {
 # ---------------------------------------------------------------------------
 
 WEATHER_SUMMARY_PERIODS: list[str] = ["next_24h", "tomorrow"]
+
+# ---------------------------------------------------------------------------
+# Geospatial evidence configuration
+# ---------------------------------------------------------------------------
+
+GEOSPATIAL_ENABLED: bool = True
+GEOSPATIAL_CITY_DEFAULT: str = "bengaluru"
+
+# Bounding box for Bengaluru OSM queries (approx city limits)
+BENGALURU_BOUNDING_BOX: dict[str, float] = {
+    "north": 13.15,
+    "south": 12.85,
+    "east": 77.75,
+    "west": 77.45,
+}
+
+# H3 resolution: resolution 9 → ~0.1 km² hexagons, ideal for neighbourhood-scale analysis
+# Resolution  9 hexagon edge length ~174 m, area ~0.105 km²
+# Resolution 10 hexagon edge length  ~66 m, area ~0.015 km²
+H3_RESOLUTION: int = 9
+
+# Default radii for station-context feature extraction
+STATION_CONTEXT_RADIUS_METERS: float = 1000.0
+ROAD_CONTEXT_RADIUS_METERS: float = 500.0
+
+# OSM cache directory (project-relative)
+OSM_CACHE_DIR: str = "data/raw/geospatial/osm"
+
+# Geospatial output directories (project-relative)
+GEOSPATIAL_RAW_DIR: str = "data/raw/geospatial"
+GEOSPATIAL_PROCESSED_DIR: str = "data/processed/geospatial"
+GEOSPATIAL_REPORTS_DIR: str = "data/reports/geospatial"
+
+# OSM cache snapshot TTL
+OSM_SNAPSHOT_TTL_DAYS: int = 30
+
+# Feature builder version (semantic, bumped on meaningful changes)
+GEOSPATIAL_FEATURE_BUILDER_VERSION: str = "1.0.0"
+
+# Geospatial context radius for investigation (meters)
+GEOSPATIAL_INVESTIGATION_CONTEXT_RADIUS_METERS: float = 1500.0
+
+# CRS for metric area and distance calculations
+GEOSPATIAL_METRIC_CRS: str = "EPSG:32643"  # UTM zone 43N (covers Bengaluru)
+
+# Station registry path (project-relative)
+STATION_REGISTRY_PATH: str = "data/reference/bengaluru_station_registry.csv"

@@ -113,6 +113,54 @@ def _sample_raw_response(start_hour: int = 0, hours: int = 72) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _make_multi_day_fixture(days: int = 3, start_hour: int = 8) -> dict:
+    """Build a raw Open-Meteo-style fixture spanning multiple calendar days."""
+    from datetime import date, timedelta
+    base = date(2026, 7, 6)
+    times = []
+    fields: dict[str, list] = {
+        "temperature_2m": [],
+        "apparent_temperature": [],
+        "relative_humidity_2m": [],
+        "precipitation_probability": [],
+        "precipitation": [],
+        "rain": [],
+        "showers": [],
+        "snowfall": [],
+        "weather_code": [],
+        "wind_speed_10m": [],
+        "wind_gusts_10m": [],
+    }
+    total_hours = days * 24
+    for i in range(total_hours):
+        d = base + timedelta(days=(start_hour + i) // 24)
+        h = (start_hour + i) % 24
+        ts = f"{d.isoformat()}T{h:02d}:00"
+        times.append(ts)
+        fields["temperature_2m"].append(28.0 + (i % 6) * 1.5)
+        fields["apparent_temperature"].append(27.0 + (i % 6) * 1.5)
+        fields["relative_humidity_2m"].append(55.0)
+        fields["precipitation_probability"].append(10.0)
+        fields["precipitation"].append(0.0)
+        fields["rain"].append(0.0)
+        fields["showers"].append(0.0)
+        fields["snowfall"].append(0.0)
+        fields["weather_code"].append(0)
+        fields["wind_speed_10m"].append(12.0)
+        fields["wind_gusts_10m"].append(20.0)
+    return {
+        "latitude": WEATHER_BENGALURU_LATITUDE,
+        "longitude": WEATHER_BENGALURU_LONGITUDE,
+        "generationtime_ms": 0.5,
+        "utc_offset_seconds": 19800,
+        "timezone": "Asia/Kolkata",
+        "timezone_abbreviation": "IST",
+        "elevation": 920.0,
+        "hourly_units": {},
+        "hourly": {"time": times, **fields},
+    }
+
+
 class TestWeatherClient:
     def test_request_parameter_construction(self):
         mock_session = MagicMock(spec=__import__("requests").Session)
@@ -238,10 +286,38 @@ class TestWeatherClient:
 # ---------------------------------------------------------------------------
 
 
+def _make_cache_hourly(
+    count: int, start_hour: int = 8, base_date: str = "2026-07-06",
+) -> list[dict]:
+    records = []
+    for i in range(count):
+        h = (start_hour + i) % 24
+        d = (start_hour + i) // 24
+        from datetime import date
+        dt = date.fromisoformat(base_date)
+        from calendar import monthrange
+        day = dt.day + d
+        month = dt.month
+        year = dt.year
+        while day > monthrange(year, month)[1]:
+            day -= monthrange(year, month)[1]
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+        ts = f"{year:04d}-{month:02d}-{day:02d}T{h:02d}:00"
+        records.append({
+            "timestamp_local": ts,
+            "temperature_c": 28.0,
+            "weather_code": 0,
+        })
+    return records
+
+
 class TestWeatherCache:
     def test_fresh_cache_is_used(self, tmp_path):
         retrieved = datetime.now(tz=IST) - timedelta(minutes=1)
-        hourly = [{"timestamp_local": "2026-07-06T10:00", "temperature_c": 28.0, "weather_code": 0}]
+        hourly = _make_cache_hourly(72, start_hour=8)
         cache_data = {
             "schema_version": "1.0",
             "retrieved_at": retrieved.isoformat(),
@@ -261,8 +337,8 @@ class TestWeatherCache:
                 "timezone": "Asia/Kolkata",
                 "latitude": WEATHER_BENGALURU_LATITUDE,
                 "longitude": WEATHER_BENGALURU_LONGITUDE,
-                "forecast_start": "2026-07-06T10:00",
-                "forecast_end": "2026-07-06T10:00",
+                "forecast_start": hourly[0]["timestamp_local"],
+                "forecast_end": hourly[-1]["timestamp_local"],
                 "warnings": [],
             },
         }
@@ -283,7 +359,7 @@ class TestWeatherCache:
 
     def test_stale_cache_fallback_on_provider_failure(self, tmp_path):
         retrieved = datetime.now(tz=IST) - timedelta(hours=2)
-        hourly = [{"timestamp_local": "2026-07-06T10:00", "temperature_c": 28.0, "weather_code": 0}]
+        hourly = _make_cache_hourly(72, start_hour=8)
         cache_data = {
             "schema_version": "1.0",
             "retrieved_at": retrieved.isoformat(),
@@ -303,8 +379,8 @@ class TestWeatherCache:
                 "timezone": "Asia/Kolkata",
                 "latitude": WEATHER_BENGALURU_LATITUDE,
                 "longitude": WEATHER_BENGALURU_LONGITUDE,
-                "forecast_start": "2026-07-06T10:00",
-                "forecast_end": "2026-07-06T10:00",
+                "forecast_start": hourly[0]["timestamp_local"],
+                "forecast_end": hourly[-1]["timestamp_local"],
                 "warnings": [],
             },
         }
@@ -354,7 +430,7 @@ class TestWeatherCache:
 
     def test_cache_metadata_correct(self, tmp_path):
         retrieved = datetime.now(tz=IST) - timedelta(minutes=5)
-        hourly = [{"timestamp_local": "2026-07-06T10:00", "temperature_c": 28.0, "weather_code": 0}]
+        hourly = _make_cache_hourly(72, start_hour=8)
         cache_data = {
             "schema_version": "1.0",
             "retrieved_at": retrieved.isoformat(),
@@ -374,8 +450,8 @@ class TestWeatherCache:
                 "timezone": "Asia/Kolkata",
                 "latitude": WEATHER_BENGALURU_LATITUDE,
                 "longitude": WEATHER_BENGALURU_LONGITUDE,
-                "forecast_start": "2026-07-06T10:00",
-                "forecast_end": "2026-07-06T10:00",
+                "forecast_start": hourly[0]["timestamp_local"],
+                "forecast_end": hourly[-1]["timestamp_local"],
                 "warnings": [],
             },
         }
@@ -408,6 +484,51 @@ class TestWeatherCache:
         ):
             result = get_weather_forecast(city="bengaluru", refresh=True)
             assert result.get("source_status") == "unavailable"
+
+    def test_insufficient_cache_triggers_refresh(self, tmp_path):
+        retrieved = datetime.now(tz=IST) - timedelta(minutes=1)
+        hourly = _make_cache_hourly(24, start_hour=8)
+        cache_data = {
+            "schema_version": "1.0",
+            "retrieved_at": retrieved.isoformat(),
+            "city": "bengaluru",
+            "provider": WEATHER_PROVIDER,
+            "forecast_horizon_hours": 24,
+            "data": {
+                "city": "bengaluru",
+                "hourly": hourly,
+                "provider": WEATHER_PROVIDER,
+                "source_status": "live_provider",
+                "cache_used": False,
+                "freshness": "fresh",
+                "age_minutes": 1.0,
+                "generated_at": retrieved.isoformat(),
+                "retrieved_at": retrieved.isoformat(),
+                "timezone": "Asia/Kolkata",
+                "latitude": WEATHER_BENGALURU_LATITUDE,
+                "longitude": WEATHER_BENGALURU_LONGITUDE,
+                "forecast_start": hourly[0]["timestamp_local"],
+                "forecast_end": hourly[-1]["timestamp_local"],
+                "warnings": [],
+            },
+        }
+        cache_dir = tmp_path / "weather"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / "bengaluru.json"
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f)
+
+        with patch(
+            "backend.app.services.weather_forecast_service._cache_dir",
+            return_value=cache_dir,
+        ), patch(
+            "backend.app.services.weather_forecast_service.fetch_open_meteo_forecast",
+            return_value=_sample_raw_response(hours=72),
+        ):
+            result = get_weather_forecast(city="bengaluru", refresh=False)
+            assert result["cache_used"] is False
+            assert len(result["hourly"]) >= 72
+            assert result["source_status"] == "live_provider"
 
 
 # ---------------------------------------------------------------------------
@@ -608,3 +729,157 @@ class TestWeatherAPI:
             with pytest.raises(HTTPException) as exc:
                 weather_forecast(city="bengaluru")
             assert exc.value.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Tomorrow coverage tests
+# ---------------------------------------------------------------------------
+
+
+class TestTomorrowCoverage:
+    def test_provider_request_includes_forecast_days_3(self):
+        """Provider request uses forecast_days=3 for default horizon_hours=72."""
+        from backend.app.services.weather_client import fetch_open_meteo_forecast
+        from backend.app.config import WEATHER_MAX_RETRIES
+
+        mock_session = MagicMock(spec=__import__("requests").Session)
+        mock_response = MagicMock(spec=__import__("requests").Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = _make_multi_day_fixture(days=3)
+        mock_session.get.return_value = mock_response
+
+        with patch("backend.app.services.weather_client.WEATHER_MAX_RETRIES", 1):
+            result = fetch_open_meteo_forecast(
+                city="bengaluru", horizon_hours=72, session=mock_session,
+            )
+        call_kwargs = mock_session.get.call_args[1]
+        params = call_kwargs["params"]
+        assert params["forecast_days"] == 3
+
+    def test_tomorrow_filter_returns_next_calendar_day(self):
+        """Fixture covering today through tomorrow produces a valid tomorrow summary."""
+        raw = _make_multi_day_fixture(days=3, start_hour=8)
+        retrieved = datetime.now(tz=IST)
+        records = _normalize_forecast(raw, "bengaluru", retrieved)["hourly"]
+
+        filtered = _filter_hours(records, "tomorrow")
+        assert len(filtered) > 0, "Tomorrow filter should return records"
+
+        tomorrow_start = (datetime.now(tz=IST) + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        tomorrow_end = tomorrow_start + timedelta(days=1)
+        for rec in filtered:
+            ts = datetime.fromisoformat(rec["timestamp_local"])
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=IST)
+            assert tomorrow_start <= ts < tomorrow_end, (
+                f"Record {rec['timestamp_local']} outside tomorrow range"
+            )
+
+    def test_tomorrow_distinct_from_next_24h(self):
+        """next_24h and tomorrow return different record sets."""
+        raw = _make_multi_day_fixture(days=3, start_hour=8)
+        retrieved = datetime.now(tz=IST)
+        records = _normalize_forecast(raw, "bengaluru", retrieved)["hourly"]
+
+        next_24h_records = _filter_hours(records, "next_24h")
+        tomorrow_records = _filter_hours(records, "tomorrow")
+
+        assert len(next_24h_records) > 0
+        assert len(tomorrow_records) > 0
+        next_24h_tss = set(r["timestamp_local"] for r in next_24h_records)
+        tomorrow_tss = set(r["timestamp_local"] for r in tomorrow_records)
+        assert next_24h_tss != tomorrow_tss, "next_24h and tomorrow must be different"
+
+    def test_single_day_cache_rejected_for_tomorrow(self, tmp_path):
+        """A cache with only today's data is rejected when tomorrow is requested."""
+        retrieved = datetime.now(tz=IST) - timedelta(minutes=1)
+        hourly = _make_cache_hourly(24, start_hour=8)
+        cache_data = {
+            "schema_version": "1.0",
+            "retrieved_at": retrieved.isoformat(),
+            "city": "bengaluru",
+            "provider": WEATHER_PROVIDER,
+            "forecast_horizon_hours": 24,
+            "data": {
+                "city": "bengaluru",
+                "hourly": hourly,
+                "provider": WEATHER_PROVIDER,
+                "source_status": "live_provider",
+                "cache_used": False,
+                "freshness": "fresh",
+                "age_minutes": 1.0,
+                "generated_at": retrieved.isoformat(),
+                "retrieved_at": retrieved.isoformat(),
+                "timezone": "Asia/Kolkata",
+                "latitude": WEATHER_BENGALURU_LATITUDE,
+                "longitude": WEATHER_BENGALURU_LONGITUDE,
+                "forecast_start": hourly[0]["timestamp_local"],
+                "forecast_end": hourly[-1]["timestamp_local"],
+                "warnings": [],
+            },
+        }
+        cache_dir = tmp_path / "weather"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / "bengaluru.json"
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f)
+
+        with patch(
+            "backend.app.services.weather_forecast_service._cache_dir",
+            return_value=cache_dir,
+        ), patch(
+            "backend.app.services.weather_forecast_service.fetch_open_meteo_forecast",
+            return_value=_make_multi_day_fixture(days=3),
+        ):
+            result = get_weather_forecast(city="bengaluru", refresh=False)
+            assert result["cache_used"] is False
+            assert len(result["hourly"]) >= 48
+
+    def test_single_day_cache_no_provider_returns_unavailable_for_tomorrow(self, tmp_path):
+        """When provider is down and cache only has today, tomorrow returns unavailable."""
+        retrieved = datetime.now(tz=IST) - timedelta(minutes=1)
+        hourly = _make_cache_hourly(24, start_hour=8)
+        cache_data = {
+            "schema_version": "1.0",
+            "retrieved_at": retrieved.isoformat(),
+            "city": "bengaluru",
+            "provider": WEATHER_PROVIDER,
+            "forecast_horizon_hours": 24,
+            "data": {
+                "city": "bengaluru",
+                "hourly": hourly,
+                "provider": WEATHER_PROVIDER,
+                "source_status": "live_provider",
+                "cache_used": False,
+                "freshness": "fresh",
+                "age_minutes": 1.0,
+                "generated_at": retrieved.isoformat(),
+                "retrieved_at": retrieved.isoformat(),
+                "timezone": "Asia/Kolkata",
+                "latitude": WEATHER_BENGALURU_LATITUDE,
+                "longitude": WEATHER_BENGALURU_LONGITUDE,
+                "forecast_start": hourly[0]["timestamp_local"],
+                "forecast_end": hourly[-1]["timestamp_local"],
+                "warnings": [],
+            },
+        }
+        cache_dir = tmp_path / "weather"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / "bengaluru.json"
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f)
+
+        with patch(
+            "backend.app.services.weather_forecast_service._cache_dir",
+            return_value=cache_dir,
+        ), patch(
+            "backend.app.services.weather_forecast_service.fetch_open_meteo_forecast",
+            side_effect=WeatherProviderError("provider down"),
+        ):
+            forecast = get_weather_forecast(city="bengaluru", refresh=False)
+            assert forecast.get("source_status") == "unavailable"
+
+            summary = get_weather_summary(city="bengaluru", period="tomorrow")
+            assert summary.get("source_status") == "unavailable"
