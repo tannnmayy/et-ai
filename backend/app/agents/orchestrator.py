@@ -11,8 +11,10 @@ from backend.app.agents.city_briefing_agent import run_city_briefing_agent
 from backend.app.agents.enforcement_planning_agent import run_enforcement_planning_agent
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
 from backend.app.agents.llm_provider import get_llm_provider
+from backend.app.agents.neighbourhood_decision_agent import run_neighbourhood_decision_agent
 from backend.app.agents.policy_guidance_agent import run_policy_guidance_agent
 from backend.app.agents.spatial_context_agent import run_spatial_context_agent
+from backend.app.agents.spatial_intelligence_agent import run_spatial_intelligence_agent
 from backend.app.agents.travel_readiness_agent import run_travel_readiness_agent
 from backend.app.agents.state import AgentState, Intent
 from backend.app.config import (
@@ -42,6 +44,8 @@ def _detect_intent(
             "weather_forecast": Intent.weather_forecast,
             "travel_readiness": Intent.travel_readiness,
             "spatial_context": Intent.spatial_context,
+            "spatial_intelligence": Intent.spatial_intelligence,
+            "neighbourhood_comparison": Intent.neighbourhood_comparison,
         }
         return intent_map.get(explicit_intent, Intent.unsupported)
 
@@ -65,6 +69,9 @@ def _detect_intent(
     if has_city_query and any(w in q for w in ["inspection", "priority", "enforce", "plan", "rank"]):
         return Intent.inspection_plan
 
+    if any(w in q for w in ["spatial intelligence", "intelligence around", "map-ready", "station intelligence"]):
+        return Intent.spatial_intelligence
+
     if any(w in q for w in ["spatial", "geospatial", "road density", "land use", "land-use", "industrial context", "construction near", "facility near", "mapped", "nearest road"]):
         return Intent.spatial_context
 
@@ -79,6 +86,9 @@ def _detect_intent(
 
     if any(w in q for w in ["weather", "rain", "temperature", "humidity", "windy", "wind speed", "sunny", "storm", "thunder"]):
         return Intent.weather_forecast
+
+    if any(w in q for w in ["compare", "neighbourhood", "neighborhood", "suitability", "where to live", "best area", "candidate"]):
+        return Intent.neighbourhood_comparison
 
     if any(w in q for w in ["policy", "official source", "official guidance", "cpcb says", "who says", "guidance support", "what does", "show the policy"]):
         return Intent.policy_guidance
@@ -100,6 +110,8 @@ def _route_intent(intent: Intent) -> str:
         Intent.weather_forecast: "travel_readiness_agent",
         Intent.travel_readiness: "travel_readiness_agent",
         Intent.spatial_context: "spatial_context_agent",
+        Intent.spatial_intelligence: "spatial_intelligence_agent",
+        Intent.neighbourhood_comparison: "neighbourhood_decision_agent",
     }
     return mapping.get(intent, "unknown")
 
@@ -256,6 +268,10 @@ def run_orchestrator(
         run_policy_guidance_agent(state, audit)
     elif intent == Intent.spatial_context:
         run_spatial_context_agent(state, audit)
+    elif intent == Intent.spatial_intelligence:
+        run_spatial_intelligence_agent(state, audit)
+    elif intent == Intent.neighbourhood_comparison:
+        run_neighbourhood_decision_agent(state, audit)
     elif intent == Intent.weather_forecast or intent == Intent.travel_readiness:
         run_travel_readiness_agent(state, audit)
 
@@ -274,6 +290,8 @@ def run_orchestrator(
                 render_citizen_advisory,
                 render_city_briefing,
                 render_inspection_plan,
+                render_neighbourhood_comparison,
+                render_spatial_intelligence,
                 render_station_explanation,
                 render_travel_readiness,
                 render_weather_forecast,
@@ -293,6 +311,10 @@ def run_orchestrator(
                 state.response = render_weather_forecast(state.structured_data or {})
             elif intent == Intent.travel_readiness:
                 state.response = render_travel_readiness(state.structured_data or {})
+            elif intent == Intent.spatial_intelligence:
+                state.response = render_spatial_intelligence(state.structured_data or {})
+            elif intent == Intent.neighbourhood_comparison:
+                state.response = render_neighbourhood_comparison(state.structured_data or {})
 
     if llm.is_available and not response_warnings:
         llm_response = llm.summarize(

@@ -1237,3 +1237,183 @@ Invoke-RestMethod http://127.0.0.1:8010/intelligence/cities/bengaluru/briefing |
 - Does not commit raw massive OSM downloads (`.gitignore` protects `data/raw/geospatial/`).
 - Does not modify existing forecast, evidence, or confidence scoring semantics.
 - Does not touch or expose Google API keys.
+
+## Milestone 5B — Map-Ready Spatial Intelligence and Neighbourhood Comparison
+
+### Architecture
+
+Milestone 5B adds an optional Google Maps-backed layer for geocoding, route computation, spatial intelligence aggregation, and neighbourhood suitability comparison. No Google API keys are required for application startup or existing endpoints.
+
+```
+User Query / API Request
+        |
+        v
+  +-----+------+       +------------------+
+  |  Copilot   | ----> | Intent Detection |
+  +-----+------+       +------------------+
+        |                      |
+        v                      v
+  +-----+------+       +------------------+
+  | Agent      | ----> | Service Layer    |
+  +-----+------+       +------------------+
+        |                      |
+        v                      v
+  +-----+------+       +------------------+
+  | Fallback   |       | Google Maps      |
+  | Renderer   |       | Client (httpx)   |
+  +------------+       +------------------+
+                              |
+                              v
+                        Geocoding / Routes API
+```
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `backend/app/schemas/maps.py` | Geocode, route, and location request/response schemas |
+| `backend/app/schemas/neighbourhood.py` | Neighbourhood comparison and spatial intelligence schemas |
+| `backend/app/services/google_maps_client.py` | Isolated HTTP client for Geocoding, Routes, and Places APIs |
+| `backend/app/services/location_service.py` | Location resolution (direct coordinates or geocoding) |
+| `backend/app/services/commute_service.py` | Commute burden calculation between locations |
+| `backend/app/services/spatial_intelligence_service.py` | Station and location intelligence aggregation |
+| `backend/app/services/neighbourhood_suitability_service.py` | Multi-candidate suitability scoring |
+| `backend/app/routers/maps.py` | `/maps/geocode`, `/maps/route` endpoints |
+| `backend/app/routers/neighbourhoods.py` | `/neighbourhoods/compare`, `/spatial-intelligence/*` endpoints |
+| `backend/app/agents/spatial_intelligence_agent.py` | Copilot agent for spatial intelligence queries |
+| `backend/app/agents/neighbourhood_decision_agent.py` | Copilot agent for neighbourhood comparison queries |
+
+### Required Google Cloud APIs
+
+For the **server API key** (backend):
+- **Geocoding API** — resolve addresses to coordinates
+- **Routes API** (or Directions API) — compute routes between locations
+
+For the **browser API key** (future frontend):
+- **Maps JavaScript API** — display maps
+- **Places API (New)** — place search and autocomplete
+
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+# Google Maps API Keys (Milestone 5B)
+# Browser key (for future frontend): Maps JavaScript API, Places API (New)
+GOOGLE_MAPS_BROWSER_API_KEY=
+# Server key (for backend): Geocoding API, Routes API
+GOOGLE_MAPS_SERVER_API_KEY=
+```
+
+Both keys are optional. If `GOOGLE_MAPS_SERVER_API_KEY` is not set:
+- Direct coordinate inputs still work
+- Free-text address lookup returns an unavailable status (not fabricated coordinates)
+- Route computation returns unavailable
+- Neighbourhood comparison proceeds with partial assessment
+
+### API Endpoints
+
+#### `GET /maps/geocode?q=...`
+Resolves a free-text address to coordinates using Google Geocoding API.
+
+#### `POST /maps/route`
+Computes a route between two coordinates. Returns distance, duration, and traffic-aware duration if available.
+
+```json
+{
+  "origin": {"latitude": 12.97, "longitude": 77.59},
+  "destination": {"latitude": 13.02, "longitude": 77.58},
+  "travel_mode": "DRIVE"
+}
+```
+
+#### `POST /neighbourhoods/compare`
+Compares 1-3 candidate areas for a person with a workplace and optional school locations.
+
+```json
+{
+  "candidate_areas": [{"query": "Jayanagar"}, {"query": "HSR Layout"}],
+  "workplace": {"query": "Manyata Tech Park"},
+  "schools": [{"query": "School A"}],
+  "profile": "family_with_children",
+  "travel_mode": "DRIVE",
+  "period": "tomorrow"
+}
+```
+
+#### `GET /spatial-intelligence/stations/{station_id}`
+Aggregates forecast evidence, confidence, inspection priority, and geospatial context for a station.
+
+#### `POST /spatial-intelligence/location`
+Returns nearby monitoring stations and spatial context for an arbitrary address or coordinate.
+
+### Copilot Intents
+
+Two new intents are supported:
+
+- **`spatial_intelligence`** — triggered by keywords like "spatial intelligence", "station intelligence"
+- **`neighbourhood_comparison`** — triggered by keywords like "compare", "neighbourhood", "suitability", "where to live"
+
+### Scoring Components
+
+Neighbourhood suitability uses the following configurable weighted components:
+
+| Component | Default Weight | Description |
+|-----------|---------------|-------------|
+| `air_quality_component` | 0.30 | Based on nearest station proximity |
+| `forecast_confidence_component` | 0.10 | Station-level forecast confidence proxy |
+| `green_space_proxy_component` | 0.10 | Green space fraction from nearest station OSM context |
+| `road_mobility_proxy_component` | 0.10 | Road density from nearest station OSM context |
+| `commute_component` | 0.20 | Commute burden score (lower is better) |
+| `weather_disruption_component` | 0.10 | Weather risk level |
+| `data_coverage_component` | 0.10 | Number of nearby stations |
+
+If Google Maps is unavailable, commute and weather components are marked `available: false` and a partial assessment is returned. The overall score is `null` when minimum required coverage is not met.
+
+### Testing
+
+All 6 new test files are fully offline and use mocked `httpx` responses:
+
+```powershell
+python -m pytest tests/test_google_maps_client.py -q
+python -m pytest tests/test_location_service.py -q
+python -m pytest tests/test_commute_service.py -q
+python -m pytest tests/test_neighbourhood_suitability.py -q
+python -m pytest tests/test_spatial_intelligence.py -q
+python -m pytest tests/test_copilot_spatial_neighbourhood.py -q
+```
+
+### Scope Limitations
+
+- Google Maps provides geocoding, route calculation, and future map visualization — it does NOT provide AQI truth, weather truth, satellite evidence, verified emission sources, or causal source attribution.
+- No satellite imagery or thermal anomaly processing.
+- If traffic-aware routing is unavailable, commute data is appropriately labeled.
+- No frontend is included in this milestone.
+- No external API calls occur in tests.
+- API keys are never logged, printed, returned in responses, or committed to git.
+- `.env` is git-ignored; only placeholder variable names are in `.env.example`.
+
+### Manual PowerShell Commands
+
+With server key configured:
+```powershell
+# Geocode
+Invoke-RestMethod "http://127.0.0.1:8010/maps/geocode?q=Jayanagar,Bengaluru" | ConvertTo-Json -Depth 5
+
+# Route
+$body = @{origin=@{latitude=12.97;longitude=77.59};destination=@{latitude=13.02;longitude=77.58};travel_mode="DRIVE"} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8010/maps/route" -Body $body -ContentType "application/json" | ConvertTo-Json -Depth 5
+
+# Neighbourhood comparison
+$body = @{candidate_areas=@(@{query="Jayanagar"},@{query="HSR Layout"});workplace=@{query="Manyata Tech Park"};profile="general";travel_mode="DRIVE"} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8010/neighbourhoods/compare" -Body $body -ContentType "application/json" | ConvertTo-Json -Depth 10
+
+# Station intelligence
+Invoke-RestMethod "http://127.0.0.1:8010/spatial-intelligence/stations/cpcb_peenya" | ConvertTo-Json -Depth 10
+
+# Location intelligence
+$body = @{latitude=12.97;longitude=77.59} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8010/spatial-intelligence/location" -Body $body -ContentType "application/json" | ConvertTo-Json -Depth 5
+```
+
+Without server key, geocoding and route endpoints return 503 errors. Direct coordinate inputs and station intelligence still work.

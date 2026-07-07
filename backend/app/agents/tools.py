@@ -120,3 +120,82 @@ def tool_get_travel_readiness(
         )
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_resolve_location(
+    query: str = "",
+    latitude: float | None = None,
+    longitude: float | None = None,
+) -> dict[str, Any]:
+    from backend.app.services.location_service import resolve_location
+    try:
+        return resolve_location(query=query, latitude=latitude, longitude=longitude)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_compute_commute_burden(
+    origin_lat: float,
+    origin_lng: float,
+    workplace_lat: float,
+    workplace_lng: float,
+    travel_mode: str = "DRIVE",
+    school_locations: list[dict[str, float]] | None = None,
+) -> dict[str, Any]:
+    from backend.app.services.commute_service import compute_commute_burden
+    try:
+        return compute_commute_burden(
+            origin_lat=origin_lat,
+            origin_lng=origin_lng,
+            workplace_lat=workplace_lat,
+            workplace_lng=workplace_lng,
+            travel_mode=travel_mode,
+            school_locations=school_locations,
+        )
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_station_intelligence(
+    station_id: str,
+    city: str = "bengaluru",
+) -> dict[str, Any]:
+    from backend.app.services.spatial_intelligence_service import get_station_intelligence
+    try:
+        return get_station_intelligence(station_id, city=city)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_location_intelligence(
+    query: str = "",
+    latitude: float | None = None,
+    longitude: float | None = None,
+) -> dict[str, Any]:
+    from backend.app.services.spatial_intelligence_service import get_location_intelligence
+    try:
+        return get_location_intelligence(query=query, latitude=latitude, longitude=longitude)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_compare_neighbourhoods(
+    candidate_queries: list[dict[str, Any]],
+    workplace_query: dict[str, Any],
+    school_queries: list[dict[str, Any]] | None = None,
+    profile: str = "general",
+    travel_mode: str = "DRIVE",
+    period: str = "tomorrow",
+) -> dict[str, Any]:
+    from backend.app.services.neighbourhood_suitability_service import compare_neighbourhoods
+    try:
+        return compare_neighbourhoods(
+            candidate_queries=candidate_queries,
+            workplace_query=workplace_query,
+            school_queries=school_queries,
+            profile=profile,
+            travel_mode=travel_mode,
+            period=period,
+        )
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}

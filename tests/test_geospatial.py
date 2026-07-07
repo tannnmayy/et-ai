@@ -898,13 +898,16 @@ class TestReportGeneration:
 
 
 class TestArtifactAdapterGeospatial:
-    def test_get_station_geospatial_context_missing_artifact(self) -> None:
-        """Should return a dict with geospatial_available=False if artifact missing."""
+    def test_get_station_geospatial_context_returns_dict(self) -> None:
+        """Should return a dict with station context fields."""
         from backend.app.services.artifact_adapter import get_station_geospatial_context
 
         result = get_station_geospatial_context("cpcb_hebbal")
-        assert result.get("geospatial_available") is False
-        assert "note" in result
+        assert "station_id" in result
+        assert "build_status" in result
+        assert "road_context" in result
+        assert "landuse_context" in result
+        assert "limitations" in result
 
 
 # =========================================================================

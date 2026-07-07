@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 def get_project_root() -> Path:
     configured = os.getenv("AQI_SENTINEL_PROJECT_ROOT")
@@ -405,3 +408,51 @@ GEOSPATIAL_METRIC_CRS: str = "EPSG:32643"  # UTM zone 43N (covers Bengaluru)
 
 # Station registry path (project-relative)
 STATION_REGISTRY_PATH: str = "data/reference/bengaluru_station_registry.csv"
+
+# ---------------------------------------------------------------------------
+# Google Maps configuration (Milestone 5B)
+# ---------------------------------------------------------------------------
+
+GOOGLE_MAPS_SERVER_API_KEY: str = os.getenv(
+    "GOOGLE_MAPS_SERVER_API_KEY", ""
+).strip()
+
+GOOGLE_MAPS_BROWSER_API_KEY: str = os.getenv(
+    "GOOGLE_MAPS_BROWSER_API_KEY", ""
+).strip()
+
+GOOGLE_MAPS_GEOCODING_ENABLED: bool = True
+GOOGLE_MAPS_ROUTES_ENABLED: bool = True
+GOOGLE_MAPS_PLACES_ENABLED: bool = False
+
+GOOGLE_MAPS_TIMEOUT_SECONDS: float = 8.0
+GOOGLE_MAPS_MAX_RETRIES: int = 2
+
+GOOGLE_MAPS_BENGALURU_ONLY: bool = True
+
+GOOGLE_MAPS_MAX_CANDIDATE_AREAS: int = 3
+
+COMMUTE_MODE_DEFAULT: str = "DRIVE"
+COMMUTE_MAX_DESTINATIONS: int = 3
+
+# Supported travel modes for commute service
+COMMUTE_SUPPORTED_MODES: list[str] = ["DRIVE", "TWO_WHEELER", "TRANSIT", "WALK"]
+
+NEIGHBOURHOOD_SCORE_WEIGHTS: dict[str, float] = {
+    "air_quality_component": 0.30,
+    "forecast_confidence_component": 0.10,
+    "green_space_proxy_component": 0.10,
+    "road_mobility_proxy_component": 0.10,
+    "commute_component": 0.20,
+    "weather_disruption_component": 0.10,
+    "data_coverage_component": 0.10,
+}
+
+NEIGHBOURHOOD_MIN_STATION_COVERAGE: float = 0.50  # 50% minimum station coverage
+
+# Neighbourhood suitability disclaimer
+NEIGHBOURHOOD_SUITABILITY_DISCLAIMER: str = (
+    "Neighbourhood suitability decision-support estimate. "
+    "This comparison uses nearby monitored-station evidence and mapped contextual proxies. "
+    "It is not a direct pollution measurement at a home, school, or workplace address."
+)

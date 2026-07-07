@@ -336,3 +336,77 @@ def render_travel_readiness(data: dict[str, Any]) -> str:
             lines.append(f"- {w}")
 
     return "\n".join(lines)
+
+
+def render_spatial_intelligence(data: dict[str, Any]) -> str:
+    station = data.get("station_id", "Unknown")
+    lines = [
+        f"Spatial Intelligence for Station: {station}",
+        "",
+    ]
+    fe = data.get("forecast_evidence", {})
+    if fe:
+        lines.append(f"Forecast PM2.5: {fe.get('predicted_pm25', 'N/A')} ug/m3 ({fe.get('risk_category', 'N/A')})")
+        lines.append(f"Forecast engine: {fe.get('forecast_engine', 'N/A')}")
+        lines.append("")
+    fc = data.get("forecast_confidence", {})
+    if fc:
+        lines.append(f"Confidence: {fc.get('confidence_level', 'N/A')} ({fc.get('confidence_score', 'N/A')}/100)")
+        lines.append("")
+    ip = data.get("inspection_priority", {})
+    if ip:
+        lines.append(f"Inspection priority: {ip.get('priority_level', 'N/A')} (score: {ip.get('priority_score', 'N/A')})")
+        lines.append(f"Focus: {ip.get('recommended_inspection_focus', 'N/A')}")
+        lines.append("")
+    geo = data.get("geospatial_context", {})
+    if geo:
+        lines.append("Geospatial context:")
+        lines.append(f"  Build status: {geo.get('build_status', 'unknown')}")
+        rc = geo.get("road_context", {}) or {}
+        rd = rc.get("road_density_m_per_sq_km")
+        if rd is not None:
+            lines.append(f"  Road density: {rd:.1f} m/km2")
+        lc = geo.get("landuse_context", {}) or {}
+        gs = lc.get("green_space_fraction")
+        if gs is not None:
+            lines.append(f"  Green space fraction: {gs:.2%}")
+        lines.append("")
+    limitations = data.get("limitations", [])
+    if limitations:
+        lines.append("Limitations:")
+        for lim in limitations:
+            lines.append(f"- {lim}")
+    return "\n".join(lines)
+
+
+def render_neighbourhood_comparison(data: dict[str, Any]) -> str:
+    from backend.app.config import NEIGHBOURHOOD_SUITABILITY_DISCLAIMER
+    candidates = data.get("candidates", [])
+    ranking = data.get("ranking")
+    lines = [
+        "Neighbourhood Suitability Comparison",
+        "",
+    ]
+    if not candidates:
+        lines.append("No candidate areas to compare.")
+        return "\n".join(lines)
+    if ranking:
+        lines.append(f"Ranking (best first):")
+        for rank_pos, cand_idx in enumerate(ranking, start=1):
+            cand = candidates[cand_idx] if cand_idx < len(candidates) else {}
+            label = cand.get("candidate_label", f"Candidate {cand_idx + 1}")
+            score = cand.get("overall_score")
+            score_str = f"{score:.2f}" if score is not None else "N/A"
+            lines.append(f"  {rank_pos}. {label} (score: {score_str})")
+        lines.append("")
+    for i, cand in enumerate(candidates):
+        lines.append(f"Candidate {i + 1}: {cand.get('candidate_label', 'Unknown')}")
+        score = cand.get("overall_score")
+        if score is not None:
+            lines.append(f"  Overall score: {score:.2f}")
+        else:
+            lines.append(f"  Overall score: N/A (insufficient data)")
+        lines.append(f"  Partial assessment: {cand.get('partial_assessment', False)}")
+        lines.append("")
+    lines.append(f"Disclaimer: {NEIGHBOURHOOD_SUITABILITY_DISCLAIMER}")
+    return "\n".join(lines)
