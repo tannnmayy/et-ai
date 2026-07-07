@@ -5,9 +5,16 @@
     "cpcb_jayanagar5",
     "cpcb_silkboard",
     "cpcb_peenya",
-    "cpcb_bapujinagar"
+    "cpcb_bapujinagar",
+    "cpcb_btmlayout",
+    "cpcb_kasturinagar",
+    "cpcb_rvce_mailasandra"
   ],
-  "excluded_station_ids": [],
+  "excluded_station_ids": [
+    "cpcb_kadabesanahalli",
+    "cpcb_city_railway",
+    "cpcb_saneguravahalli"
+  ],
   "quality_details": {
     "cpcb_hebbal": {
       "hourly_row_count": 8761,
@@ -50,6 +57,48 @@
       "longest_continuous_pm25_run_hours": 1093,
       "classification": "Recommended for real-data training",
       "recommendation": "Coverage, PM2.5 completeness, and continuity meet the recommended thresholds for 24-hour PM2.5 training."
+    },
+    "cpcb_btmlayout": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 94.59,
+      "longest_continuous_pm25_run_hours": 508,
+      "classification": "Usable with caveats",
+      "recommendation": "The station has enough PM2.5 history for pipeline validation, but gaps or missing auxiliary sensors should be interpreted cautiously."
+    },
+    "cpcb_kadabesanahalli": {
+      "hourly_row_count": 2929,
+      "pm25_completeness_percent": 47.56,
+      "longest_continuous_pm25_run_hours": 351,
+      "classification": "Not suitable",
+      "recommendation": "Coverage, PM2.5 completeness, or continuity fall below the minimum thresholds for reliable 24-hour PM2.5 training."
+    },
+    "cpcb_city_railway": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 0.0,
+      "longest_continuous_pm25_run_hours": 0,
+      "classification": "Not suitable",
+      "recommendation": "Coverage, PM2.5 completeness, or continuity fall below the minimum thresholds for reliable 24-hour PM2.5 training."
+    },
+    "cpcb_kasturinagar": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 86.35,
+      "longest_continuous_pm25_run_hours": 650,
+      "classification": "Usable with caveats",
+      "recommendation": "The station has enough PM2.5 history for pipeline validation, but gaps or missing auxiliary sensors should be interpreted cautiously."
+    },
+    "cpcb_rvce_mailasandra": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 68.95,
+      "longest_continuous_pm25_run_hours": 315,
+      "classification": "Usable with caveats",
+      "recommendation": "The station has enough PM2.5 history for pipeline validation, but gaps or missing auxiliary sensors should be interpreted cautiously."
+    },
+    "cpcb_saneguravahalli": {
+      "hourly_row_count": 8761,
+      "pm25_completeness_percent": 0.0,
+      "longest_continuous_pm25_run_hours": 0,
+      "classification": "Not suitable",
+      "recommendation": "Coverage, PM2.5 completeness, or continuity fall below the minimum thresholds for reliable 24-hour PM2.5 training."
     }
   },
   "feature_metadata": {
@@ -80,18 +129,21 @@
       "pm25_roll_std_24h"
     ],
     "excluded_features": {
-      "wind_speed_mps": "completeness 29.3% below 60% threshold"
+      "wind_speed_mps": "completeness 50.6% below 60% threshold"
     },
     "completeness_threshold_percent": 60.0,
     "timestamp_gap_policy": "exact timestamp alignment; no forward fill"
   },
   "per_station_feature_paths": {
-    "cpcb_hebbal": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_hebbal\\cpcb_hebbal_features_24h.parquet",
-    "cpcb_hombegowda": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_hombegowda\\cpcb_hombegowda_features_24h.parquet",
-    "cpcb_jayanagar5": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_jayanagar5\\cpcb_jayanagar5_features_24h.parquet",
-    "cpcb_silkboard": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_silkboard\\cpcb_silkboard_features_24h.parquet",
-    "cpcb_peenya": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_peenya\\cpcb_peenya_features_24h.parquet",
-    "cpcb_bapujinagar": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\cpcb_bapujinagar\\cpcb_bapujinagar_features_24h.parquet"
+    "cpcb_hebbal": "E:\\1ETAI\\data\\processed\\real\\cpcb_hebbal\\cpcb_hebbal_features_24h.parquet",
+    "cpcb_hombegowda": "E:\\1ETAI\\data\\processed\\real\\cpcb_hombegowda\\cpcb_hombegowda_features_24h.parquet",
+    "cpcb_jayanagar5": "E:\\1ETAI\\data\\processed\\real\\cpcb_jayanagar5\\cpcb_jayanagar5_features_24h.parquet",
+    "cpcb_silkboard": "E:\\1ETAI\\data\\processed\\real\\cpcb_silkboard\\cpcb_silkboard_features_24h.parquet",
+    "cpcb_peenya": "E:\\1ETAI\\data\\processed\\real\\cpcb_peenya\\cpcb_peenya_features_24h.parquet",
+    "cpcb_bapujinagar": "E:\\1ETAI\\data\\processed\\real\\cpcb_bapujinagar\\cpcb_bapujinagar_features_24h.parquet",
+    "cpcb_btmlayout": "E:\\1ETAI\\data\\processed\\real\\cpcb_btmlayout\\cpcb_btmlayout_features_24h.parquet",
+    "cpcb_kasturinagar": "E:\\1ETAI\\data\\processed\\real\\cpcb_kasturinagar\\cpcb_kasturinagar_features_24h.parquet",
+    "cpcb_rvce_mailasandra": "E:\\1ETAI\\data\\processed\\real\\cpcb_rvce_mailasandra\\cpcb_rvce_mailasandra_features_24h.parquet"
   },
-  "unified_features_path": "E:\\1ETAI\\aqi-sentinel\\data\\processed\\real\\bengaluru_multistation_features_24h.parquet"
+  "unified_features_path": "E:\\1ETAI\\data\\processed\\real\\bengaluru_multistation_features_24h.parquet"
 }

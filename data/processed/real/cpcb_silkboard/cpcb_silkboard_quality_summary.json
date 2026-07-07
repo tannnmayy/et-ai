@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-07-04T23:01:40.235758+00:00",
-  "raw_source_file": "E:\\1ETAI\\aqi-sentinel\\data\\raw\\cpcb\\silk_board_bengaluru_kspcb_15m.csv",
+  "generated_at_utc": "2026-07-07T15:58:07.738678+00:00",
+  "raw_source_file": "E:\\1ETAI\\data\\raw\\cpcb\\silk_board_bengaluru_kspcb_15m.csv",
   "station_id": "cpcb_silkboard",
-  "station_name": "Silk Board, Bengaluru - KSPCB",
-  "latitude": null,
-  "longitude": null,
-  "source": "CPCB/KSPCB 15-minute station export",
+  "station_name": "Silk Board Bengaluru - KSPCB",
+  "latitude": 12.917348,
+  "longitude": 77.622813,
+  "source": "CPCB/KSPCB",
   "raw_headers": [
     "Timestamp",
     "PM2.5 (\u00b5g/m\u00b3)",

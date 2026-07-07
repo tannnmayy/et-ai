@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-07-04T23:01:30.969126+00:00",
-  "raw_source_file": "E:\\1ETAI\\aqi-sentinel\\data\\raw\\cpcb\\jayanagar_5th_block_bengaluru_kspcb_15m.csv",
+  "generated_at_utc": "2026-07-07T15:57:58.245994+00:00",
+  "raw_source_file": "E:\\1ETAI\\data\\raw\\cpcb\\jayanagar_5th_block_bengaluru_kspcb_15m.csv",
   "station_id": "cpcb_jayanagar5",
-  "station_name": "Jayanagar 5th Block, Bengaluru - KSPCB",
-  "latitude": null,
-  "longitude": null,
-  "source": "CPCB/KSPCB 15-minute station export",
+  "station_name": "Jayanagar 5th Block Bengaluru - KSPCB",
+  "latitude": 12.920984,
+  "longitude": 77.584908,
+  "source": "CPCB/KSPCB",
   "raw_headers": [
     "Timestamp",
     "PM2.5 (\u00b5g/m\u00b3)",

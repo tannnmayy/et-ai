@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-07-04T23:01:58.575819+00:00",
-  "raw_source_file": "E:\\1ETAI\\aqi-sentinel\\data\\raw\\cpcb\\bapuji_nagar_bengaluru_kspcb_15m.csv",
+  "generated_at_utc": "2026-07-07T15:58:28.861745+00:00",
+  "raw_source_file": "E:\\1ETAI\\data\\raw\\cpcb\\bapuji_nagar_bengaluru_kspcb_15m.csv",
   "station_id": "cpcb_bapujinagar",
-  "station_name": "Bapuji Nagar, Bengaluru - KSPCB",
-  "latitude": null,
-  "longitude": null,
-  "source": "CPCB/KSPCB 15-minute station export",
+  "station_name": "Bapuji Nagar Bengaluru - KSPCB",
+  "latitude": 12.951913,
+  "longitude": 77.539784,
+  "source": "CPCB/KSPCB",
   "raw_headers": [
     "Timestamp",
     "PM2.5 (\u00b5g/m\u00b3)",

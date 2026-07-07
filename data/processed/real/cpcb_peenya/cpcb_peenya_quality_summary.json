@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-07-04T23:01:49.434939+00:00",
-  "raw_source_file": "E:\\1ETAI\\aqi-sentinel\\data\\raw\\cpcb\\peenya_bengaluru_cpcb_15m.csv",
+  "generated_at_utc": "2026-07-07T15:58:17.844811+00:00",
+  "raw_source_file": "E:\\1ETAI\\data\\raw\\cpcb\\peenya_bengaluru_cpcb_15m.csv",
   "station_id": "cpcb_peenya",
-  "station_name": "Peenya, Bengaluru - CPCB",
-  "latitude": null,
-  "longitude": null,
-  "source": "CPCB/KSPCB 15-minute station export",
+  "station_name": "Peenya Bengaluru - CPCB",
+  "latitude": 13.02702,
+  "longitude": 77.494094,
+  "source": "CPCB",
   "raw_headers": [
     "Timestamp",
     "PM2.5 (\u00b5g/m\u00b3)",

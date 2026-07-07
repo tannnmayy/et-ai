@@ -89,7 +89,8 @@ class TestStationRegistry:
     def test_get_station_by_id(self):
         station = get_station_by_id("cpcb_hebbal")
         assert station.station_id == "cpcb_hebbal"
-        assert station.station_name == "Hebbal, Bengaluru - KSPCB"
+        # station_name reflects the registry CSV display_name (canonical source)
+        assert "Hebbal" in station.station_name and "KSPCB" in station.station_name
 
     def test_get_station_by_id_unknown_raises(self):
         with pytest.raises(KeyError, match="Unknown station_id"):

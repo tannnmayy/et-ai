@@ -1,0 +1,7 @@
+raw_filename,proposed_station_id,activation_possible,details
+btm_layout_bengaluru_cpcb_15m.csv,cpcb_btmlayout,True,All gates passed
+bwssb_kadabesanahalli_bengaluru_cpcb_15m.csv,cpcb_kadabesanahalli,True,All gates passed
+city_railway_station_bengaluru_kspcb_15m.csv,cpcb_city_railway,True,All gates passed
+kasturi_nagar_bengaluru_kspcb_15m.csv,cpcb_kasturinagar,True,All gates passed
+rvce_mailasandra_bengaluru_kspcb_15m.csv,cpcb_rvce_mailasandra,True,All gates passed
+sanegurava_halli_bengaluru_kspcb_15m.csv,cpcb_saneguravahalli,True,All gates passed

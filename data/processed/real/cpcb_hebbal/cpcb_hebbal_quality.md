@@ -1,11 +1,11 @@
 # Hebbal CPCB/KSPCB Data Quality Report
 
-Generated at (UTC): 2026-07-04T23:01:12.435574+00:00
+Generated at (UTC): 2026-07-07T15:57:39.230319+00:00
 
 ## Source
-- Raw file: `E:\1ETAI\aqi-sentinel\data\raw\cpcb\hebbal_bengaluru_kspcb_15m.csv`
-- Station: `Hebbal, Bengaluru - KSPCB` (`cpcb_hebbal`)
-- Source label: CPCB/KSPCB 15-minute station export
+- Raw file: `E:\1ETAI\data\raw\cpcb\hebbal_bengaluru_kspcb_15m.csv`
+- Station: `Hebbal Bengaluru - KSPCB` (`cpcb_hebbal`)
+- Source label: CPCB/KSPCB
 
 ## Raw CSV Inspection
 - Detected headers: `Timestamp, PM2.5 (µg/m³), PM10 (µg/m³), NO (µg/m³), NO2 (µg/m³), NOx (ppb), NH3 (µg/m³), SO2 (µg/m³), CO (mg/m³), Ozone (µg/m³), Benzene (µg/m³), Toluene (µg/m³), Xylene (µg/m³), O Xylene (µg/m³), Eth-Benzene (µg/m³), MP-Xylene (µg/m³), AT (°C), RH (%), WS (m/s), WD (deg), RF (mm), TOT-RF (mm), SR (W/mt2), BP (mmHg), VWS (m/s)`
