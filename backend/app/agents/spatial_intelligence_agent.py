@@ -92,6 +92,15 @@ def run_spatial_intelligence_agent(state: AgentState, audit: AuditTrail) -> None
                 gs = lc.get("green_space_fraction")
                 if gs is not None:
                     lines.append(f"  Green space fraction: {gs:.2%}")
+
+                readings = geo.get("current_readings") or {}
+                if readings:
+                    lines.append("  Current pollutant readings:")
+                    for poll, r in readings.items():
+                        if r.get("available"):
+                            lines.append(f"    {poll}: {r['value']} µg/m³ at {r.get('timestamp', 'N/A')}")
+                        else:
+                            lines.append(f"    {poll}: {r.get('note', 'Not available')}")
                 lines.append("")
 
             limitations = intelligence.get("limitations", [])

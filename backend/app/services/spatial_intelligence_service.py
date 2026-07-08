@@ -7,7 +7,8 @@ from backend.app.config import (
     NEIGHBOURHOOD_SUITABILITY_DISCLAIMER,
     STATION_CONTEXT_RADIUS_METERS,
 )
-from backend.app.services.artifact_adapter import get_station_snapshot
+from backend.app.services.artifact_adapter import get_latest_station_reading, get_station_snapshot
+from pipeline.station_registry import get_station_by_id
 from backend.app.services.confidence_service import get_forecast_confidence
 from backend.app.services.forecast_evidence_service import get_forecast_evidence
 from backend.app.services.geospatial_evidence_service import (
@@ -104,12 +105,21 @@ def get_station_intelligence(station_id: str, city: str = "bengaluru") -> dict[s
         }
 
     if "_error" not in geo and "station_id" in geo:
+        current_readings: dict[str, dict] = {}
+        try:
+            config = get_station_by_id(station_id)
+            for pollutant in config.available_pollutants:
+                current_readings[pollutant] = get_latest_station_reading(station_id, pollutant)
+        except Exception:
+            pass
+
         result["geospatial_context"] = {
             "build_status": geo.get("build_status", "unknown"),
             "road_context": geo.get("road_context"),
             "landuse_context": geo.get("landuse_context"),
             "investigation_context": geo.get("investigation_context"),
             "data_completeness_score": geo.get("data_completeness_score"),
+            "current_readings": current_readings or None,
         }
 
     if station_priority:

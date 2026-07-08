@@ -68,6 +68,13 @@ class GeospatialProvenance(BaseModel):
     h3_cell: str | None = Field(None, description="H3 cell ID for the station location")
 
 
+class PollutantReading(BaseModel):
+    value: float | None = Field(None, description="Current pollutant reading value (μg/m³)")
+    timestamp: str | None = Field(None, description="ISO timestamp of the reading")
+    available: bool = Field(description="Whether a valid reading is available")
+    note: str | None = Field(None, description="Explanation if not available")
+
+
 class StationGeospatialContext(BaseModel):
     station_id: str = Field(description="Station identifier matching the forecast registry")
     city: str = Field(description="City name")
@@ -88,6 +95,9 @@ class StationGeospatialContext(BaseModel):
         ge=0.0, le=1.0, description="Overall data completeness score (0.0 to 1.0)"
     )
     limitations: list[str] = Field(description="Limitations and disclaimers")
+    current_readings: dict[str, PollutantReading] | None = Field(
+        None, description="Current pollutant readings keyed by pollutant name"
+    )
 
 
 class CityCoverageSummary(BaseModel):

@@ -8,8 +8,10 @@ from backend.app.services.artifact_adapter import (
     UnknownStationError,
     UnsupportedCityError,
     get_city_station_snapshots,
+    get_latest_station_reading,
     get_lightgbm_explanation_context,
     get_station_evaluation,
+    get_station_geospatial_context,
     get_station_quality,
     get_station_recent_observations,
     get_station_snapshot,
@@ -233,6 +235,68 @@ class TestComputeStationCapabilityClassification:
             assert "pm25" not in pollutants
             assert "pm10" in pollutants
             assert "no2" in pollutants
+
+
+class TestGetLatestStationReading:
+    def test_city_railway_no2_returns_real_value(self) -> None:
+        result = get_latest_station_reading("cpcb_city_railway", "no2")
+        assert result["station_id"] == "cpcb_city_railway"
+        assert result["pollutant"] == "no2"
+        assert result["available"] is True
+        assert result["value"] is not None
+        assert result["value"] > 0
+        assert result["timestamp"] is not None
+
+    def test_saneguravahalli_pm10_returns_real_value(self) -> None:
+        result = get_latest_station_reading("cpcb_saneguravahalli", "pm10")
+        assert result["station_id"] == "cpcb_saneguravahalli"
+        assert result["pollutant"] == "pm10"
+        assert result["available"] is True
+        assert result["value"] is not None
+        assert result["value"] > 0
+        assert result["timestamp"] is not None
+
+    def test_city_railway_pm25_returns_not_available(self) -> None:
+        result = get_latest_station_reading("cpcb_city_railway", "pm25")
+        assert result["station_id"] == "cpcb_city_railway"
+        assert result["pollutant"] == "pm25"
+        assert result["available"] is False
+        assert result["value"] is None
+        assert result["note"] is not None
+        assert "not available" in result["note"].lower() or "No valid" in result["note"]
+
+    def test_hebbal_pm25_returns_real_value(self) -> None:
+        result = get_latest_station_reading("cpcb_hebbal", "pm25")
+        assert result["station_id"] == "cpcb_hebbal"
+        assert result["pollutant"] == "pm25"
+        assert result["available"] is True
+        assert result["value"] is not None
+        assert result["value"] > 0
+        assert result["timestamp"] is not None
+
+    def test_unknown_station_raises(self) -> None:
+        with pytest.raises(UnknownStationError):
+            get_latest_station_reading("nonexistent", "pm25")
+
+
+class TestGetStationGeospatialContextWithReadings:
+    def test_saneguravahalli_includes_pm10_no2_readings(self) -> None:
+        geo = get_station_geospatial_context("cpcb_saneguravahalli")
+        assert "station_id" in geo
+        assert geo["station_id"] == "cpcb_saneguravahalli"
+        assert "current_readings" in geo
+        readings = geo["current_readings"]
+        assert "pm10" in readings
+        assert readings["pm10"]["available"] is True
+        assert readings["pm10"]["value"] is not None
+        assert readings["pm10"]["value"] > 0
+        assert "no2" in readings
+        assert readings["no2"]["available"] is True
+        assert readings["no2"]["value"] is not None
+        assert readings["no2"]["value"] > 0
+        assert "pm25" not in readings
+        assert "landuse_context" in geo
+        assert "road_context" in geo
 
 
 class TestGetLightgbmExplanationContext:

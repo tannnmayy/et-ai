@@ -323,9 +323,10 @@ def get_station_evaluation(station_id: str) -> dict:
 def get_station_geospatial_context(station_id: str, city: str = "bengaluru") -> dict:
     """Return geospatial context for a station from built artifacts.
 
-    Reads: station_geospatial_context.parquet.
+    Reads: station_geospatial_context.parquet + hourly parquet for readings.
 
-    Returns a dict with road, land-use, investigation features and disclaimers.
+    Returns a dict with road, land-use, investigation features,
+    current pollutant readings and disclaimers.
     """
     from backend.app.services.geospatial_evidence_service import (
         GeospatialArtifactMissingError,
@@ -333,13 +334,94 @@ def get_station_geospatial_context(station_id: str, city: str = "bengaluru") -> 
         get_station_geospatial_context as _get_geo_context,
     )
     try:
-        return _get_geo_context(station_id, city=city)
+        result = _get_geo_context(station_id, city=city)
     except (GeoUnknownStationError, GeospatialArtifactMissingError):
         return {
             "station_id": station_id,
             "geospatial_available": False,
             "note": "Geospatial context not available for this station.",
         }
+
+    config = get_station_by_id(station_id)
+    current_readings: dict[str, dict] = {}
+    for pollutant in config.available_pollutants:
+        current_readings[pollutant] = get_latest_station_reading(station_id, pollutant)
+    result["current_readings"] = current_readings
+    return result
+
+
+def get_latest_station_reading(station_id: str, pollutant: str) -> dict:
+    """Return the most recent valid hourly reading for a given pollutant.
+
+    Reads from the station's hourly parquet file. Returns a structured
+    dict with the reading value, timestamp, and availability status.
+
+    For stations missing the requested pollutant in their
+    ``available_pollutants``, returns a clean "not available" result —
+    never an exception, never a null/zero that could be mistaken for a
+    real reading.
+    """
+    _validate_station(station_id)
+    config = get_station_by_id(station_id)
+
+    if pollutant not in config.available_pollutants:
+        return {
+            "station_id": station_id,
+            "pollutant": pollutant,
+            "value": None,
+            "timestamp": None,
+            "available": False,
+            "note": f"Pollutant '{pollutant}' is not available for station '{station_id}'.",
+        }
+
+    project_root = get_project_root()
+    hourly_path = project_root / "data" / "processed" / "real" / station_id / f"{station_id}_hourly.parquet"
+    if not hourly_path.exists():
+        return {
+            "station_id": station_id,
+            "pollutant": pollutant,
+            "value": None,
+            "timestamp": None,
+            "available": False,
+            "note": f"Hourly data file not found for station '{station_id}'.",
+        }
+
+    df = pd.read_parquet(hourly_path)
+    if pollutant not in df.columns:
+        return {
+            "station_id": station_id,
+            "pollutant": pollutant,
+            "value": None,
+            "timestamp": None,
+            "available": False,
+            "note": f"Column '{pollutant}' not found in hourly data for station '{station_id}'.",
+        }
+
+    valid = df[pollutant].dropna()
+    if valid.empty:
+        return {
+            "station_id": station_id,
+            "pollutant": pollutant,
+            "value": None,
+            "timestamp": None,
+            "available": False,
+            "note": f"No valid readings for pollutant '{pollutant}' at station '{station_id}'.",
+        }
+
+    last_idx = valid.index[-1]
+    value = float(valid.iloc[-1])
+    ts_col = "timestamp_utc" if "timestamp_utc" in df.columns else "timestamp"
+    raw_ts = df.loc[last_idx, ts_col]
+    ts_str = raw_ts.isoformat() if isinstance(raw_ts, pd.Timestamp) else str(raw_ts)
+
+    return {
+        "station_id": station_id,
+        "pollutant": pollutant,
+        "value": round(value, 4),
+        "timestamp": ts_str,
+        "available": True,
+        "note": None,
+    }
 
 
 def get_lightgbm_explanation_context(station_id: str) -> dict | None:

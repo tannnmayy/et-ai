@@ -93,6 +93,16 @@ def run_spatial_context_agent(state: AgentState, audit: AuditTrail) -> None:
         lines.append(f"  Coverage: {inv.get('investigation_context_coverage_status', 'unavailable')}")
         lines.append("")
 
+        readings = context_data.get("current_readings") or {}
+        if readings:
+            lines.append("Current pollutant readings:")
+            for poll, r in readings.items():
+                if r.get("available"):
+                    lines.append(f"  {poll}: {r['value']} µg/m³ at {r.get('timestamp', 'N/A')}")
+                else:
+                    lines.append(f"  {poll}: {r.get('note', 'Not available')}")
+            lines.append("")
+
         limitations = context_data.get("limitations", [])
         if limitations:
             lines.append("Limitations:")
