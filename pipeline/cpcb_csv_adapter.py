@@ -21,6 +21,7 @@ CANONICAL_FIELDS = (
     "temperature_c",
     "relative_humidity",
     "wind_speed_mps",
+    "wind_direction_deg",
     "rainfall_mm",
 )
 
@@ -31,12 +32,13 @@ NUMERIC_FIELDS = (
     "temperature_c",
     "relative_humidity",
     "wind_speed_mps",
+    "wind_direction_deg",
     "rainfall_mm",
     "latitude",
     "longitude",
 )
 
-NON_NEGATIVE_FIELDS = ("pm25", "pm10", "no2", "wind_speed_mps", "rainfall_mm")
+NON_NEGATIVE_FIELDS = ("pm25", "pm10", "no2", "wind_speed_mps", "wind_direction_deg", "rainfall_mm")
 
 DEFAULT_PLAUSIBILITY_THRESHOLDS: dict[str, tuple[str, float]] = {
     "pm25": (">", 1000.0),
@@ -45,6 +47,7 @@ DEFAULT_PLAUSIBILITY_THRESHOLDS: dict[str, tuple[str, float]] = {
     "relative_humidity": ("range", 0.0, 100.0),
     "temperature_c": ("range", -10.0, 60.0),
     "wind_speed_mps": (">", 60.0),
+    "wind_direction_deg": ("range", 0.0, 360.0),
     "rainfall_mm": (">", 250.0),
 }
 
@@ -97,6 +100,12 @@ COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
         "ws",
         "ws (m/s)",
         "wind speed",
+    ),
+    "wind_direction_deg": (
+        "wd",
+        "wd (deg)",
+        "wind direction",
+        "wind direction (deg)",
     ),
     "rainfall_mm": (
         "rf",

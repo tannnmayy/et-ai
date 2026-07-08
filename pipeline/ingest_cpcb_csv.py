@@ -29,6 +29,7 @@ HOURLY_COLUMNS = [
     "temperature_c",
     "relative_humidity",
     "wind_speed_mps",
+    "wind_direction_deg",
     "rainfall_mm",
     "observations_per_hour",
     "pm25_observations_per_hour",
@@ -38,7 +39,7 @@ HOURLY_COLUMNS = [
     "source",
 ]
 
-WEATHER_COLUMNS = ["temperature_c", "relative_humidity", "wind_speed_mps", "rainfall_mm"]
+WEATHER_COLUMNS = ["temperature_c", "relative_humidity", "wind_speed_mps", "wind_direction_deg", "rainfall_mm"]
 
 CLASSIFICATION_THRESHOLDS = {
     "recommended": {"covered_days": 180, "pm25_completeness": 70.0, "longest_run_days": 30},
@@ -74,6 +75,7 @@ def aggregate_to_hourly(
         temperature_c=("temperature_c", "mean"),
         relative_humidity=("relative_humidity", "mean"),
         wind_speed_mps=("wind_speed_mps", "mean"),
+        wind_direction_deg=("wind_direction_deg", "mean"),
         rainfall_mm=("rainfall_mm", "sum"),
     )
     hourly = hourly.rename(columns={"timestamp_hour_utc": "timestamp_utc"})

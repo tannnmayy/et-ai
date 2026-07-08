@@ -24,6 +24,7 @@ HEBBAL_HEADERS = [
     "AT (°C)",
     "RH (%)",
     "WS (m/s)",
+    "WD (deg)",
     "RF (mm)",
 ]
 
@@ -42,6 +43,7 @@ def test_hebbal_header_mapping_detects_actual_headers():
     assert mapping["AT (°C)"] == "temperature_c"
     assert mapping["RH (%)"] == "relative_humidity"
     assert mapping["WS (m/s)"] == "wind_speed_mps"
+    assert mapping["WD (deg)"] == "wind_direction_deg"
     assert mapping["RF (mm)"] == "rainfall_mm"
 
 
@@ -68,8 +70,8 @@ def test_ist_to_utc_conversion(tmp_path):
     _write_fixture(
         csv_path,
         [
-            ["2025-01-01 00:00:00", "10", "20", "NA", "5", "25", "60", "1.0", "0.0"],
-            ["2025-01-01 00:15:00", "12", "22", "NA", "6", "25", "61", "1.1", "0.0"],
+            ["2025-01-01 00:00:00", "10", "20", "NA", "5", "25", "60", "1.0", "270", "0.0"],
+            ["2025-01-01 00:15:00", "12", "22", "NA", "6", "25", "61", "1.1", "270", "0.0"],
         ],
     )
     station = CPCBStationConfig(station_id="cpcb_hebbal", station_name="Hebbal, Bengaluru - KSPCB")
@@ -81,7 +83,7 @@ def test_ist_to_utc_conversion(tmp_path):
 
 def test_invalid_timestamp_reporting(tmp_path):
     csv_path = tmp_path / "invalid.csv"
-    _write_fixture(csv_path, [["not-a-date", "10", "20", "NA", "5", "25", "60", "1.0", "0.0"]])
+    _write_fixture(csv_path, [["not-a-date", "10", "20", "NA", "5", "25", "60", "1.0", "270", "0.0"]])
     station = CPCBStationConfig(station_id="cpcb_hebbal", station_name="Hebbal, Bengaluru - KSPCB")
     cleaned, stats = clean_cpcb_frame(read_raw_csv(csv_path), station, raw_path=str(csv_path))
     assert stats.invalid_timestamp_count == 1
@@ -90,7 +92,7 @@ def test_invalid_timestamp_reporting(tmp_path):
 
 def test_negative_pm25_rejection(tmp_path):
     csv_path = tmp_path / "negative.csv"
-    _write_fixture(csv_path, [["2025-01-01 00:00:00", "-5", "20", "NA", "-1", "25", "60", "-1.0", "-0.5"]])
+    _write_fixture(csv_path, [["2025-01-01 00:00:00", "-5", "20", "NA", "-1", "25", "60", "-1.0", "270", "-0.5"]])
     station = CPCBStationConfig(station_id="cpcb_hebbal", station_name="Hebbal, Bengaluru - KSPCB")
     cleaned, stats = clean_cpcb_frame(read_raw_csv(csv_path), station, raw_path=str(csv_path))
     assert pd.isna(cleaned.iloc[0]["pm25"])
@@ -105,8 +107,8 @@ def test_duplicate_handling_uses_median(tmp_path):
     _write_fixture(
         csv_path,
         [
-            ["2025-01-01 00:00:00", "10", "20", "NA", "5", "25", "60", "1.0", "0.0"],
-            ["2025-01-01 00:00:00", "20", "40", "NA", "7", "27", "62", "1.2", "0.0"],
+            ["2025-01-01 00:00:00", "10", "20", "NA", "5", "25", "60", "1.0", "270", "0.0"],
+            ["2025-01-01 00:00:00", "20", "40", "NA", "7", "27", "62", "1.2", "270", "0.0"],
         ],
     )
     station = CPCBStationConfig(station_id="cpcb_hebbal", station_name="Hebbal, Bengaluru - KSPCB")
@@ -119,3 +121,41 @@ def test_duplicate_handling_uses_median(tmp_path):
 def test_normalize_header_handles_unicode_variants():
     assert normalize_header("PM2.5 (µg/m³)") == "pm2.5 (ug/m3)"
     assert normalize_header("NO₂ (µg/m³)") == "no2 (ug/m3)"
+
+
+def test_wind_direction_deg_present_and_nonnull(tmp_path):
+    csv_path = tmp_path / "wd.csv"
+    _write_fixture(
+        csv_path,
+        [["2025-01-01 00:00:00", "10", "20", "NA", "5", "25", "60", "1.0", "270", "0.0"]],
+    )
+    station = CPCBStationConfig(station_id="cpcb_hebbal", station_name="Hebbal, Bengaluru - KSPCB")
+    cleaned, stats = clean_cpcb_frame(read_raw_csv(csv_path), station, raw_path=str(csv_path))
+    assert "wind_direction_deg" in cleaned.columns
+    assert cleaned.iloc[0]["wind_direction_deg"] == 270.0
+
+
+def test_wind_direction_negative_rejected(tmp_path):
+    csv_path = tmp_path / "wd_negative.csv"
+    _write_fixture(
+        csv_path,
+        [["2025-01-01 00:00:00", "10", "20", "NA", "5", "25", "60", "1.0", "-10", "0.0"]],
+    )
+    station = CPCBStationConfig(station_id="cpcb_hebbal", station_name="Hebbal, Bengaluru - KSPCB")
+    cleaned, stats = clean_cpcb_frame(read_raw_csv(csv_path), station, raw_path=str(csv_path))
+    assert pd.isna(cleaned.iloc[0]["wind_direction_deg"])
+
+
+def test_wind_direction_deg_from_real_header(tmp_path):
+    headers = [
+        "Timestamp", "PM2.5 (µg/m³)", "PM10 (µg/m³)", "NO (µg/m³)", "NO2 (µg/m³)",
+        "AT (°C)", "RH (%)", "WS (m/s)", "WD (deg)", "RF (mm)",
+    ]
+    csv_path = tmp_path / "wd_real.csv"
+    lines = [",".join(headers)] + [",".join(["2025-01-01 00:00:00", "10", "20", "NA", "5", "25", "60", "1.0", "180", "0.0"])]
+    csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    station = CPCBStationConfig(station_id="cpcb_hebbal", station_name="Hebbal, Bengaluru - KSPCB")
+    cleaned, stats = clean_cpcb_frame(read_raw_csv(csv_path), station, raw_path=str(csv_path))
+    assert "wind_direction_deg" in cleaned.columns
+    assert not pd.isna(cleaned.iloc[0]["wind_direction_deg"])
+    assert 0 <= cleaned.iloc[0]["wind_direction_deg"] <= 360

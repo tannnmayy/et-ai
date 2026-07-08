@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-07-07T15:57:39.230319+00:00",
+  "generated_at_utc": "2026-07-08T18:35:50.651834+00:00",
   "raw_source_file": "E:\\1ETAI\\data\\raw\\cpcb\\hebbal_bengaluru_kspcb_15m.csv",
   "station_id": "cpcb_hebbal",
   "station_name": "Hebbal Bengaluru - KSPCB",
-  "latitude": 13.029152,
-  "longitude": 77.585901,
-  "source": "CPCB/KSPCB",
+  "latitude": null,
+  "longitude": null,
+  "source": "CPCB/KSPCB 15-minute station export",
   "raw_headers": [
     "Timestamp",
     "PM2.5 (\u00b5g/m\u00b3)",
@@ -50,6 +50,7 @@
     "temperature_c": 0,
     "relative_humidity": 0,
     "wind_speed_mps": 0,
+    "wind_direction_deg": 0,
     "rainfall_mm": 0,
     "latitude": 0,
     "longitude": 0
@@ -62,6 +63,7 @@
     "relative_humidity": 0,
     "temperature_c": 0,
     "wind_speed_mps": 0,
+    "wind_direction_deg": 0,
     "rainfall_mm": 0
   },
   "expected_15min_intervals": 35040,

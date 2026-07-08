@@ -20,6 +20,10 @@ class NormalizedHourlyRecord(BaseModel):
     weather_description: str = Field(default="Unknown")
     wind_speed_kmh: float | None = Field(default=None, ge=0)
     wind_gust_kmh: float | None = Field(default=None, ge=0)
+    wind_direction_deg: float | None = Field(
+        default=None, ge=0, le=360,
+        description="Wind direction in degrees, meteorological convention (0=N, 90=E, 180=S, 270=W)",
+    )
 
 
 class NormalizedWeatherForecast(BaseModel):

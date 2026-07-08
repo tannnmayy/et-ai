@@ -197,6 +197,7 @@ def _normalize_hourly(
             "weather_description": WEATHER_CODE_DESCRIPTIONS.get(wc, "Unknown"),
             "wind_speed_kmh": _safe_float(hourly["wind_speed_10m"][i]),
             "wind_gust_kmh": _safe_float(hourly["wind_gusts_10m"][i]),
+            "wind_direction_deg": _safe_float(hourly["winddirection_10m"][i]),
         })
     return records
 

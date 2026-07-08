@@ -47,6 +47,7 @@ def _sample_raw_response(start_hour: int = 0, hours: int = 72) -> dict:
         "weather_code": [],
         "wind_speed_10m": [],
         "wind_gusts_10m": [],
+        "winddirection_10m": [],
     }
     base = datetime(2026, 7, 6, 0, 0, 0, tzinfo=IST)
     for i in range(hours):
@@ -78,6 +79,7 @@ def _sample_raw_response(start_hour: int = 0, hours: int = 72) -> dict:
             fields["wind_gusts_10m"].append(20.0)
         fields["showers"].append(0.0)
         fields["snowfall"].append(0.0)
+        fields["winddirection_10m"].append(float((i % 8) * 45))
 
     return {
         "latitude": WEATHER_BENGALURU_LATITUDE,
@@ -100,6 +102,7 @@ def _sample_raw_response(start_hour: int = 0, hours: int = 72) -> dict:
             "weather_code": "wmo code",
             "wind_speed_10m": "km/h",
             "wind_gusts_10m": "km/h",
+            "winddirection_10m": "°",
         },
         "hourly": {
             "time": times,
@@ -130,6 +133,7 @@ def _make_multi_day_fixture(days: int = 3, start_hour: int = 8) -> dict:
         "weather_code": [],
         "wind_speed_10m": [],
         "wind_gusts_10m": [],
+        "winddirection_10m": [],
     }
     total_hours = days * 24
     for i in range(total_hours):
@@ -148,6 +152,7 @@ def _make_multi_day_fixture(days: int = 3, start_hour: int = 8) -> dict:
         fields["weather_code"].append(0)
         fields["wind_speed_10m"].append(12.0)
         fields["wind_gusts_10m"].append(20.0)
+        fields["winddirection_10m"].append(float((i % 8) * 45))
     return {
         "latitude": WEATHER_BENGALURU_LATITUDE,
         "longitude": WEATHER_BENGALURU_LONGITUDE,

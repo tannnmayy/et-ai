@@ -235,6 +235,7 @@ OPEN_METEO_HOURLY_FIELDS: list[str] = [
     "weather_code",
     "wind_speed_10m",
     "wind_gusts_10m",
+    "winddirection_10m",
 ]
 
 # ---------------------------------------------------------------------------
@@ -425,6 +426,22 @@ GEOSPATIAL_METRIC_CRS: str = "EPSG:32643"  # UTM zone 43N (covers Bengaluru)
 
 # Station registry path (project-relative)
 STATION_REGISTRY_PATH: str = "data/reference/bengaluru_station_registry.csv"
+
+# ---------------------------------------------------------------------------
+# Attribution engine (Milestone 8)
+# ---------------------------------------------------------------------------
+
+# Maximum distance (meters) for source hexagons to contribute to attribution
+ATTRIBUTION_SEARCH_RADIUS_METERS: float = 3000.0
+
+# Wind speed threshold (km/h) below which directional weighting is skipped
+ATTRIBUTION_CALM_WIND_SPEED_THRESHOLD_KMH: float = 1.0
+
+# Maximum distance (meters) for stations to contribute IDW residual correction
+FUSION_STATION_RANGE_METERS: float = 5000.0
+
+# Path to precomputed per-hexagon feature parquet
+HEXAGON_FEATURES_PATH: str = "data/processed/geospatial/hexagon_features.parquet"
 
 # ---------------------------------------------------------------------------
 # Google Maps configuration (Milestone 5B)
