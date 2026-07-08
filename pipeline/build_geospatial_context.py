@@ -36,7 +36,6 @@ from pipeline.geospatial.h3_utils import (
     get_h3_api_version,
 )
 from pipeline.geospatial.osm_client import (
-    OSM_TAGS,
     _snapshot_geojson_path,
     _validate_geojson,
     get_all_snapshot_metadata,
@@ -61,7 +60,13 @@ NON_CAUSALITY_DISCLAIMER: str = (
     "or mapped object caused pollution at this station."
 )
 
-REQUIRED_OSM_LAYERS = list(OSM_TAGS.keys())
+REQUIRED_OSM_LAYERS = [
+    "roads",
+    "landuse",
+    "green_spaces",
+    "construction",
+    "industrial_facility",
+]
 
 # ---------------------------------------------------------------------------
 # Helpers
