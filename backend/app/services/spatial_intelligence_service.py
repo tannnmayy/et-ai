@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from backend.app.config import (
@@ -21,6 +22,8 @@ import pandas as pd
 
 from backend.app.config import get_project_root
 from pipeline.station_registry import BENGALURU_STATIONS
+
+logger = logging.getLogger(__name__)
 
 _REGISTRY_DF: pd.DataFrame | None = None
 
@@ -110,8 +113,10 @@ def get_station_intelligence(station_id: str, city: str = "bengaluru") -> dict[s
             config = get_station_by_id(station_id)
             for pollutant in config.available_pollutants:
                 current_readings[pollutant] = get_latest_station_reading(station_id, pollutant)
-        except Exception:
+        except UnknownStationError:
             pass
+        except Exception as exc:
+            logger.warning("Failed to fetch current readings for %s: %s", station_id, exc)
 
         result["geospatial_context"] = {
             "build_status": geo.get("build_status", "unknown"),
