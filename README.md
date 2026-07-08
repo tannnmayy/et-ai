@@ -76,37 +76,45 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Generate synthetic data:
+## Files already committed (present on clone, nothing to do)
 
-```powershell
-python -m pipeline.generate_demo_data
-```
+- Station registry, pipeline code, schemas, ML model binaries, and geospatial context files are tracked and ready to use after `pip install`.
 
-Build leakage-safe features:
+## Required build steps (must run in this order)
 
-```powershell
-python -m pipeline.build_features
-```
+Some artifacts are too large or too machine-specific to commit. Run these steps to create them locally:
 
-Train the persistence baseline:
+1. **Generate synthetic demo data** (if no real CPCB data is available):
+   ```powershell
+   python -m pipeline.generate_demo_data
+   ```
 
-```powershell
-python -m ml.train_persistence_baseline
-```
+2. **Build geospatial context** (required for station-level geospatial endpoints):
+   ```powershell
+   python -m pipeline.build_geospatial_context
+   ```
 
-Train LightGBM:
+3. **Build leakage-safe features**:
+   ```powershell
+   python -m pipeline.build_features
+   ```
 
-```powershell
-python -m ml.train_lightgbm
-```
+4. **Train the persistence baseline**:
+   ```powershell
+   python -m ml.train_persistence_baseline
+   ```
 
-Evaluate both models on the same chronological test set:
+5. **Train LightGBM**:
+   ```powershell
+   python -m ml.train_lightgbm
+   ```
 
-```powershell
-python -m ml.evaluate
-```
+6. **Evaluate both models** on the same chronological test set:
+   ```powershell
+   python -m ml.evaluate
+   ```
 
-Run tests:
+## Run tests
 
 ```powershell
 pytest
