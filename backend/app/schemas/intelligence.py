@@ -143,6 +143,56 @@ class InspectionPriorityResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Enforcement priority (Milestone 9)
+# ---------------------------------------------------------------------------
+
+class DecomposedScore(BaseModel):
+    exposure_weight: float = Field(
+        ge=0, le=1,
+        description="Population-vulnerability proxy (hospital/school/elderly-care density), "
+        "0–1 normalized",
+    )
+    attributable_magnitude: float = Field(
+        ge=0, le=1,
+        description="Fused PM2.5 × enforceable source fraction (industrial + construction + "
+        "burning), 0–1 normalized",
+    )
+    actionability_weight: float = Field(
+        ge=0, le=1,
+        description="Weighted average actionability of attributed sources: industrial (1.0), "
+        "construction (1.0), burning (1.0), traffic (0.2)",
+    )
+
+
+class EnforcementPriorityItem(BaseModel):
+    rank: int
+    h3_cell: str = Field(description="H3 cell ID at resolution 9")
+    priority_score: float = Field(ge=0, description="Composite enforcement priority score")
+    scoring_breakdown: DecomposedScore = Field(
+        description="Decomposed score components for explainability",
+    )
+    fused_pm25: float | None = Field(
+        default=None, description="Fused PM2.5 estimate from attribution fusion (µg/m³)",
+    )
+    source_attribution: dict = Field(
+        description="Normalized source-category breakdown (traffic, industrial, "
+        "construction, burning)",
+    )
+    method: str = Field(
+        description="Attribution method: 'wind_weighted' or 'calm_fallback' — flags "
+        "whether a directional wind signal was available",
+    )
+
+
+class EnforcementPriorityResponse(BaseModel):
+    city: str
+    computed_at: str = Field(description="ISO timestamp of the computation")
+    total_hexagons: int
+    top_k: int
+    ranked_hexagons: list[EnforcementPriorityItem]
+
+
+# ---------------------------------------------------------------------------
 # Citizen advisory
 # ---------------------------------------------------------------------------
 

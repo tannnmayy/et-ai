@@ -294,7 +294,6 @@ def compute_fusion_for_hexagon(
         if sim_weights_arr.sum() > 0:
             s_vec_for = np.array([s["attribution"]["traffic"], s["attribution"]["industrial"],
                                   s["attribution"]["construction"], s["attribution"]["burning"]])
-            l1_s = np.sum(np.abs(s_vec_for - s_vec_for))
             s_sim_weights = []
             for other_s in station_attribs:
                 other_vec = np.array([other_s["attribution"]["traffic"], other_s["attribution"]["industrial"],

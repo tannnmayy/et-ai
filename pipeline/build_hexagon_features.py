@@ -20,7 +20,7 @@ from pipeline.geospatial.osm_client import load_category_geojson
 
 logger = logging.getLogger(__name__)
 
-CATEGORIES = ["roads", "landuse", "green_spaces", "construction", "industrial_facility"]
+CATEGORIES = ["roads", "landuse", "green_spaces", "construction", "industrial_facility", "vulnerability"]
 
 INDUSTRIAL_LANDUSE_VALS = {"industrial", "quarry", "landfill", "brownfield"}
 COMMERCIAL_LANDUSE_VALS = {"commercial", "retail"}
@@ -213,6 +213,7 @@ def build_hexagon_features(output_path: str | Path | None = None) -> pd.DataFram
     construction_geoms, _, construction_tree = _load_geometries("construction")
     facility_geoms, _, facility_tree = _load_geometries("industrial_facility")
     green_geoms, _, green_tree = _load_geometries("green_spaces")
+    vulnerability_geoms, _, vulnerability_tree = _load_geometries("vulnerability")
 
     cell_areas: list[float] = []
     road_lengths: list[float] = []
@@ -223,6 +224,7 @@ def build_hexagon_features(output_path: str | Path | None = None) -> pd.DataFram
     other_landuse_areas: list[float] = []
     construction_counts: list[int] = []
     facility_counts: list[int] = []
+    vulnerability_counts: list[int] = []
 
     for idx, row in hex_df.iterrows():
         hex_poly = row["polygon"]
@@ -242,6 +244,7 @@ def build_hexagon_features(output_path: str | Path | None = None) -> pd.DataFram
 
         construction_counts.append(_count_intersecting(hex_poly, construction_geoms, construction_tree))
         facility_counts.append(_count_intersecting(hex_poly, facility_geoms, facility_tree))
+        vulnerability_counts.append(_count_intersecting(hex_poly, vulnerability_geoms, vulnerability_tree))
 
         if (idx + 1) % 500 == 0:
             logger.info("Processed %d / %d hexagons", idx + 1, len(hex_df))
@@ -259,10 +262,13 @@ def build_hexagon_features(output_path: str | Path | None = None) -> pd.DataFram
         "other_landuse_area_sq_m": other_landuse_areas,
         "construction_feature_count": construction_counts,
         "industrial_facility_count": facility_counts,
+        "vulnerability_feature_count": vulnerability_counts,
     })
 
     valid_areas = result_df["cell_area_sq_m"].replace(0, np.nan)
     result_df["road_density_m_per_sq_m"] = (result_df["road_length_m"] / valid_areas).fillna(0.0)
+    area_sq_km = valid_areas / 1_000_000.0
+    result_df["vulnerability_feature_density_per_sq_km"] = (result_df["vulnerability_feature_count"] / area_sq_km).fillna(0.0)
 
     for col in ["industrial_area_sq_m", "commercial_area_sq_m", "residential_area_sq_m",
                 "green_space_area_sq_m", "other_landuse_area_sq_m"]:

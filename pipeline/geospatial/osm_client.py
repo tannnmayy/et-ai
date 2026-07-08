@@ -45,6 +45,14 @@ OSM_TAGS: dict[str, dict[str, Any]] = {
         "landuse": ["industrial", "quarry", "landfill", "brownfield"],
         "power_source": True,
     },
+    "vulnerability": {
+        "amenity": [
+            "hospital", "clinic", "doctors", "pharmacy",
+            "school", "kindergarten", "college", "university",
+            "social_facility", "nursing_home",
+        ],
+        "healthcare": True,
+    },
 }
 
 # Retry / backoff settings
