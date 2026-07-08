@@ -67,6 +67,9 @@ def list_stations(city: str = "bengaluru", include_inactive: bool = False) -> li
             geospatial_available=geo_avail,
             data_status=data_status,
             limitations=limitations,
+            forecast_eligible=s.forecast_eligible,
+            pm25_forecast_coverage_status=s.pm25_forecast_coverage_status if not s.forecast_eligible else None,
+            available_pollutants=s.available_pollutants,
         ))
 
     return [r.model_dump() for r in result]

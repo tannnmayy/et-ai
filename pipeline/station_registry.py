@@ -21,6 +21,9 @@ class StationConfig:
     active: bool = True
     geospatial_eligible: bool = True
     raw_filename: str = ""
+    forecast_eligible: bool = True
+    available_pollutants: list[str] = field(default_factory=list)
+    pm25_forecast_coverage_status: str = "complete"
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +128,17 @@ def load_registry_from_csv() -> list[dict[str, Any]]:
             "raw_filename": str(row.get("raw_filename", "")).strip(),
             "active": _safe_bool(row, "active", True),
             "geospatial_eligible": _safe_bool(row, "geospatial_eligible", True),
+            "forecast_eligible": _safe_bool(row, "forecast_eligible", True),
+            "available_pollutants": str(row.get("available_pollutants", "")).strip(),
+            "pm25_forecast_coverage_status": str(row.get("pm25_forecast_coverage_status", "complete")).strip(),
         })
     return records
+
+
+def _parse_available_pollutants(raw: str) -> list[str]:
+    if not raw:
+        return []
+    return [p.strip() for p in raw.split(";") if p.strip()]
 
 
 def _cfg_from_record(r: dict[str, Any]) -> StationConfig:
@@ -134,6 +146,7 @@ def _cfg_from_record(r: dict[str, Any]) -> StationConfig:
     raw = r.get("raw_filename") or ""
     display = r.get("display_name") or sid
     source_file = raw or f"{sid.replace('cpcb_', '')}.csv"
+    pollutants_raw = r.get("available_pollutants", "") or ""
     return StationConfig(
         station_id=sid,
         station_name=display,
@@ -146,6 +159,9 @@ def _cfg_from_record(r: dict[str, Any]) -> StationConfig:
         active=r.get("active", True),
         geospatial_eligible=r.get("geospatial_eligible", True),
         raw_filename=raw,
+        forecast_eligible=r.get("forecast_eligible", True),
+        available_pollutants=_parse_available_pollutants(pollutants_raw),
+        pm25_forecast_coverage_status=r.get("pm25_forecast_coverage_status", "complete"),
     )
 
 

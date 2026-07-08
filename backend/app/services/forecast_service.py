@@ -408,6 +408,9 @@ def get_station_status() -> StationStatusResponse:
             features_available=feature_path.exists(),
             model_available=paths.lightgbm_model.exists(),
             quality_classification=quality_class,
+            forecast_eligible=config.forecast_eligible,
+            pm25_forecast_coverage_status=config.pm25_forecast_coverage_status,
+            available_pollutants=config.available_pollutants,
         ))
     return StationStatusResponse(
         city="Bengaluru",

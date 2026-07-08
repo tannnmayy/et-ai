@@ -182,6 +182,7 @@ def _build_snapshot(
         "station_id": station_id,
         "station_name": station_config.station_name,
         "city": SUPPORTED_CITIES[city_key]["display_name"],
+        "forecast_eligible": True,
         "forecast_engine": forecast_engine,
         "prediction_origin": origin.isoformat(),
         "forecast_for": forecast_for.isoformat(),
@@ -193,6 +194,8 @@ def _build_snapshot(
         "quality_note": quality["recommendation"],
         "evaluation_metrics": eval_data,
         "artifact_status": artifact_status,
+        "pm25_forecast_coverage_status": station_config.pm25_forecast_coverage_status,
+        "available_pollutants": station_config.available_pollutants,
     }
 
 
@@ -209,22 +212,40 @@ def get_station_snapshot(station_id: str, city: str = "bengaluru") -> dict:
 
     Reads: unified features parquet, evaluation_metrics.json,
     persistence_baseline.json, station_manifest.json, station registry.
+
+    For stations where forecast_eligible=False, returns a minimal
+    structured response with coverage status and available pollutants
+    instead of raising NoValidForecastError — that exception is reserved
+    for eligible stations whose artifacts are genuinely missing.
     """
     _validate_station(station_id)
     city_key = _validate_city(city)
-    _, paths, eval_metrics, manifest, persistence, features = _load_all_artifacts()
     config = get_station_by_id(station_id)
+
+    if not config.forecast_eligible:
+        return {
+            "station_id": station_id,
+            "station_name": config.station_name,
+            "city": SUPPORTED_CITIES[city_key]["display_name"],
+            "forecast_eligible": False,
+            "pm25_forecast_coverage_status": config.pm25_forecast_coverage_status,
+            "available_pollutants": config.available_pollutants,
+        }
+
+    _, paths, eval_metrics, manifest, persistence, features = _load_all_artifacts()
     return _build_snapshot(station_id, config, features, eval_metrics, manifest, persistence, city_key)
 
 
 def list_station_snapshots(city: str | None = None) -> list[dict]:
-    """Return snapshots for all accepted stations in a city (or all cities if None)."""
+    """Return snapshots for all forecast-eligible stations in a city (or all cities if None)."""
     if city is not None:
         _validate_city(city)
     _, paths, eval_metrics, manifest, persistence, features = _load_all_artifacts()
 
     results = []
     for config in BENGALURU_STATIONS:
+        if not config.forecast_eligible:
+            continue
         sid = config.station_id
         try:
             snap = _build_snapshot(sid, config, features, eval_metrics, manifest, persistence, "bengaluru")

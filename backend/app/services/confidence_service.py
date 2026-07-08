@@ -94,6 +94,25 @@ def get_forecast_confidence(station_id: str, city: str = "bengaluru") -> dict:
     except (UnsupportedCityError, UnknownStationError, MissingArtifactError, NoValidForecastError):
         raise
 
+    if not snapshot.get("forecast_eligible", True):
+        return {
+            "station_id": station_id,
+            "station_name": snapshot.get("station_name", station_id),
+            "city": snapshot.get("city", city),
+            "confidence_level": "Unavailable",
+            "confidence_score": None,
+            "latest_observation_age_hours": None,
+            "recent_pm25_completeness_percent": None,
+            "recent_gap_hours": None,
+            "selected_engine": "unavailable",
+            "quality_classification": "Not eligible",
+            "reasons": [f"Station is not forecast-eligible: {snapshot.get('pm25_forecast_coverage_status', 'unknown')}"],
+            "blockers": ["Station cannot produce a PM2.5 forecast."],
+            "forecast_eligible": False,
+            "pm25_forecast_coverage_status": snapshot.get("pm25_forecast_coverage_status"),
+            "available_pollutants": snapshot.get("available_pollutants", []),
+        }
+
     quality = snapshot.get("quality_classification", "Unknown")
     score = 100
     reasons: list[str] = []
@@ -155,4 +174,7 @@ def get_forecast_confidence(station_id: str, city: str = "bengaluru") -> dict:
         "quality_classification": quality,
         "reasons": reasons,
         "blockers": blockers,
+        "forecast_eligible": True,
+        "pm25_forecast_coverage_status": None,
+        "available_pollutants": [],
     }

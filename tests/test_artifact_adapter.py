@@ -15,6 +15,14 @@ from backend.app.services.artifact_adapter import (
     get_station_snapshot,
     list_station_snapshots,
 )
+from pipeline.station_registry import refresh_registry
+
+
+NON_ELIGIBLE_STATIONS = [
+    ("cpcb_kadabesanahalli", "insufficient_pm25_history", ["pm10", "no2"]),
+    ("cpcb_city_railway", "pm25_sensor_unavailable", ["pm10", "no2"]),
+    ("cpcb_saneguravahalli", "pm25_sensor_unavailable", ["pm10", "no2"]),
+]
 
 
 class TestGetStationSnapshot:
@@ -22,6 +30,7 @@ class TestGetStationSnapshot:
         snap = get_station_snapshot("cpcb_hebbal")
         assert snap["station_id"] == "cpcb_hebbal"
         assert snap["city"] == "Bengaluru"
+        assert snap["forecast_eligible"] is True
         assert snap["forecast_engine"] in ("persistence", "lightgbm")
         assert snap["predicted_pm25"] >= 0
         assert snap["risk_category"] in ("Good", "Satisfactory", "Moderate", "Poor", "Very Poor", "Severe")
@@ -38,11 +47,27 @@ class TestGetStationSnapshot:
             get_station_snapshot("cpcb_hebbal", city="delhi")
 
     def test_all_stations_have_snapshots(self) -> None:
+        refresh_registry()
         from pipeline.station_registry import BENGALURU_STATIONS
         for config in BENGALURU_STATIONS:
             snap = get_station_snapshot(config.station_id)
             assert snap["station_id"] == config.station_id
-            assert snap["station_name"] == config.station_name
+            if config.forecast_eligible:
+                assert snap["forecast_eligible"] is True
+                assert snap["station_name"] == config.station_name
+                assert "forecast_engine" in snap
+            else:
+                assert snap["forecast_eligible"] is False
+                assert "pm25_forecast_coverage_status" in snap
+                assert "available_pollutants" in snap
+
+    def test_non_eligible_station_returns_structured_response(self) -> None:
+        for station_id, expected_status, expected_pollutants in NON_ELIGIBLE_STATIONS:
+            snap = get_station_snapshot(station_id)
+            assert snap["station_id"] == station_id
+            assert snap["forecast_eligible"] is False
+            assert snap["pm25_forecast_coverage_status"] == expected_status
+            assert snap["available_pollutants"] == expected_pollutants
 
 
 class TestListStationSnapshots:
@@ -106,6 +131,108 @@ class TestGetStationEvaluation:
     def test_unknown_station(self) -> None:
         with pytest.raises(UnknownStationError):
             get_station_evaluation("nonexistent")
+
+
+class TestNonEligibleStationServices:
+    def test_confidence_for_non_eligible(self) -> None:
+        from backend.app.services.confidence_service import get_forecast_confidence
+        for station_id, status, _ in NON_ELIGIBLE_STATIONS:
+            result = get_forecast_confidence(station_id)
+            assert result["station_id"] == station_id
+            assert result["forecast_eligible"] is False
+            assert result["confidence_level"] == "Unavailable"
+            assert result["pm25_forecast_coverage_status"] == status
+
+    def test_evidence_for_non_eligible(self) -> None:
+        from backend.app.services.forecast_evidence_service import get_forecast_evidence
+        for station_id, status, pollutants in NON_ELIGIBLE_STATIONS:
+            result = get_forecast_evidence(station_id)
+            assert result["station_id"] == station_id
+            assert result["forecast_eligible"] is False
+            assert result["forecast_engine"] == "unavailable"
+            assert result["pm25_forecast_coverage_status"] == status
+            assert result["available_pollutants"] == pollutants
+
+    def test_advisory_for_non_eligible(self) -> None:
+        from backend.app.services.citizen_advisory_service import get_citizen_advisory
+        for station_id, status, _ in NON_ELIGIBLE_STATIONS:
+            result = get_citizen_advisory(station_id)
+            assert result["station_id"] == station_id
+            assert result["forecast_eligible"] is False
+            assert result["pm25_forecast_coverage_status"] == status
+
+
+class TestComputeStationCapabilityClassification:
+    def test_complete_classification(self) -> None:
+        from pipeline.compute_station_capability import (
+            compute_available_pollutants,
+            compute_pm25_coverage_status,
+        )
+        project_root = None
+        try:
+            from backend.app.config import get_project_root
+            project_root = get_project_root()
+        except ImportError:
+            import os
+            project_root = Path(__file__).resolve().parents[1]
+        from pathlib import Path
+
+        quality_path = project_root / "data" / "processed" / "real" / "cpcb_hebbal" / "cpcb_hebbal_quality_summary.json"
+        import json
+        with quality_path.open("r", encoding="utf-8") as f:
+            quality = json.load(f)
+        assert compute_pm25_coverage_status(quality) == "complete"
+        pollutants = compute_available_pollutants(quality)
+        assert "pm25" in pollutants
+        assert "pm10" in pollutants
+        assert "no2" in pollutants
+
+    def test_insufficient_pm25_history(self) -> None:
+        from pipeline.compute_station_capability import (
+            compute_available_pollutants,
+            compute_pm25_coverage_status,
+        )
+        try:
+            from backend.app.config import get_project_root
+            project_root = get_project_root()
+        except ImportError:
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parents[1]
+        from pathlib import Path
+
+        quality_path = project_root / "data" / "processed" / "real" / "cpcb_kadabesanahalli" / "cpcb_kadabesanahalli_quality_summary.json"
+        import json
+        with quality_path.open("r", encoding="utf-8") as f:
+            quality = json.load(f)
+        assert compute_pm25_coverage_status(quality) == "insufficient_pm25_history"
+        pollutants = compute_available_pollutants(quality)
+        assert "pm25" not in pollutants
+        assert "pm10" in pollutants
+        assert "no2" in pollutants
+
+    def test_pm25_sensor_unavailable(self) -> None:
+        from pipeline.compute_station_capability import (
+            compute_available_pollutants,
+            compute_pm25_coverage_status,
+        )
+        try:
+            from backend.app.config import get_project_root
+            project_root = get_project_root()
+        except ImportError:
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parents[1]
+        from pathlib import Path
+
+        for sid in ("cpcb_city_railway", "cpcb_saneguravahalli"):
+            quality_path = project_root / "data" / "processed" / "real" / sid / f"{sid}_quality_summary.json"
+            import json
+            with quality_path.open("r", encoding="utf-8") as f:
+                quality = json.load(f)
+            assert compute_pm25_coverage_status(quality) == "pm25_sensor_unavailable"
+            pollutants = compute_available_pollutants(quality)
+            assert "pm25" not in pollutants
+            assert "pm10" in pollutants
+            assert "no2" in pollutants
 
 
 class TestGetLightgbmExplanationContext:

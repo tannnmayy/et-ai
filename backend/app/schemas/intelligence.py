@@ -22,6 +22,10 @@ class StationSnapshot(BaseModel):
     quality_note: str
     evaluation_metrics: dict
     artifact_status: dict
+    forecast_eligible: bool = True
+    pm25_forecast_coverage_status: str | None = None
+    available_pollutants: list[str] = []
+    note: str | None = None
 
 
 class QualitySnapshot(BaseModel):
@@ -77,6 +81,9 @@ class ForecastEvidenceResponse(BaseModel):
     caveats: list[str]
     data_quality_classification: str
     data_quality_note: str
+    forecast_eligible: bool = True
+    pm25_forecast_coverage_status: str | None = None
+    available_pollutants: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +105,9 @@ class ForecastConfidenceResponse(BaseModel):
     quality_classification: str
     reasons: list[str]
     blockers: list[str]
+    forecast_eligible: bool = True
+    pm25_forecast_coverage_status: str | None = None
+    available_pollutants: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +162,9 @@ class CitizenAdvisoryResponse(BaseModel):
     caution_note: str
     data_quality_note: str
     medical_disclaimer: str
+    forecast_eligible: bool = True
+    pm25_forecast_coverage_status: str | None = None
+    available_pollutants: list[str] = []
 
 
 # ---------------------------------------------------------------------------

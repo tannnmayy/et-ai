@@ -158,12 +158,44 @@ def _build_caveats(quality: dict, eval_data: dict) -> list[str]:
     return caveats
 
 
+def _non_eligible_evidence_response(
+    station_id: str, snapshot: dict, city: str
+) -> dict:
+    status = snapshot.get("pm25_forecast_coverage_status", "unknown")
+    return {
+        "station_id": station_id,
+        "station_name": snapshot.get("station_name", station_id),
+        "city": snapshot.get("city", city),
+        "forecast_engine": "unavailable",
+        "explanation_method": "unavailable",
+        "prediction_origin": "",
+        "forecast_for": "",
+        "predicted_pm25": 0,
+        "latest_observed_pm25": None,
+        "latest_observed_at": None,
+        "expected_change_pm25": None,
+        "expected_change_direction": "unavailable",
+        "risk_category": "Unknown",
+        "model_validation_summary": "Station is not forecast-eligible.",
+        "evidence_items": [],
+        "caveats": [f"Station is not forecast-eligible: {status}."],
+        "data_quality_classification": "Not eligible",
+        "data_quality_note": status,
+        "forecast_eligible": False,
+        "pm25_forecast_coverage_status": status,
+        "available_pollutants": snapshot.get("available_pollutants", []),
+    }
+
+
 def get_forecast_evidence(station_id: str, city: str = "bengaluru") -> dict:
     """Generate structured evidence for a station's forecast."""
     try:
         snapshot = get_station_snapshot(station_id, city)
     except (UnsupportedCityError, UnknownStationError, MissingArtifactError, NoValidForecastError):
         raise
+
+    if not snapshot.get("forecast_eligible", True):
+        return _non_eligible_evidence_response(station_id, snapshot, city)
 
     eval_data = get_station_evaluation(station_id)
     quality = get_station_quality(station_id)
@@ -208,4 +240,7 @@ def get_forecast_evidence(station_id: str, city: str = "bengaluru") -> dict:
         "caveats": caveats,
         "data_quality_classification": quality["classification"],
         "data_quality_note": quality["recommendation"],
+        "forecast_eligible": True,
+        "pm25_forecast_coverage_status": None,
+        "available_pollutants": [],
     }

@@ -67,6 +67,9 @@ class StationStatusItem(BaseModel):
     features_available: bool
     model_available: bool
     quality_classification: str | None = None
+    forecast_eligible: bool = True
+    pm25_forecast_coverage_status: str | None = None
+    available_pollutants: list[str] = []
 
 
 class StationStatusResponse(BaseModel):

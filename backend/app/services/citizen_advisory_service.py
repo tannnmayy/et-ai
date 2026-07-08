@@ -143,6 +143,28 @@ def get_citizen_advisory(
     except (UnsupportedCityError, UnknownStationError, MissingArtifactError, NoValidForecastError):
         raise
 
+    if not snapshot.get("forecast_eligible", True):
+        return {
+            "station_id": station_id,
+            "station_name": snapshot.get("station_name", station_id),
+            "city": snapshot.get("city", city),
+            "profile": profile,
+            "language_requested": language,
+            "language_served": "en",
+            "translation_fallback": False,
+            "forecast_risk_category": "Unknown",
+            "predicted_pm25": 0,
+            "confidence_level": "Unavailable",
+            "headline": "Forecast not available for this station.",
+            "recommendations": [],
+            "caution_note": "",
+            "data_quality_note": f"PM2.5 forecast unavailable: {snapshot.get('pm25_forecast_coverage_status', '')}",
+            "medical_disclaimer": MEDICAL_DISCLAIMER,
+            "forecast_eligible": False,
+            "pm25_forecast_coverage_status": snapshot.get("pm25_forecast_coverage_status"),
+            "available_pollutants": snapshot.get("available_pollutants", []),
+        }
+
     predicted_pm25 = snapshot["predicted_pm25"]
     risk_category = snapshot["risk_category"]
     conf_data = get_forecast_confidence(station_id, city=city)
@@ -182,4 +204,7 @@ def get_citizen_advisory(
         "caution_note": advisory["caution_note"],
         "data_quality_note": data_quality_note,
         "medical_disclaimer": MEDICAL_DISCLAIMER,
+        "forecast_eligible": True,
+        "pm25_forecast_coverage_status": None,
+        "available_pollutants": [],
     }

@@ -14,6 +14,9 @@ class StationInfo(BaseModel):
     geospatial_available: bool = Field(description="Whether geospatial context exists for this station")
     data_status: str = Field(description="Data status: active, pending_activation, or deferred")
     limitations: list[str] = Field(default_factory=list, description="Limitations for this station")
+    forecast_eligible: bool = Field(default=True, description="Whether this station is expected to serve a 24-hour PM2.5 forecast")
+    pm25_forecast_coverage_status: str | None = Field(default=None, description="PM2.5 forecast coverage status: complete, insufficient_pm25_history, or pm25_sensor_unavailable")
+    available_pollutants: list[str] = Field(default_factory=list, description="Pollutants with hourly missingness at or below 50%")
 
 
 class StationListResponse(BaseModel):
