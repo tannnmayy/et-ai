@@ -289,6 +289,12 @@ def _predict_station_forecast(
         with station_cols_path.open("r", encoding="utf-8") as f:
             all_station_cols = json.load(f)
 
+    interaction_cols_path = paths.artifacts_dir / "station_interaction_columns.json"
+    all_interaction_cols: list[str] = []
+    if interaction_cols_path.exists():
+        with interaction_cols_path.open("r", encoding="utf-8") as f:
+            all_interaction_cols = json.load(f)
+
     encoded_row = latest_row.copy()
     for col in all_station_cols:
         encoded_row[col] = 0
@@ -296,7 +302,11 @@ def _predict_station_forecast(
     if target_col in all_station_cols:
         encoded_row[target_col] = 1
 
-    all_cols = list(feature_columns) + all_station_cols
+    if all_interaction_cols:
+        from ml.feature_engineering.station_interactions import add_station_interaction_features
+        encoded_row, _ = add_station_interaction_features(encoded_row, all_station_cols)
+
+    all_cols = list(feature_columns) + all_station_cols + all_interaction_cols
     prediction = max(0.0, float(model.predict(encoded_row[all_cols])[0]))
 
     origin = pd.Timestamp(latest_row["timestamp"].iloc[0])

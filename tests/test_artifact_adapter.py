@@ -301,7 +301,7 @@ class TestGetStationGeospatialContextWithReadings:
 
 class TestGetLightgbmExplanationContext:
     def test_persistence_returns_none(self) -> None:
-        result = get_lightgbm_explanation_context("cpcb_hebbal")
+        result = get_lightgbm_explanation_context("cpcb_silkboard")
         assert result is None
 
     def test_lightgbm_returns_context(self) -> None:

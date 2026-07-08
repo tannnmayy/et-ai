@@ -8,8 +8,8 @@ from backend.app.services.artifact_adapter import UnknownStationError, Unsupport
 
 class TestGetForecastEvidence:
     def test_persistence_station(self) -> None:
-        result = get_forecast_evidence("cpcb_hebbal")
-        assert result["station_id"] == "cpcb_hebbal"
+        result = get_forecast_evidence("cpcb_silkboard")
+        assert result["station_id"] == "cpcb_silkboard"
         assert result["forecast_engine"] == "persistence"
         assert result["explanation_method"] == "exact_24h_reference"
         assert result["predicted_pm25"] >= 0
@@ -35,7 +35,7 @@ class TestGetForecastEvidence:
         assert "Selected engine" in result["model_validation_summary"]
 
     def test_persistence_wording(self) -> None:
-        result = get_forecast_evidence("cpcb_hebbal")
+        result = get_forecast_evidence("cpcb_silkboard")
         for item in result["evidence_items"]:
             if item["factor"] == "forecast_engine":
                 assert "Persistence was selected" in item["description"]

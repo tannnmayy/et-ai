@@ -106,9 +106,19 @@ def _evaluate_single_station(paths, test, model, feature_columns, quality, datas
 
 def _evaluate_multistation(paths, features, train, validation, test, model, feature_columns, quality):
     from ml.train_lightgbm import encode_station_id
+    from ml.feature_engineering.station_interactions import add_station_interaction_features
 
     test_encoded, station_cols = encode_station_id(test.copy())
-    all_feature_cols = list(feature_columns) + station_cols
+
+    interaction_cols: list[str] = []
+    interaction_cols_path = paths.artifacts_dir / "station_interaction_columns.json"
+    if interaction_cols_path.exists():
+        with interaction_cols_path.open("r", encoding="utf-8") as f:
+            interaction_cols = json.load(f)
+        if interaction_cols:
+            test_encoded, _ = add_station_interaction_features(test_encoded, station_cols)
+
+    all_feature_cols = list(feature_columns) + station_cols + interaction_cols
 
     actual = test_encoded[TARGET_COLUMN].astype(float)
     persistence_predictions = test_encoded["pm25_lag_24h"].astype(float)
