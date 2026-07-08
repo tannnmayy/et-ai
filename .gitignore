@@ -8,8 +8,11 @@ __pycache__/
 # OSM raw data (large downloads)
 data/raw/geospatial/
 
-# Geospatial processed artifacts (reproducible)
-data/processed/geospatial/
+# Geospatial processed artifacts — keep transient files ignored
+data/processed/geospatial/*
+# But these are REQUIRED for the app to serve geospatial context
+!data/processed/geospatial/station_geospatial_context.parquet
+!data/processed/geospatial/geospatial_build_metadata.json
 
 # Geospatial reports (reproducible)
 data/reports/geospatial/
@@ -17,8 +20,15 @@ data/reports/geospatial/
 # Cache files
 backend/cache/
 
-# ML artifacts
-ml/artifacts/
+# ML artifacts — keep training diagnostics ignored
+ml/artifacts/*
+!ml/artifacts/multistation/
+ml/artifacts/multistation/*
+# But this file is REQUIRED for the multistation forecast model
+!ml/artifacts/multistation/station_interaction_columns.json
 
 # Runtime caches
 backend/cache/
+
+# secrets of the google earth services api json 
+backend/secrets/

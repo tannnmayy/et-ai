@@ -1,0 +1,70 @@
+{
+  "artifact": "station_geospatial_context",
+  "build_status": "full",
+  "feature_builder_version": "1.0.0",
+  "h3_resolution": 9,
+  "h3_library_version": "4.5.0",
+  "stations_count": 12,
+  "registry_station_count": 12,
+  "geospatial_station_count": 12,
+  "station_ids_included": [
+    "cpcb_bapujinagar",
+    "cpcb_btmlayout",
+    "cpcb_city_railway",
+    "cpcb_hebbal",
+    "cpcb_hombegowda",
+    "cpcb_jayanagar5",
+    "cpcb_kadabesanahalli",
+    "cpcb_kasturinagar",
+    "cpcb_peenya",
+    "cpcb_rvce_mailasandra",
+    "cpcb_saneguravahalli",
+    "cpcb_silkboard"
+  ],
+  "osm_snapshot_timestamp": "2026-07-07T00:42:11.038471+00:00",
+  "context_radius_meters": 1000.0,
+  "road_context_radius_meters": 500.0,
+  "investigation_context_radius_meters": 1500.0,
+  "generated_at": "2026-07-08T04:05:15.565719+00:00",
+  "bounding_box": {
+    "north": 13.15,
+    "south": 12.85,
+    "east": 77.75,
+    "west": 77.45
+  },
+  "metric_crs": "EPSG:32643",
+  "layer_status": {
+    "roads": {
+      "exists": true,
+      "valid": true,
+      "reason": "ok (483229 features)"
+    },
+    "landuse": {
+      "exists": true,
+      "valid": true,
+      "reason": "ok (17205 features)"
+    },
+    "green_spaces": {
+      "exists": true,
+      "valid": true,
+      "reason": "ok (17902 features)"
+    },
+    "construction": {
+      "exists": true,
+      "valid": true,
+      "reason": "ok (4004 features)"
+    },
+    "industrial_facility": {
+      "exists": true,
+      "valid": true,
+      "reason": "ok (1420 features)"
+    },
+    "_all_ok": true,
+    "_missing": [],
+    "_empty": []
+  },
+  "disclaimers": {
+    "osm_completeness": "OpenStreetMap data is community-maintained and may be incomplete, outdated, or inconsistently tagged. Mapped features are contextual evidence only and do not represent verified registered emission sources.",
+    "non_causality": "Spatial features are contextual evidence and investigation signals only. They do not prove that a specific industry, construction site, road, facility, or mapped object caused pollution at this station."
+  }
+}

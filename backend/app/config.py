@@ -363,6 +363,23 @@ TRAVEL_READINESS_MATRIX: dict[tuple[str, str], str] = {
 WEATHER_SUMMARY_PERIODS: list[str] = ["next_24h", "tomorrow"]
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# FIRMS (NASA fire detection) — Milestone 7
+# ---------------------------------------------------------------------------
+
+FIRMS_CACHE_DIR: str = "data/raw/firms"
+FIRMS_CACHE_TTL_MINUTES: int = 30
+FIRMS_STALE_CACHE_MAX_HOURS: int = 24
+
+# ---------------------------------------------------------------------------
+# Sentinel-5P (TROPOMI NO2 column density) — Milestone 7
+# ---------------------------------------------------------------------------
+
+SENTINEL5P_CACHE_DIR: str = "data/raw/sentinel5p"
+SENTINEL5P_CACHE_TTL_HOURS: int = 24
+SENTINEL5P_STALE_CACHE_MAX_HOURS: int = 48
+
+# ---------------------------------------------------------------------------
 # Geospatial evidence configuration
 # ---------------------------------------------------------------------------
 

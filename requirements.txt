@@ -17,3 +17,6 @@ osmnx==2.1.0
 geopandas==1.1.4
 shapely==2.1.2
 pyproj==3.7.2
+
+# Milestone 7 — Sentinel-5P TROPOMI NO2 via Google Earth Engine
+earthengine-api==1.5.6

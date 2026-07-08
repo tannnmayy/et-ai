@@ -118,3 +118,48 @@ class CityCoverageSummary(BaseModel):
     h3_resolution: int = Field(description="H3 resolution")
     build_status: str | None = Field(None, description="Build status: 'full', 'partial', or 'unknown'")
     disclaimers: list[str] = Field(description="Applicable disclaimers")
+
+
+class HexFireData(BaseModel):
+    h3_cell: str = Field(description="H3 cell ID (resolution 9)")
+    detection_count: int = Field(description="Number of fire detections in the last 24h")
+    total_frp_mw: float = Field(description="Sum of Fire Radiative Power in megawatts")
+    max_confidence: str | None = Field(
+        None, description="Highest confidence level: low, nominal, or high"
+    )
+    window_end_utc: str = Field(description="End of the 24h rolling aggregation window (ISO UTC)")
+
+
+class HexNO2Data(BaseModel):
+    h3_cell: str = Field(description="H3 cell ID (resolution 9)")
+    no2_column_density_mean: float | None = Field(
+        None, description="Mean tropospheric NO2 column density (mol/m²)"
+    )
+
+
+class FireDetectionResponse(BaseModel):
+    hexagons: list[HexFireData] = Field(description="Per-hexagon fire detection aggregates")
+    city: str = Field(description="City name")
+    source: str = Field(description="FIRMS satellite source identifier")
+    source_status: str = Field(
+        description="Data freshness status: live_provider, stale_cache_fallback, or unavailable"
+    )
+    cache_used: bool = Field(description="Whether cached data was served")
+    freshness: str = Field(description="Freshness: fresh, stale, or unavailable")
+    age_minutes: float | None = Field(None, description="Age of data in minutes")
+    retrieved_at: str = Field(description="ISO UTC timestamp of data retrieval")
+    warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
+
+
+class NO2ColumnResponse(BaseModel):
+    hexagons: list[HexNO2Data] = Field(description="Per-hexagon NO2 column density values")
+    city: str = Field(description="City name")
+    collection: str = Field(description="GEE image collection identifier")
+    source_status: str = Field(
+        description="Data freshness status: live_provider, stale_cache_fallback, or unavailable"
+    )
+    cache_used: bool = Field(description="Whether cached data was served")
+    freshness: str = Field(description="Freshness: fresh, stale, or unavailable")
+    age_minutes: float | None = Field(None, description="Age of data in minutes")
+    retrieved_at: str = Field(description="ISO UTC timestamp of data retrieval")
+    warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
