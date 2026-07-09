@@ -7,6 +7,17 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_SUMMARIZER_SYSTEM_PROMPT = (
+    "You are an air quality assistant. "
+    "Summarize the provided data accurately. "
+    "Do not add information not present in the data."
+)
+
+_PLANNING_SYSTEM_PROMPT = (
+    "You are a tool-use planner for an air quality system. "
+    "Respond only with the exact JSON format requested — no summarization, no prose."
+)
+
 
 class LLMProvider:
     def __init__(self) -> None:
@@ -62,7 +73,7 @@ class LLMProvider:
         )
 
         try:
-            raw = self._call_llm(prompt, {})
+            raw = self._call_llm(prompt, {}, system_prompt=_PLANNING_SYSTEM_PROMPT)
             if raw is None:
                 return None
             cleaned = raw.strip()
@@ -96,28 +107,29 @@ class LLMProvider:
             logger.warning("plan_next_step: unexpected error: %s", exc)
             return None
 
-    def _call_llm(self, prompt: str, structured_data: dict[str, Any]) -> str | None:
+    def _call_llm(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         provider = self.provider.lower().strip()
 
         if provider == "openai":
-            return self._call_openai(prompt, structured_data)
+            return self._call_openai(prompt, structured_data, system_prompt=system_prompt)
         elif provider == "anthropic":
-            return self._call_anthropic(prompt, structured_data)
+            return self._call_anthropic(prompt, structured_data, system_prompt=system_prompt)
         elif provider == "google":
-            return self._call_google(prompt, structured_data)
+            return self._call_google(prompt, structured_data, system_prompt=system_prompt)
 
         logger.warning("Unsupported LLM provider: %s", self.provider)
         return None
 
-    def _call_openai(self, prompt: str, structured_data: dict[str, Any]) -> str | None:
+    def _call_openai(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         try:
             import openai
             client = openai.OpenAI(api_key=self.api_key)
             model = self.model or "gpt-4o-mini"
+            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
             resp = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "You are an air quality assistant. Summarize the provided data accurately. Do not add information not present in the data."},
+                    {"role": "system", "content": system_msg},
                     {"role": "user", "content": f"{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}"},
                 ],
                 temperature=0.3,
@@ -131,15 +143,16 @@ class LLMProvider:
             logger.warning("OpenAI call failed: %s", exc)
             return None
 
-    def _call_anthropic(self, prompt: str, structured_data: dict[str, Any]) -> str | None:
+    def _call_anthropic(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=self.api_key)
             model = self.model or "claude-3-haiku-20240307"
+            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
             resp = client.messages.create(
                 model=model,
                 max_tokens=500,
-                system="You are an air quality assistant. Summarize the provided data accurately. Do not add information not present in the data.",
+                system=system_msg,
                 messages=[
                     {"role": "user", "content": f"{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}"},
                 ],
@@ -152,13 +165,14 @@ class LLMProvider:
             logger.warning("Anthropic call failed: %s", exc)
             return None
 
-    def _call_google(self, prompt: str, structured_data: dict[str, Any]) -> str | None:
+    def _call_google(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.api_key)
             model = genai.GenerativeModel(self.model or "gemini-2.0-flash-lite")
+            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
             resp = model.generate_content(
-                f"You are an air quality assistant. Summarize the provided data accurately. Do not add information not present in the data.\n\n{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}",
+                f"{system_msg}\n\n{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}",
                 generation_config={"temperature": 0.3, "max_output_tokens": 500},
             )
             return resp.text

@@ -188,11 +188,15 @@ def tool_get_attribution(city: str = "bengaluru", h3_cell: str | None = None, la
     import h3 as _h3
     try:
         if h3_cell:
-            return get_single_hexagon_attribution(h3_cell, city=city, include_fusion=include_fusion)
-        if lat is not None and lon is not None:
+            result = get_single_hexagon_attribution(h3_cell, city=city, include_fusion=include_fusion)
+        elif lat is not None and lon is not None:
             cell = _h3.latlng_to_cell(lat, lon, 9)
-            return get_single_hexagon_attribution(cell, city=city, include_fusion=include_fusion)
-        return get_city_grid_attribution(city=city, include_fusion=include_fusion)
+            result = get_single_hexagon_attribution(cell, city=city, include_fusion=include_fusion)
+        else:
+            result = get_city_grid_attribution(city=city, include_fusion=include_fusion)
+        if "error" in result:
+            return {"_tool_error": result["error"], "_error_type": "ServiceError"}
+        return result
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 

@@ -143,6 +143,31 @@ def _make_fake_tool_registry() -> dict:
 
 
 class TestPlanNextStep:
+    def test_plan_next_step_uses_planning_system_prompt(self) -> None:
+        from backend.app.agents.llm_provider import _SUMMARIZER_SYSTEM_PROMPT
+        llm = LLMProvider()
+        call_records: list[dict] = []
+
+        def mock_call_llm(prompt, structured_data, system_prompt=None):
+            call_records.append({"prompt": prompt, "system_prompt": system_prompt})
+            return '{"action": "final_answer", "text": "Paris."}'
+
+        with patch.object(llm, "_available", True):
+            with patch.object(llm, "_call_llm", side_effect=mock_call_llm):
+                result = llm.plan_next_step(
+                    query="What is the capital of France?",
+                    tool_schemas={"tool_get_city_briefing": {"description": "Get city briefing", "parameters": {}}},
+                    tool_results_so_far={},
+                    step_number=1,
+                    max_steps=5,
+                )
+
+        assert result == {"action": "final_answer", "text": "Paris."}
+        assert len(call_records) == 1
+        sp = call_records[0]["system_prompt"]
+        assert sp is not None
+        assert sp != _SUMMARIZER_SYSTEM_PROMPT
+        assert "tool" in sp.lower()
     def test_dynamic_planning_agent_executes_sequence(self) -> None:
         mock = MockLLM([
             '{"action": "call_tool", "tool": "tool_get_forecast_evidence", "arguments": {"station_id": "cpcb_peenya"}}',
