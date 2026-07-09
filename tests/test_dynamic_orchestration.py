@@ -319,3 +319,55 @@ class TestPlanNextStep:
                 )
         assert result["intent"] == "dynamic_planning"
         assert result["answer"] is not None
+
+
+# =========================================================================
+# Groq provider tests
+# =========================================================================
+
+
+class TestGroqProvider:
+    def test_groq_uses_correct_base_url_and_model_fallback(self) -> None:
+        import openai as openai_module
+        constructor_kwargs = {}
+
+        def mock_constructor(api_key=None, base_url=None):
+            constructor_kwargs["api_key"] = api_key
+            constructor_kwargs["base_url"] = base_url
+            raise ImportError("stop before real call")
+
+        with patch.object(openai_module, "OpenAI", side_effect=mock_constructor):
+            llm = LLMProvider()
+            with patch.object(llm, "_available", True):
+                llm.model = ""
+                result = llm._call_groq("test prompt", {}, system_prompt=None)
+
+        assert result is None  # ImportError re-raised as None
+        assert constructor_kwargs["base_url"] == "https://api.groq.com/openai/v1"
+        assert constructor_kwargs["api_key"] is not None
+
+    def test_groq_model_fallback_when_empty(self) -> None:
+        import openai as openai_module
+        create_kwargs = {}
+
+        class FakeResponse:
+            class Choice:
+                def __init__(self):
+                    self.message = type("Msg", (), {"content": "ok"})()
+            choices = [Choice()]
+
+        def fake_create(*args, **kwargs):
+            create_kwargs.update(kwargs)
+            return FakeResponse()
+
+        class FakeClient:
+            chat = type("Chat", (), {"completions": type("Comp", (), {"create": fake_create})})()
+
+        with patch.object(openai_module, "OpenAI", return_value=FakeClient()):
+            llm = LLMProvider()
+            with patch.object(llm, "_available", True):
+                llm.model = ""
+                result = llm._call_groq("test", {})
+
+        assert result == "ok"
+        assert create_kwargs.get("model") == "openai/gpt-oss-120b"

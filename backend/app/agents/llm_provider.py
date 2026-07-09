@@ -22,9 +22,8 @@ _PLANNING_SYSTEM_PROMPT = (
 class LLMProvider:
     def __init__(self) -> None:
         self.api_key: str | None = os.getenv("AQI_SENTINEL_LLM_API_KEY")
-        self.provider: str = os.getenv("AQI_SENTINEL_LLM_PROVIDER", "")
         self.model: str = os.getenv("AQI_SENTINEL_LLM_MODEL", "")
-        self._available = bool(self.api_key and self.provider and self.model)
+        self._available = bool(self.api_key)
 
     @property
     def is_available(self) -> bool:
@@ -108,23 +107,16 @@ class LLMProvider:
             return None
 
     def _call_llm(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
-        provider = self.provider.lower().strip()
+        return self._call_groq(prompt, structured_data, system_prompt=system_prompt)
 
-        if provider == "openai":
-            return self._call_openai(prompt, structured_data, system_prompt=system_prompt)
-        elif provider == "anthropic":
-            return self._call_anthropic(prompt, structured_data, system_prompt=system_prompt)
-        elif provider == "google":
-            return self._call_google(prompt, structured_data, system_prompt=system_prompt)
-
-        logger.warning("Unsupported LLM provider: %s", self.provider)
-        return None
-
-    def _call_openai(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
+    def _call_groq(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         try:
             import openai
-            client = openai.OpenAI(api_key=self.api_key)
-            model = self.model or "gpt-4o-mini"
+            client = openai.OpenAI(
+                api_key=self.api_key,
+                base_url="https://api.groq.com/openai/v1",
+            )
+            model = self.model or "openai/gpt-oss-120b"
             system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
             resp = client.chat.completions.create(
                 model=model,
@@ -140,47 +132,7 @@ class LLMProvider:
             logger.warning("openai package not installed")
             return None
         except Exception as exc:
-            logger.warning("OpenAI call failed: %s", exc)
-            return None
-
-    def _call_anthropic(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=self.api_key)
-            model = self.model or "claude-3-haiku-20240307"
-            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
-            resp = client.messages.create(
-                model=model,
-                max_tokens=500,
-                system=system_msg,
-                messages=[
-                    {"role": "user", "content": f"{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}"},
-                ],
-            )
-            return resp.content[0].text if resp.content else None
-        except ImportError:
-            logger.warning("anthropic package not installed")
-            return None
-        except Exception as exc:
-            logger.warning("Anthropic call failed: %s", exc)
-            return None
-
-    def _call_google(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel(self.model or "gemini-2.0-flash-lite")
-            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
-            resp = model.generate_content(
-                f"{system_msg}\n\n{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}",
-                generation_config={"temperature": 0.3, "max_output_tokens": 500},
-            )
-            return resp.text
-        except ImportError:
-            logger.warning("google-generativeai package not installed")
-            return None
-        except Exception as exc:
-            logger.warning("Google call failed: %s", exc)
+            logger.warning("Groq call failed: %s", exc)
             return None
 
 

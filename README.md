@@ -475,7 +475,7 @@ All agents call existing Milestone 3A services directly (not via HTTP):
 - **Deterministic mode** (default): No LLM call. Uses `fallback_renderer.py` for natural-language responses from structured data.
 - **Hosted LLM mode** (optional): Reads config from environment variables only. No keys are hardcoded.
   - `AQI_SENTINEL_LLM_API_KEY` — API key
-  - `AQI_SENTINEL_LLM_PROVIDER` — `openai`, `anthropic`, or `google`
+  - `AQI_SENTINEL_LLM_PROVIDER` — `groq` (only supported provider)
   - `AQI_SENTINEL_LLM_MODEL` — model name
 
 If no key is present, deterministic mode is used automatically. If an LLM call fails, the system falls back to deterministic rendering.
@@ -611,16 +611,16 @@ Set environment variables (do not commit secrets):
 
 ```powershell
 $env:AQI_SENTINEL_LLM_API_KEY = "your-api-key"
-$env:AQI_SENTINEL_LLM_PROVIDER = "openai"     # openai, anthropic, or google
-$env:AQI_SENTINEL_LLM_MODEL = "gpt-4o-mini"
+$env:AQI_SENTINEL_LLM_PROVIDER = "groq"     # groq is the only supported provider
+$env:AQI_SENTINEL_LLM_MODEL = "openai/gpt-oss-120b"
 ```
 
 Or add to a `.env` file (never committed):
 
 ```text
 AQI_SENTINEL_LLM_API_KEY=your-api-key
-AQI_SENTINEL_LLM_PROVIDER=openai
-AQI_SENTINEL_LLM_MODEL=gpt-4o-mini
+AQI_SENTINEL_LLM_PROVIDER=groq
+AQI_SENTINEL_LLM_MODEL=openai/gpt-oss-120b
 ```
 
 If no key is present, the system operates in fully offline deterministic mode.
