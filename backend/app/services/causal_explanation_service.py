@@ -164,7 +164,10 @@ def generate_causal_explanation(
             f"Focus on the top sources ({top_source_label} at {top_source_pct*100:.0f}%) and the wind conditions. "
             f"Keep it to 3-5 sentences. Do not add information not present in the data."
         )
-        explanation = llm.summarize(prompt, {"source_attribution": source_attr})
+        explanation = llm.summarize(
+            prompt, {"source_attribution": source_attr},
+            system_prompt=_CAUSAL_EXPLANATION_SYSTEM_PROMPT,
+        )
         if explanation:
             return {
                 "explanation": explanation,

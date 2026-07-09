@@ -38,11 +38,11 @@ class LLMProvider:
     def is_available(self) -> bool:
         return self._available
 
-    def summarize(self, prompt: str, structured_data: dict[str, Any]) -> str | None:
+    def summarize(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         if not self._available:
             return None
         try:
-            return self._call_llm(prompt, structured_data)
+            return self._call_llm(prompt, structured_data, system_prompt=system_prompt)
         except Exception as exc:
             logger.warning("LLM call failed: %s", exc)
             return None

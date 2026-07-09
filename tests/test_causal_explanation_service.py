@@ -96,6 +96,34 @@ class TestGenerateCausalExplanation:
             assert "traffic" in result["explanation"].lower()
             mock_llm.summarize.assert_called_once()
 
+    def test_llm_uses_causal_explanation_system_prompt(self) -> None:
+        from backend.app.agents.llm_provider import (
+            _CAUSAL_EXPLANATION_SYSTEM_PROMPT,
+            _SUMMARIZER_SYSTEM_PROMPT,
+            _PLANNING_SYSTEM_PROMPT,
+        )
+
+        call_records: list[dict] = []
+
+        def mock_call_llm(prompt, structured_data, system_prompt=None):
+            call_records.append({"system_prompt": system_prompt})
+            return "Mocked causal explanation."
+
+        with patch(
+            "backend.app.services.causal_explanation_service.get_llm_provider"
+        ) as mock_get:
+            llm = mock_get.return_value
+            llm.is_available = True
+            with patch.object(llm, "_call_llm", side_effect=mock_call_llm):
+                generate_causal_explanation(self._SAMPLE_ATTRIBUTION, language="en")
+
+        assert len(call_records) == 1
+        sp = call_records[0]["system_prompt"]
+        assert sp is not None
+        assert sp == _CAUSAL_EXPLANATION_SYSTEM_PROMPT
+        assert sp != _SUMMARIZER_SYSTEM_PROMPT
+        assert sp != _PLANNING_SYSTEM_PROMPT
+
     def test_llm_fallback_on_empty_response(self) -> None:
         with patch(
             "backend.app.services.causal_explanation_service.get_llm_provider"
