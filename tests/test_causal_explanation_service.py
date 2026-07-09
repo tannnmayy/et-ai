@@ -98,10 +98,14 @@ class TestGenerateCausalExplanation:
 
     def test_llm_uses_causal_explanation_system_prompt(self) -> None:
         from backend.app.agents.llm_provider import (
+            LLMProvider,
             _CAUSAL_EXPLANATION_SYSTEM_PROMPT,
             _SUMMARIZER_SYSTEM_PROMPT,
             _PLANNING_SYSTEM_PROMPT,
         )
+
+        real_llm = LLMProvider()
+        real_llm.api_key = "test-key"
 
         call_records: list[dict] = []
 
@@ -109,17 +113,16 @@ class TestGenerateCausalExplanation:
             call_records.append({"system_prompt": system_prompt})
             return "Mocked causal explanation."
 
-        with patch(
-            "backend.app.services.causal_explanation_service.get_llm_provider"
-        ) as mock_get:
-            llm = mock_get.return_value
-            llm.is_available = True
-            with patch.object(llm, "_call_llm", side_effect=mock_call_llm):
-                generate_causal_explanation(self._SAMPLE_ATTRIBUTION, language="en")
+        with patch.object(real_llm, "_available", True):
+            with patch.object(real_llm, "_call_llm", side_effect=mock_call_llm):
+                with patch(
+                    "backend.app.services.causal_explanation_service.get_llm_provider",
+                    return_value=real_llm,
+                ):
+                    generate_causal_explanation(self._SAMPLE_ATTRIBUTION, language="en")
 
         assert len(call_records) == 1
         sp = call_records[0]["system_prompt"]
-        assert sp is not None
         assert sp == _CAUSAL_EXPLANATION_SYSTEM_PROMPT
         assert sp != _SUMMARIZER_SYSTEM_PROMPT
         assert sp != _PLANNING_SYSTEM_PROMPT
