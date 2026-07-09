@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "retrieved_at": "2026-07-08T23:52:58.521085+00:00",
+  "city": "bengaluru",
+  "source": "VIIRS_NOAA20_NRT",
+  "data": {
+    "hexagons": [],
+    "city": "bengaluru",
+    "source": "VIIRS_NOAA20_NRT",
+    "source_status": "live_provider",
+    "cache_used": false,
+    "freshness": "fresh",
+    "age_minutes": 0.0,
+    "warnings": [],
+    "retrieved_at": "2026-07-08T23:52:58.521085+00:00"
+  }
+}

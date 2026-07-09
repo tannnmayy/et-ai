@@ -8,6 +8,7 @@ from typing import Any
 from backend.app.agents.audit import AuditTrail
 from backend.app.agents.citizen_advisory_agent import run_citizen_advisory_agent
 from backend.app.agents.city_briefing_agent import run_city_briefing_agent
+from backend.app.agents.dynamic_planning_agent import run_dynamic_planning_agent
 from backend.app.agents.enforcement_planning_agent import run_enforcement_planning_agent
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
 from backend.app.agents.llm_provider import get_llm_provider
@@ -26,6 +27,32 @@ from backend.app.config import (
 from backend.app.services.artifact_adapter import UnknownStationError, _validate_station
 
 logger = logging.getLogger(__name__)
+
+
+_TRIGGER_GROUPS: list[tuple[str, list[str]]] = [
+    ("why_explain", ["why", "explain", "evidence", "how is", "forecast", "change"]),
+    ("confidence", ["confidence", "reliable", "trust", "reliability"]),
+    ("advisory", ["advisory", "guidance", "health", "breathe", "should i", "safe"]),
+    ("inspection", ["inspection", "priority", "enforce", "plan", "rank"]),
+    ("spatial_intel", ["spatial intelligence", "intelligence around", "map-ready", "station intelligence"]),
+    ("spatial_context", ["spatial", "geospatial", "road density", "land use", "land-use", "industrial context", "construction near", "facility near", "mapped", "nearest road"]),
+    ("briefing", ["briefing", "summary", "overview", "situation", "status"]),
+    ("travel", ["travel", "go outside", "go out", "bike", "two-wheeler", "two wheeler", "commute", "outing", "ride"]),
+    ("weather", ["weather", "rain", "temperature", "humidity", "windy", "wind speed", "sunny", "storm", "thunder"]),
+    ("neighbourhood", ["compare", "neighbourhood", "neighborhood", "suitability", "where to live", "best area", "candidate"]),
+    ("policy", ["policy", "official source", "official guidance", "cpcb says", "who says", "guidance support", "what does", "show the policy"]),
+]
+
+
+def _is_compound_query(query: str) -> bool:
+    q = query.lower().strip()
+    if not q:
+        return False
+    matched_groups: set[str] = set()
+    for group_name, triggers in _TRIGGER_GROUPS:
+        if any(w in q for w in triggers):
+            matched_groups.add(group_name)
+    return len(matched_groups) >= 2
 
 
 def _detect_intent(
@@ -112,6 +139,7 @@ def _route_intent(intent: Intent) -> str:
         Intent.spatial_context: "spatial_context_agent",
         Intent.spatial_intelligence: "spatial_intelligence_agent",
         Intent.neighbourhood_comparison: "neighbourhood_decision_agent",
+        Intent.dynamic_planning: "dynamic_planning_agent",
     }
     return mapping.get(intent, "unknown")
 
@@ -222,6 +250,12 @@ def run_orchestrator(
     state.intent = intent
     audit.set_intent(intent.value)
 
+    llm = get_llm_provider()
+    if not explicit_intent and llm.is_available and (intent == Intent.unsupported or _is_compound_query(query)):
+        intent = Intent.dynamic_planning
+        state.intent = intent
+        audit.set_intent(intent.value)
+
     if intent == Intent.unsupported:
         state.selected_agent = "none"
         state.response = "I could not determine what you are asking about. Please ask about air quality forecasts, evidence, confidence, inspection priorities, health advisories, city briefings, weather forecasts, or travel readiness."
@@ -252,7 +286,6 @@ def run_orchestrator(
     state.selected_agent = agent_name
     audit.set_agent(agent_name)
 
-    llm = get_llm_provider()
     llm_mode = "deterministic"
     fallback_used = False
 
@@ -272,6 +305,8 @@ def run_orchestrator(
         run_spatial_intelligence_agent(state, audit)
     elif intent == Intent.neighbourhood_comparison:
         run_neighbourhood_decision_agent(state, audit)
+    elif intent == Intent.dynamic_planning:
+        run_dynamic_planning_agent(state, audit)
     elif intent == Intent.weather_forecast or intent == Intent.travel_readiness:
         run_travel_readiness_agent(state, audit)
 
@@ -316,7 +351,7 @@ def run_orchestrator(
             elif intent == Intent.neighbourhood_comparison:
                 state.response = render_neighbourhood_comparison(state.structured_data or {})
 
-    if llm.is_available and not response_warnings:
+    if llm.is_available and not response_warnings and intent != Intent.dynamic_planning:
         llm_response = llm.summarize(
             f"Create a concise natural language response for: '{query}'",
             state.structured_data or {},
@@ -328,6 +363,9 @@ def run_orchestrator(
         else:
             llm_mode = "deterministic"
             state.llm_status = "deterministic"
+    elif intent == Intent.dynamic_planning:
+        llm_mode = state.llm_status
+        fallback_used = state.fallback_used
     else:
         state.llm_status = llm_mode
 
@@ -355,3 +393,10 @@ def _build_response(state: AgentState, audit: AuditTrail) -> dict[str, Any]:
         "llm_mode": state.llm_status,
         "fallback_used": state.fallback_used,
     }
+
+
+
+
+
+
+    

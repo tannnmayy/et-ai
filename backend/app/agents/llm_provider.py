@@ -28,6 +28,74 @@ class LLMProvider:
             logger.warning("LLM call failed: %s", exc)
             return None
 
+    def plan_next_step(
+        self,
+        query: str,
+        tool_schemas: dict[str, dict],
+        tool_results_so_far: dict[str, Any],
+        step_number: int,
+        max_steps: int,
+    ) -> dict[str, Any] | None:
+        if not self._available:
+            return None
+
+        tools_section = "\n".join(
+            f"  - {name}: {schema['description']}\n    Parameters: {json.dumps(schema['parameters'], indent=6)}"
+            for name, schema in tool_schemas.items()
+        )
+
+        results_section = json.dumps(tool_results_so_far, indent=2) if tool_results_so_far else "No tools called yet."
+
+        prompt = (
+            f"You are an air quality research planner. You have access to a set of tools to answer the user's query.\n\n"
+            f"## User Query\n{query}\n\n"
+            f"## Available Tools\n{tools_section}\n\n"
+            f"## Results So Far (step {step_number} of {max_steps})\n{results_section}\n\n"
+            f"## Instructions\n"
+            f"Respond with STRICT JSON ONLY. No prose, no markdown fences, no explanation.\n"
+            f"Choose exactly one of these two response formats:\n"
+            f'  {{"action": "call_tool", "tool": "<tool_name>", "arguments": {{...}}}}\n'
+            f'  {{"action": "final_answer", "text": "<natural language answer>"}}\n\n'
+            f"If you already have enough information to answer the query, use final_answer.\n"
+            f"If you cannot make progress or the step budget is nearly exhausted, use final_answer with whatever you have gathered.\n"
+            f"Do not call the same tool with identical arguments twice."
+        )
+
+        try:
+            raw = self._call_llm(prompt, {})
+            if raw is None:
+                return None
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                lines = cleaned.splitlines()
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                cleaned = "\n".join(lines).strip()
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, dict) or "action" not in parsed:
+                logger.warning("plan_next_step: parsed JSON missing 'action' key: %s", parsed)
+                return None
+            if parsed["action"] == "call_tool":
+                if "tool" not in parsed or "arguments" not in parsed:
+                    logger.warning("plan_next_step: call_tool missing 'tool' or 'arguments': %s", parsed)
+                    return None
+            elif parsed["action"] == "final_answer":
+                if "text" not in parsed:
+                    logger.warning("plan_next_step: final_answer missing 'text': %s", parsed)
+                    return None
+            else:
+                logger.warning("plan_next_step: unknown action '%s'", parsed.get("action"))
+                return None
+            return parsed
+        except json.JSONDecodeError as e:
+            logger.warning("plan_next_step: JSON parse error: %s — raw: %s", e, raw)
+            return None
+        except Exception as exc:
+            logger.warning("plan_next_step: unexpected error: %s", exc)
+            return None
+
     def _call_llm(self, prompt: str, structured_data: dict[str, Any]) -> str | None:
         provider = self.provider.lower().strip()
 

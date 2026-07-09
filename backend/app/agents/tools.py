@@ -179,6 +179,35 @@ def tool_get_location_intelligence(
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 
 
+def tool_get_attribution(city: str = "bengaluru", h3_cell: str | None = None, lat: float | None = None, lon: float | None = None, include_fusion: bool = True) -> dict[str, Any]:
+    """Get source attribution for a hexagon or the whole city grid."""
+    from backend.app.services.attribution_service import (
+        get_city_grid_attribution,
+        get_single_hexagon_attribution,
+    )
+    import h3 as _h3
+    try:
+        if h3_cell:
+            return get_single_hexagon_attribution(h3_cell, city=city, include_fusion=include_fusion)
+        if lat is not None and lon is not None:
+            cell = _h3.latlng_to_cell(lat, lon, 9)
+            return get_single_hexagon_attribution(cell, city=city, include_fusion=include_fusion)
+        return get_city_grid_attribution(city=city, include_fusion=include_fusion)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_enforcement_priority(city: str = "bengaluru", top_k: int = 10) -> dict[str, Any]:
+    from backend.app.services.enforcement_priority_service import compute_enforcement_priorities
+    try:
+        result = compute_enforcement_priorities(city=city, top_k=top_k)
+        if "error" in result:
+            return {"_tool_error": result["error"], "_error_type": "ServiceError"}
+        return result
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
 def tool_compare_neighbourhoods(
     candidate_queries: list[dict[str, Any]],
     workplace_query: dict[str, Any],

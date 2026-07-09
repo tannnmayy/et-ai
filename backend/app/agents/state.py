@@ -17,6 +17,7 @@ class Intent(str, Enum):
     spatial_context = "spatial_context"
     spatial_intelligence = "spatial_intelligence"
     neighbourhood_comparison = "neighbourhood_comparison"
+    dynamic_planning = "dynamic_planning"
     unsupported = "unsupported"
 
 
