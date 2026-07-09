@@ -6,6 +6,7 @@ from backend.app.agents.tools import (
     tool_compare_neighbourhoods,
     tool_compute_commute_burden,
     tool_get_attribution,
+    tool_get_causal_explanation,
     tool_get_citizen_advisory,
     tool_get_city_briefing,
     tool_get_enforcement_priority,
@@ -42,6 +43,7 @@ PLANNING_TOOL_REGISTRY: dict[str, Callable[..., dict[str, Any]]] = {
     "tool_compare_neighbourhoods": tool_compare_neighbourhoods,
     "tool_get_attribution": tool_get_attribution,
     "tool_get_enforcement_priority": tool_get_enforcement_priority,
+    "tool_get_causal_explanation": tool_get_causal_explanation,
 }
 
 PLANNING_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
@@ -188,6 +190,16 @@ PLANNING_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "parameters": {
             "city": "string (optional, default 'bengaluru') — city name",
             "top_k": "integer (optional, default 10) — number of top-ranked hexagons to return",
+        },
+    },
+    "tool_get_causal_explanation": {
+        "description": "Get a plain-language causal explanation of pollution sources at a specific hexagon location. Internally fetches source attribution and wind data, then generates an explanation in the requested language. Supports English, Hindi, and Kannada.",
+        "parameters": {
+            "city": "string (optional, default 'bengaluru') — city name",
+            "h3_cell": "string (optional) — H3 cell ID for a specific hexagon",
+            "lat": "float (optional) — latitude to convert to H3 cell",
+            "lon": "float (optional) — longitude to convert to H3 cell",
+            "language": "string (optional, default 'en') — output language; en, hi, or kn",
         },
     },
 }

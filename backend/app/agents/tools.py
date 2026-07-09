@@ -212,6 +212,31 @@ def tool_get_enforcement_priority(city: str = "bengaluru", top_k: int = 10) -> d
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 
 
+def tool_get_causal_explanation(
+    city: str = "bengaluru",
+    h3_cell: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    language: str = "en",
+) -> dict[str, Any]:
+    from backend.app.services.attribution_service import get_single_hexagon_attribution
+    from backend.app.services.causal_explanation_service import generate_causal_explanation
+    import h3 as _h3
+    try:
+        if h3_cell:
+            attribution = get_single_hexagon_attribution(h3_cell, city=city)
+        elif lat is not None and lon is not None:
+            cell = _h3.latlng_to_cell(lat, lon, 9)
+            attribution = get_single_hexagon_attribution(cell, city=city)
+        else:
+            return {"_tool_error": "Either h3_cell or lat+lon is required", "_error_type": "ParameterError"}
+        if "error" in attribution:
+            return {"_tool_error": attribution["error"], "_error_type": "ServiceError"}
+        return generate_causal_explanation(attribution, language=language)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
 def tool_compare_neighbourhoods(
     candidate_queries: list[dict[str, Any]],
     workplace_query: dict[str, Any],

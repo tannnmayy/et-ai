@@ -18,6 +18,15 @@ _PLANNING_SYSTEM_PROMPT = (
     "Respond only with the exact JSON format requested — no summarization, no prose."
 )
 
+_CAUSAL_EXPLANATION_SYSTEM_PROMPT = (
+    "You are an air quality science communicator. "
+    "Explain the sources of pollution at a specific location in clear, plain language "
+    "that a non-expert resident can understand. "
+    "Use the source attribution percentages, wind data, and fused PM2.5 estimate provided. "
+    "Do not invent data. Do not make causal claims that are not supported by the data. "
+    "Respond only with the explanation — no extra commentary, no disclaimers."
+)
+
 
 class LLMProvider:
     def __init__(self) -> None:
