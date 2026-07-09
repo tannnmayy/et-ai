@@ -257,3 +257,14 @@ def tool_compare_neighbourhoods(
         )
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_get_grid_suitability(city: str = "bengaluru") -> dict[str, Any]:
+    from backend.app.services.neighbourhood_suitability_service import get_grid_suitability
+    try:
+        result = get_grid_suitability(city=city)
+        if "error" in result:
+            return {"_tool_error": result["error"], "_error_type": "ServiceError"}
+        return result
+    except Exception as exc:
+        return {"_tool_error": str(exc), "_error_type": type(exc).__name__}

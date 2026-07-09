@@ -14,6 +14,7 @@ from backend.app.agents.tools import (
     tool_get_forecast_evidence,
     tool_get_geospatial_city_coverage,
     tool_get_geospatial_context,
+    tool_get_grid_suitability,
     tool_get_inspection_priorities,
     tool_get_location_intelligence,
     tool_get_station_intelligence,
@@ -44,6 +45,7 @@ PLANNING_TOOL_REGISTRY: dict[str, Callable[..., dict[str, Any]]] = {
     "tool_get_attribution": tool_get_attribution,
     "tool_get_enforcement_priority": tool_get_enforcement_priority,
     "tool_get_causal_explanation": tool_get_causal_explanation,
+    "tool_get_grid_suitability": tool_get_grid_suitability,
 }
 
 PLANNING_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
@@ -200,6 +202,12 @@ PLANNING_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "lat": "float (optional) — latitude to convert to H3 cell",
             "lon": "float (optional) — longitude to convert to H3 cell",
             "language": "string (optional, default 'en') — output language; en, hi, or kn",
+        },
+    },
+    "tool_get_grid_suitability": {
+        "description": "Get a city-wide grid suitability assessment for every hexagon, scoring air quality (fused PM2.5 where available), forecast confidence, green space, road-density-based pollution exposure risk, weather disruption, and data coverage. Commute is excluded — it requires a specific workplace/school address.",
+        "parameters": {
+            "city": "string (optional, default 'bengaluru') — city name",
         },
     },
 }
