@@ -338,13 +338,14 @@ class TestGroqProvider:
 
         with patch.object(openai_module, "OpenAI", side_effect=mock_constructor):
             llm = LLMProvider()
+            llm.api_key = "test-key-for-unit-test"
             with patch.object(llm, "_available", True):
                 llm.model = ""
                 result = llm._call_groq("test prompt", {}, system_prompt=None)
 
         assert result is None  # ImportError re-raised as None
         assert constructor_kwargs["base_url"] == "https://api.groq.com/openai/v1"
-        assert constructor_kwargs["api_key"] is not None
+        assert constructor_kwargs["api_key"] == "test-key-for-unit-test"
 
     def test_groq_model_fallback_when_empty(self) -> None:
         import openai as openai_module
@@ -365,6 +366,7 @@ class TestGroqProvider:
 
         with patch.object(openai_module, "OpenAI", return_value=FakeClient()):
             llm = LLMProvider()
+            llm.api_key = "test-key-for-unit-test"
             with patch.object(llm, "_available", True):
                 llm.model = ""
                 result = llm._call_groq("test", {})
