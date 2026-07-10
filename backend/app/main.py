@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import SERVICE_NAME
-from backend.app.routers import attribution, copilot, forecasts, geospatial, guidance, health, intelligence, maps, neighbourhoods, stations, travel, weather
+from backend.app.routers import attribution, copilot, enforcement, forecasts, geospatial, guidance, health, intelligence, maps, neighbourhoods, stations, travel, weather
 
 
 app = FastAPI(
@@ -35,6 +35,7 @@ app.include_router(geospatial.router)
 app.include_router(maps.router)
 app.include_router(neighbourhoods.router)
 app.include_router(attribution.router)
+app.include_router(enforcement.router)
 app.include_router(stations.router)
 
 

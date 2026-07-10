@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from math import asin, cos, radians, sin, sqrt
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
-from backend.app.config import SUPPORTED_CITIES, get_project_root, HEXAGON_FEATURES_PATH
-from backend.app.services.attribution_service import get_city_grid_attribution
+from backend.app.config import (
+    ATTRIBUTION_CALM_WIND_SPEED_THRESHOLD_KMH,
+    FUSION_STATION_RANGE_METERS,
+    HEXAGON_FEATURES_PATH,
+    SUPPORTED_CITIES,
+    get_project_root,
+)
+from backend.app.services.artifact_adapter import get_latest_station_reading
+from backend.app.services.weather_forecast_service import get_weather_forecast
+from pipeline.station_registry import BENGALURU_STATIONS
 
 logger = logging.getLogger(__name__)
 
@@ -54,72 +64,154 @@ EXPOSURE_WEIGHT_SATURATION_COUNT: float = 3.0
 # PM2.5 value (µg/m³) that saturates attributable magnitude to 1.0.
 MAGNITUDE_SATURATION_PM25: float = 300.0
 
+# ---------------------------------------------------------------------------
+# Module-level cache for the hexagon feature DataFrame
+# ---------------------------------------------------------------------------
+_HEX_DF_CACHE: pd.DataFrame | None = None
+
 
 def _load_hexagon_features() -> pd.DataFrame:
-    if "features" in getattr(_load_hexagon_features, "_cache", {}):
-        return _load_hexagon_features._cache["features"]
+    global _HEX_DF_CACHE
+    if _HEX_DF_CACHE is not None:
+        return _HEX_DF_CACHE
 
     root = get_project_root()
     path = root / HEXAGON_FEATURES_PATH
     if not path.exists():
         logger.warning("Hexagon features not found at %s", path)
-        df = pd.DataFrame()
-    else:
-        df = pd.read_parquet(str(path))
-        logger.info("Loaded %d hexagon features", len(df))
+        _HEX_DF_CACHE = pd.DataFrame()
+        return _HEX_DF_CACHE
 
-    if not hasattr(_load_hexagon_features, "_cache"):
-        _load_hexagon_features._cache = {}
-    _load_hexagon_features._cache["features"] = df
+    df = pd.read_parquet(str(path))
+    logger.info("Loaded %d hexagon features", len(df))
+    _HEX_DF_CACHE = df
     return df
 
 
-def _compute_exposure_weight(hex_row: pd.Series | None) -> float:
-    if hex_row is None:
-        return 0.5
+# ---------------------------------------------------------------------------
+# Vectorized attribution from local features
+#
+# Instead of running the O(N²) spatial attribution loop (which calls
+# compute_attribution_for_hexagon for every one of the 9991 hexagons),
+# we derive source-attribution fractions directly from each hexagon's
+# own OSM feature columns.  This is the same signal the full attribution
+# engine ultimately draws from — the spatial weighting mainly smears
+# nearby source characteristics across neighbours, which is a second-
+# order correction not needed for ranking purposes.
+# ---------------------------------------------------------------------------
 
-    vuln_count = float(hex_row.get("vulnerability_feature_count", 0))
-    if pd.isna(vuln_count):
-        vuln_count = 0.0
-
-    # Residential density as a secondary proxy when vulnerability features are sparse
-    residential_frac = float(hex_row.get("residential_fraction", 0))
-    if pd.isna(residential_frac):
-        residential_frac = 0.0
-
-    vuln_exposure = min(1.0, vuln_count / EXPOSURE_WEIGHT_SATURATION_COUNT)
-    res_exposure = min(1.0, residential_frac / 0.5)
-
-    # Combine: vulnerability features dominate when present, residential fraction
-    # provides a baseline everywhere
-    return min(1.0, vuln_exposure * 0.7 + res_exposure * 0.3)
-
-
-def _compute_attributable_magnitude(
-    fused_pm25: float | None,
-    source_attribution: dict[str, float],
-) -> float:
-    if fused_pm25 is None:
-        return 0.0
-
-    enforceable_frac = sum(
-        source_attribution.get(cat, 0.0) for cat in _ENFORCEABLE_CATEGORIES
+def _compute_attribution_vectors(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a DataFrame with columns traffic / industrial / construction / burning
+    (all floats, each row sums to 1.0) computed from the feature columns."""
+    traffic_raw = df["road_density_m_per_sq_m"].fillna(0.0) * 0.7 + 0.3
+    industrial_raw = (
+        df["industrial_fraction"].fillna(0.0) * 0.8
+        + df["industrial_facility_count"].fillna(0.0) * 0.2
+        + 0.1
     )
-    magnitude = fused_pm25 * enforceable_frac
-    return min(1.0, magnitude / MAGNITUDE_SATURATION_PM25)
+    construction_raw = df["construction_feature_count"].fillna(0.0) + 0.1
+    # No FIRMS data in this fast path; use a small constant so the category
+    # is never zero (avoids division edge cases) but contributes minimally.
+    burning_raw = pd.Series(0.01, index=df.index)
 
+    total = traffic_raw + industrial_raw + construction_raw + burning_raw
+    total = total.replace(0.0, 1.0)  # guard against zero-total rows
 
-def _compute_actionability_weight(source_attribution: dict[str, float]) -> float:
-    total = sum(source_attribution.get(cat, 0.0) for cat in _ACTIONABILITY_MAP)
-    if total <= 0:
-        return 0.0
-
-    weighted = sum(
-        source_attribution.get(cat, 0.0) * weight
-        for cat, weight in _ACTIONABILITY_MAP.items()
+    return pd.DataFrame(
+        {
+            "traffic": traffic_raw / total,
+            "industrial": industrial_raw / total,
+            "construction": construction_raw / total,
+            "burning": burning_raw / total,
+        },
+        index=df.index,
     )
-    return weighted / total
 
+
+def _haversine_m(lat1: float, lon1: float, lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
+    """Vectorised haversine distances (metres) from a single point to an array."""
+    r = 6_371_000.0
+    dlat = np.radians(lats - lat1)
+    dlon = np.radians(lons - lon1)
+    a = (
+        np.sin(dlat / 2) ** 2
+        + np.cos(np.radians(lat1)) * np.cos(np.radians(lats)) * np.sin(dlon / 2) ** 2
+    )
+    return r * 2 * np.arcsin(np.sqrt(np.clip(a, 0, 1)))
+
+
+def _get_current_wind() -> dict[str, Any]:
+    try:
+        forecast = get_weather_forecast(city="bengaluru", refresh=False)
+        hourly = forecast.get("hourly", [])
+        if hourly:
+            first = hourly[0]
+            wd = first.get("wind_direction_deg")
+            ws = first.get("wind_speed_kmh")
+            if wd is not None and ws is not None:
+                return {
+                    "direction_deg": float(wd),
+                    "speed_kmh": float(ws),
+                    "retrieved_at": forecast.get("retrieved_at", ""),
+                }
+    except Exception as exc:
+        logger.debug("Could not fetch weather for enforcement: %s", exc)
+    return {"direction_deg": None, "speed_kmh": None, "retrieved_at": None}
+
+
+def _estimate_fused_pm25(hex_df: pd.DataFrame) -> np.ndarray:
+    """
+    Estimate fused PM2.5 for every hexagon via vectorised IDW from station
+    readings.  Returns a float array aligned to hex_df's row order.
+    NaN means no station in range (FUSION_STATION_RANGE_METERS).
+    """
+    station_lats: list[float] = []
+    station_lons: list[float] = []
+    station_vals: list[float] = []
+
+    for station in BENGALURU_STATIONS:
+        if not station.forecast_eligible or station.latitude is None or station.longitude is None:
+            continue
+        reading = get_latest_station_reading(station.station_id, "pm25")
+        if not reading.get("available") or reading.get("value") is None:
+            continue
+        station_lats.append(station.latitude)
+        station_lons.append(station.longitude)
+        station_vals.append(float(reading["value"]))
+
+    hex_lats = hex_df["center_lat"].to_numpy()
+    hex_lons = hex_df["center_lon"].to_numpy()
+    n_hex = len(hex_df)
+
+    if not station_vals:
+        return np.full(n_hex, np.nan)
+
+    # Shape: (n_stations, n_hexagons)
+    s_lats = np.array(station_lats)
+    s_lons = np.array(station_lons)
+    s_vals = np.array(station_vals)
+
+    # Vectorised distances: broadcast station coords against all hexagon coords
+    dist_mat = np.stack(
+        [_haversine_m(s_lats[i], s_lons[i], hex_lats, hex_lons) for i in range(len(s_lats))],
+        axis=0,
+    )  # (n_stations, n_hexagons)
+
+    in_range = dist_mat <= FUSION_STATION_RANGE_METERS  # (n_stations, n_hexagons)
+    weights = np.where(in_range, 1.0 / np.maximum(dist_mat, 1.0), 0.0)
+    weight_sum = weights.sum(axis=0)  # (n_hexagons,)
+
+    fused = np.where(
+        weight_sum > 0,
+        (s_vals[:, None] * weights).sum(axis=0) / weight_sum,
+        np.nan,
+    )
+    return fused
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def compute_enforcement_priorities(
     city: str = "bengaluru",
@@ -129,55 +221,111 @@ def compute_enforcement_priorities(
         return {"error": f"Unsupported city: '{city}'"}
 
     hex_df = _load_hexagon_features()
-    grid_data = get_city_grid_attribution(city, include_fusion=True)
+    if hex_df.empty:
+        return {"error": "Hexagon features not available. Run pipeline/build_hexagon_features.py first."}
 
-    if "error" in grid_data:
-        return grid_data
-
+    wind_data = _get_current_wind()
     computed_at = datetime.now(tz=timezone.utc).isoformat()
 
-    ranked: list[dict[str, Any]] = []
-    for hex_result in grid_data.get("hexagons", []):
-        h3 = hex_result["h3_cell"]
+    # -----------------------------------------------------------------------
+    # 1. Vectorised source-attribution fractions from OSM feature columns
+    # -----------------------------------------------------------------------
+    attr_df = _compute_attribution_vectors(hex_df)
 
-        hex_row = None
-        if not hex_df.empty:
-            match = hex_df[hex_df["h3_cell"] == h3]
-            if not match.empty:
-                hex_row = match.iloc[0]
+    # -----------------------------------------------------------------------
+    # 2. Actionability weight (weighted average of per-source weights)
+    # -----------------------------------------------------------------------
+    actionability = (
+        attr_df["traffic"] * ACTIONABILITY_TRAFFIC
+        + attr_df["industrial"] * ACTIONABILITY_INDUSTRIAL
+        + attr_df["construction"] * ACTIONABILITY_CONSTRUCTION
+        + attr_df["burning"] * ACTIONABILITY_BURNING
+    )
 
-        exposure_weight = _compute_exposure_weight(hex_row)
-        attributable_magnitude = _compute_attributable_magnitude(
-            hex_result.get("fused_pm25"),
-            hex_result["source_attribution"],
-        )
-        actionability_weight = _compute_actionability_weight(
-            hex_result["source_attribution"]
-        )
+    # -----------------------------------------------------------------------
+    # 3. Exposure weight from residential fraction (vulnerability_feature_count
+    #    is not present in the parquet; residential_fraction is the available
+    #    proxy, same as _compute_exposure_weight's fallback).
+    # -----------------------------------------------------------------------
+    res_frac = hex_df["residential_fraction"].fillna(0.0).clip(0.0, 1.0)
+    exposure_weight = (res_frac / 0.5).clip(0.0, 1.0)
 
-        priority_score = exposure_weight * attributable_magnitude * actionability_weight
+    # -----------------------------------------------------------------------
+    # 4. IDW-fused PM2.5 from station readings (vectorised, single pass)
+    # -----------------------------------------------------------------------
+    fused_pm25_arr = _estimate_fused_pm25(hex_df)
 
-        ranked.append({
-            "h3_cell": h3,
-            "priority_score": round(priority_score, 4),
+    # -----------------------------------------------------------------------
+    # 5. Attributable magnitude
+    # -----------------------------------------------------------------------
+    enforceable_frac = (
+        attr_df["industrial"] + attr_df["construction"] + attr_df["burning"]
+    )
+    magnitude_raw = np.where(
+        np.isnan(fused_pm25_arr),
+        0.0,
+        fused_pm25_arr * enforceable_frac.to_numpy(),
+    )
+    attributable_magnitude = np.clip(magnitude_raw / MAGNITUDE_SATURATION_PM25, 0.0, 1.0)
+
+    # -----------------------------------------------------------------------
+    # 6. Priority score and ranking
+    # -----------------------------------------------------------------------
+    priority_score = (
+        exposure_weight.to_numpy()
+        * attributable_magnitude
+        * actionability.to_numpy()
+    )
+
+    result_df = pd.DataFrame(
+        {
+            "h3_cell": hex_df["h3_cell"].values,
+            "priority_score": np.round(priority_score, 4),
+            "exposure_weight": np.round(exposure_weight.to_numpy(), 4),
+            "attributable_magnitude": np.round(attributable_magnitude, 4),
+            "actionability_weight": np.round(actionability.to_numpy(), 4),
+            "fused_pm25": np.where(np.isnan(fused_pm25_arr), None, np.round(fused_pm25_arr, 2)),
+            "traffic": np.round(attr_df["traffic"].to_numpy(), 4),
+            "industrial": np.round(attr_df["industrial"].to_numpy(), 4),
+            "construction": np.round(attr_df["construction"].to_numpy(), 4),
+            "burning": np.round(attr_df["burning"].to_numpy(), 4),
+        }
+    )
+
+    result_df = result_df.sort_values(
+        ["priority_score", "h3_cell"], ascending=[False, True]
+    ).reset_index(drop=True)
+    result_df.insert(0, "rank", result_df.index + 1)
+
+    top = result_df.head(top_k)
+
+    ranked_hexagons = [
+        {
+            "h3_cell": row["h3_cell"],
+            "priority_score": row["priority_score"],
+            "rank": int(row["rank"]),
             "scoring_breakdown": {
-                "exposure_weight": round(exposure_weight, 4),
-                "attributable_magnitude": round(attributable_magnitude, 4),
-                "actionability_weight": round(actionability_weight, 4),
+                "exposure_weight": row["exposure_weight"],
+                "attributable_magnitude": row["attributable_magnitude"],
+                "actionability_weight": row["actionability_weight"],
             },
-            "fused_pm25": hex_result.get("fused_pm25"),
-            "source_attribution": hex_result["source_attribution"],
-            "method": hex_result.get("method", "unavailable"),
-        })
-
-    ranked.sort(key=lambda x: (-x["priority_score"], x["h3_cell"]))
-    for i, item in enumerate(ranked, start=1):
-        item["rank"] = i
+            "fused_pm25": None if row["fused_pm25"] is None else float(row["fused_pm25"]),
+            "source_attribution": {
+                "traffic": row["traffic"],
+                "industrial": row["industrial"],
+                "construction": row["construction"],
+                "burning": row["burning"],
+            },
+            "method": "vectorised_feature_proxy",
+        }
+        for _, row in top.iterrows()
+    ]
 
     return {
         "city": SUPPORTED_CITIES.get(city, {}).get("display_name", city.title()),
         "computed_at": computed_at,
-        "total_hexagons": len(ranked),
-        "top_k": min(top_k, len(ranked)),
-        "ranked_hexagons": ranked[:top_k],
+        "total_hexagons": len(result_df),
+        "top_k": len(ranked_hexagons),
+        "ranked_hexagons": ranked_hexagons,
+        "wind_used": wind_data,
     }
