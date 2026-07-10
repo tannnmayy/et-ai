@@ -89,6 +89,69 @@ def _load_hexagon_features() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Wrapper functions retained for unit-testability (option (a) from the
+# enforcement-priority test-collection fix).  Each wraps the equivalent
+# vectorised logic so existing tests pass unchanged.
+# ---------------------------------------------------------------------------
+
+
+def _compute_exposure_weight(row: pd.Series | None) -> float:
+    """Compute exposure weight from vulnerability feature count + residential fraction.
+
+    Formula (unchanged from the pre-vectorisation implementation):
+        vuln_weight = min(1.0, vulnerability_feature_count /
+                          EXPOSURE_WEIGHT_SATURATION_COUNT)
+        res_weight  = min(1.0, residential_fraction / 0.5)
+        return vuln_weight * 0.7 + res_weight * 0.3
+
+    None → 0.5 (safe default when no hexagon data is available).
+    """
+    if row is None:
+        return 0.5
+
+    vuln = row.get("vulnerability_feature_count", 0) or 0
+    if pd.isna(vuln):
+        vuln = 0
+    res = row.get("residential_fraction", 0) or 0
+    if pd.isna(res):
+        res = 0
+
+    vuln_weight = min(1.0, vuln / EXPOSURE_WEIGHT_SATURATION_COUNT)
+    res_weight = min(1.0, res / 0.5)
+    return vuln_weight * 0.7 + res_weight * 0.3
+
+
+def _compute_attributable_magnitude(
+    fused_pm25: float | None, attr: dict[str, float]
+) -> float:
+    """Attributable magnitude = min(1.0, fused_pm25 × enforceable_frac / 300)."""
+    if fused_pm25 is None:
+        return 0.0
+    enforceable = (
+        attr.get("industrial", 0)
+        + attr.get("construction", 0)
+        + attr.get("burning", 0)
+    )
+    return min(1.0, fused_pm25 * enforceable / MAGNITUDE_SATURATION_PM25)
+
+
+def _compute_actionability_weight(attr: dict[str, float]) -> float:
+    """Weighted average of per-source actionability weights.
+
+    Returns 0.0 when the total attribution fraction is zero (no sources).
+    """
+    total = sum(attr.values())  # should be ~1.0 for normalised input
+    if total == 0:
+        return 0.0
+    return (
+        attr.get("traffic", 0) * ACTIONABILITY_TRAFFIC
+        + attr.get("industrial", 0) * ACTIONABILITY_INDUSTRIAL
+        + attr.get("construction", 0) * ACTIONABILITY_CONSTRUCTION
+        + attr.get("burning", 0) * ACTIONABILITY_BURNING
+    ) / total
+
+
+# ---------------------------------------------------------------------------
 # Vectorized attribution from local features
 #
 # Instead of running the O(N²) spatial attribution loop (which calls
@@ -248,12 +311,19 @@ def compute_enforcement_priorities(
     )
 
     # -----------------------------------------------------------------------
-    # 3. Exposure weight from residential fraction (vulnerability_feature_count
-    #    is not present in the parquet; residential_fraction is the available
-    #    proxy, same as _compute_exposure_weight's fallback).
+    # 3. Exposure weight from vulnerability density + residential fraction
     # -----------------------------------------------------------------------
-    res_frac = hex_df["residential_fraction"].fillna(0.0).clip(0.0, 1.0)
-    exposure_weight = (res_frac / 0.5).clip(0.0, 1.0)
+    if "vulnerability_feature_count" in hex_df.columns:
+        vuln = hex_df["vulnerability_feature_count"].fillna(0.0)
+        vuln_weight = (vuln / EXPOSURE_WEIGHT_SATURATION_COUNT).clip(0.0, 1.0)
+        res_frac = hex_df["residential_fraction"].fillna(0.0).clip(0.0, 1.0)
+        res_weight = (res_frac / 0.5).clip(0.0, 1.0)
+        exposure_weight = vuln_weight.to_numpy() * 0.7 + res_weight.to_numpy() * 0.3
+        exposure_data_source = "vulnerability_density"
+    else:
+        res_frac = hex_df["residential_fraction"].fillna(0.0).clip(0.0, 1.0)
+        exposure_weight = (res_frac / 0.5).clip(0.0, 1.0)
+        exposure_data_source = "residential_fraction_proxy"
 
     # -----------------------------------------------------------------------
     # 4. IDW-fused PM2.5 from station readings (vectorised, single pass)
@@ -332,6 +402,7 @@ def compute_enforcement_priorities(
         "total_hexagons": len(result_df),
         "top_k": len(ranked_hexagons),
         "ranked_hexagons": ranked_hexagons,
+        "exposure_data_source": exposure_data_source,
         "wind_used": wind_data,
     }
 

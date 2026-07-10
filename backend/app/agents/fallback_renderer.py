@@ -24,14 +24,14 @@ def render_station_explanation(data: dict[str, Any]) -> str:
 
     lines = [
         f"Station: {station}",
-        f"Forecast PM2.5: {pm25} &#181;g/m\u00B3 ({risk})",
+        f"Forecast PM2.5: {pm25} µg/m³ ({risk})",
         f"Forecast engine: {engine}",
         f"Explanation method: {method}",
     ]
 
     if change_val is not None:
         sign = "+" if change_val > 0 else ""
-        lines.append(f"Expected change: {sign}{change_val:.1f} &#181;g/m\u00B3 ({change_dir})")
+        lines.append(f"Expected change: {sign}{change_val:.1f} µg/m³ ({change_dir})")
 
     if conf_level:
         lines.append(f"Forecast confidence: {conf_level}")
@@ -97,7 +97,7 @@ def render_inspection_plan(data: dict[str, Any]) -> str:
     for i, station in enumerate(ranked, start=1):
         lines.append(f"{i}. {station.get('station_name', station.get('station_id', 'Unknown'))}")
         lines.append(f"   Priority: {station.get('priority_level', 'N/A')} (score: {station.get('priority_score', 0)})")
-        lines.append(f"   PM2.5: {station.get('predicted_pm25', 'N/A')} &#181;g/m\u00B3 ({station.get('risk_category', 'N/A')})")
+        lines.append(f"   PM2.5: {station.get('predicted_pm25', 'N/A')} µg/m³ ({station.get('risk_category', 'N/A')})")
         lines.append(f"   Engine: {station.get('forecast_engine', 'N/A')} | Confidence: {station.get('confidence_level', 'N/A')}")
         lines.append(f"   Focus: {station.get('recommended_inspection_focus', 'General investigation')}")
         lines.append("")
@@ -158,7 +158,7 @@ def render_city_briefing(data: dict[str, Any]) -> str:
     ]
 
     for s in stations:
-        lines.append(f"- {s.get('station_name', s.get('station_id', 'N/A'))}: {s.get('predicted_pm25', 'N/A')} &#181;g/m\u00B3 ({s.get('risk_category', 'N/A')}) [{s.get('forecast_engine', 'N/A')}]")
+        lines.append(f"- {s.get('station_name', s.get('station_id', 'N/A'))}: {s.get('predicted_pm25', 'N/A')} µg/m³ ({s.get('risk_category', 'N/A')}) [{s.get('forecast_engine', 'N/A')}]")
 
     if recs:
         lines.append("")
@@ -346,7 +346,7 @@ def render_spatial_intelligence(data: dict[str, Any]) -> str:
     ]
     fe = data.get("forecast_evidence", {})
     if fe:
-        lines.append(f"Forecast PM2.5: {fe.get('predicted_pm25', 'N/A')} ug/m3 ({fe.get('risk_category', 'N/A')})")
+        lines.append(f"Forecast PM2.5: {fe.get('predicted_pm25', 'N/A')} µg/m³ ({fe.get('risk_category', 'N/A')})")
         lines.append(f"Forecast engine: {fe.get('forecast_engine', 'N/A')}")
         lines.append("")
     fc = data.get("forecast_confidence", {})
