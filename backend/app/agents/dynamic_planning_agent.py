@@ -19,6 +19,34 @@ logger = logging.getLogger(__name__)
 MAX_PLANNING_STEPS = 5
 
 
+def _grounded_fallback(state: AgentState, audit: AuditTrail) -> None:
+    """Keep Copilot useful when the hosted LLM is temporarily unreachable."""
+    from backend.app.services.inspection_priority_service import get_inspection_priorities
+
+    priorities = get_inspection_priorities(state.city, top_k=max(3, state.top_k))
+    ranked = priorities.get("ranked_stations", [])
+    audit.record_tool_call("tool_get_inspection_priorities", {"city": state.city, "top_k": max(3, state.top_k)}, True)
+    state.structured_data = {"inspection_priorities": priorities}
+    if ranked:
+        highest = ranked[0]
+        others = ", ".join(
+            f"{item['station_name']} ({item['risk_category']})" for item in ranked[1:3]
+        )
+        state.response = (
+            f"The highest current monitoring priority is {highest['station_name']}. "
+            f"Its next PM2.5 estimate is {highest['predicted_pm25']:.0f} µg/m³, "
+            f"which is {highest['risk_category'].lower()} on the project’s scale. "
+            f"The recommended check is: {highest['recommended_inspection_focus']} "
+            + (f"Other areas to watch are {others}. " if others else "")
+            + "This is a monitoring-based priority, not proof of a source at a particular site."
+        )
+    else:
+        state.response = "Live station priorities are unavailable right now. Please try again shortly."
+    state.llm_status = "fallback"
+    state.fallback_used = True
+    state.warnings.append("The LLM was temporarily unavailable; this answer uses live deterministic monitoring data.")
+
+
 class PlanningGraphState(TypedDict, total=False):
     query: str
     results: dict[str, Any]
@@ -78,33 +106,21 @@ def run_dynamic_planning_agent(state: AgentState, audit: AuditTrail) -> None:
     llm = get_llm_provider()
 
     if not llm.is_available:
-        state.response = (
-            "Dynamic planning requires an LLM to be configured. "
-            "Please set AQI_SENTINEL_LLM_API_KEY, AQI_SENTINEL_LLM_PROVIDER, "
-            "and AQI_SENTINEL_LLM_MODEL environment variables."
-        )
-        state.structured_data = {}
-        state.llm_status = "deterministic"
-        state.fallback_used = True
+        _grounded_fallback(state, audit)
         return
 
     graph = _build_planning_graph(llm, audit)
     output = graph.invoke({"query": query, "results": {}, "called_pairs": [], "step": 0})
     tool_results_so_far = output.get("results", {})
-    if output.get("answer"):
+    if output.get("answer") and output["answer"] != "I couldn't complete the reasoning step. Please try again.":
         state.response = output["answer"]
         state.structured_data = tool_results_so_far
         state.tool_results = tool_results_so_far
         state.llm_status = "hosted"
         return
 
-    # Defensive fallback: LangGraph should always end with an answer, but we
-    # still return grounded data instead of exposing planner internals.
-    summary = llm.summarize(f"Answer the user's question: '{query}' using this evidence.", tool_results_so_far)
-    state.response = summary or "I could not produce a final response from the available evidence."
-    state.structured_data = tool_results_so_far
-    state.llm_status = "hosted" if summary else "fallback"
-    state.fallback_used = summary is None
+    # A provider failure must never surface as a generic retry message.
+    _grounded_fallback(state, audit)
     return
 
     tool_results_so_far: dict[str, Any] = {}

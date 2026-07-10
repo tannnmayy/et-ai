@@ -127,6 +127,10 @@ export default function MapView({
       streetViewControl: false,
       mapTypeControl: false,
       fullscreenControl: false,
+      zoomControl: false,
+      draggable: false,
+      keyboardShortcuts: false,
+      gestureHandling: "none",
       styles: [
         {
           featureType: "poi",
