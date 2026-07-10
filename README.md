@@ -136,6 +136,9 @@ pip install -r requirements.txt
 cp .env.example .env
 # Fill in your Groq API key and Google Maps API keys in .env
 
+# Build geospatial artifacts (required for enforcement and attribution endpoints)
+python pipeline/build_hexagon_features.py
+
 # Run the backend
 uvicorn backend.app.main:app --reload
 

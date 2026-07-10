@@ -13,6 +13,7 @@ data/processed/geospatial/*
 # But these are REQUIRED for the app to serve geospatial context
 !data/processed/geospatial/station_geospatial_context.parquet
 !data/processed/geospatial/geospatial_build_metadata.json
+!data/processed/geospatial/hexagon_features.parquet
 
 # Geospatial reports (reproducible)
 data/reports/geospatial/
