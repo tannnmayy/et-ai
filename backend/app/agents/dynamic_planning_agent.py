@@ -55,6 +55,7 @@ class PlanningGraphState(TypedDict, total=False):
     decision: dict[str, Any]
     answer: str
     finished: bool
+    warnings: list[str]
 
 
 def _build_planning_graph(llm: Any, audit: AuditTrail):
@@ -66,15 +67,43 @@ def _build_planning_graph(llm: Any, audit: AuditTrail):
             tool_results_so_far=graph_state.get("results", {}), step_number=step,
             max_steps=MAX_PLANNING_STEPS,
         )
+        result: PlanningGraphState = {"step": step}
         if decision is None:
-            return {"step": step, "finished": True, "answer": "I couldn't complete the reasoning step. Please try again."}
-        if decision["action"] == "final_answer" or step >= MAX_PLANNING_STEPS:
-            return {"step": step, "decision": decision, "finished": True, "answer": decision.get("text", "I gathered the available evidence but could not complete the plan.")}
-        return {"step": step, "decision": decision, "finished": False}
+            result["finished"] = True
+            result["answer"] = "I couldn't complete the reasoning step. Please try again."
+            return result
+
+        action = decision.get("action")
+        if action is None:
+            result["finished"] = True
+            result["answer"] = "I couldn't parse the planning decision. Please try rephrasing your question."
+            result["warnings"] = ["The LLM returned a decision without an 'action' field."]
+            return result
+
+        if action == "final_answer" or step >= MAX_PLANNING_STEPS:
+            result["finished"] = True
+            result["decision"] = decision
+            result["answer"] = decision.get("text", "I gathered the available evidence but could not complete the plan.")
+            if step >= MAX_PLANNING_STEPS:
+                result["warnings"] = [f"Dynamic planning step cap ({MAX_PLANNING_STEPS}) reached; response may be incomplete."]
+            return result
+
+        if action != "call_tool":
+            result["finished"] = True
+            result["answer"] = "I couldn't parse the planning decision. Please try rephrasing your question."
+            result["warnings"] = [f"The LLM returned an unrecognized planning action '{action}'."]
+            return result
+
+        result["decision"] = decision
+        result["finished"] = False
+        return result
 
     def execute_tool(graph_state: PlanningGraphState) -> PlanningGraphState:
         decision = graph_state["decision"]
-        tool_name = decision["tool"]
+        tool_name = decision.get("tool")
+        if not tool_name:
+            audit.record_tool_call("unknown", {}, False)
+            return {"results": {"_tool_error": "Tool call missing 'tool' field in LLM decision."}}
         arguments = decision.get("arguments", {})
         key = (tool_name, json_dumps_sort(arguments))
         results = dict(graph_state.get("results", {}))
@@ -112,11 +141,33 @@ def run_dynamic_planning_agent(state: AgentState, audit: AuditTrail) -> None:
     graph = _build_planning_graph(llm, audit)
     output = graph.invoke({"query": query, "results": {}, "called_pairs": [], "step": 0})
     tool_results_so_far = output.get("results", {})
-    if output.get("answer") and output["answer"] != "I couldn't complete the reasoning step. Please try again.":
+
+    # Propagate warnings from the graph (step cap, malformed decisions, etc.)
+    graph_warnings = output.get("warnings", [])
+    state.warnings.extend(graph_warnings)
+
+    has_answer = bool(output.get("answer"))
+    answer_is_ok = (
+        has_answer
+        and output["answer"] != "I couldn't complete the reasoning step. Please try again."
+        and not graph_warnings
+    )
+
+    if answer_is_ok:
         state.response = output["answer"]
         state.structured_data = tool_results_so_far
         state.tool_results = tool_results_so_far
         state.llm_status = "hosted"
+        return
+
+    # If the graph produced an answer alongside warnings (step cap / malformed
+    # decision), still surface the answer but mark it as fallback.
+    if has_answer and graph_warnings:
+        state.response = output["answer"]
+        state.structured_data = tool_results_so_far
+        state.tool_results = tool_results_so_far
+        state.llm_status = "fallback"
+        state.fallback_used = True
         return
 
     # A provider failure must never surface as a generic retry message.
