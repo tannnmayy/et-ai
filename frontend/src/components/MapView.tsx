@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader } from "@googlemaps/js-api-loader";
+import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { useQuery } from "@tanstack/react-query";
 import { cellToBoundary } from "h3-js";
 import { getCityGridAttribution } from "../api/client";
-import type { HexagonAttribution } from "../api/types";
 
-const BENGALURU_CENTER: google.maps.LatLngLiteral = { lat: 12.9716, lng: 77.5946 };
+const BENGALURU_CENTER: google.maps.LatLngLiteral = {
+  lat: 12.9716,
+  lng: 77.5946,
+};
+
 const DEFAULT_ZOOM = 12;
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
@@ -29,9 +32,11 @@ const CPCB_BREAKPOINTS = [
 
 function pm25ToBand(pm25: number | null): string {
   if (pm25 === null || pm25 === undefined) return "Moderate";
-  for (const bp of CPCB_BREAKPOINTS) {
-    if (pm25 <= bp.max) return bp.band;
+
+  for (const breakpoint of CPCB_BREAKPOINTS) {
+    if (pm25 <= breakpoint.max) return breakpoint.band;
   }
+
   return "Severe";
 }
 
@@ -44,7 +49,7 @@ interface MapViewProps {
   colorBy?: "fused_pm25" | "priority_score";
   onHexagonClick?: (h3Cell: string) => void;
   highlightedCells?: string[];
-  hexagonData?: Array<{ h3_cell: string; value: number }>;
+  hexagonData?: Array<{ h3_cell: string; value: number; label?: string; message?: string }>;
   fullHeight?: boolean;
 }
 
@@ -59,40 +64,57 @@ export default function MapView({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const dataLayerRef = useRef<google.maps.Data | null>(null);
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["cityGridAttribution", city],
     queryFn: () => getCityGridAttribution(city),
+    enabled: !hexagonData,
     staleTime: 60_000,
   });
 
   useEffect(() => {
     if (!GOOGLE_MAPS_API_KEY) {
-      setMapError("Google Maps API key not configured. Add VITE_GOOGLE_MAPS_API_KEY to your frontend/.env file.");
+      setMapError(
+        "Google Maps API key not configured. Add VITE_GOOGLE_MAPS_API_KEY to your frontend/.env file."
+      );
       return;
     }
 
-    const loader = new Loader({
-      apiKey: GOOGLE_MAPS_API_KEY,
-      version: "weekly",
-    });
+    let cancelled = false;
 
-    loader
-      .load()
-      .then(() => {
-        setMapLoaded(true);
-      })
-      .catch((err) => {
-        // Google Maps JS API authentication failures surface here (e.g. key not
-        // authorised, Maps JavaScript API not enabled, billing not set up).
-        // Distinguish from a missing key so debugging is unambiguous.
-        setMapError(
-          "Google Maps failed to load — check that your API key is valid and has the Maps JavaScript API enabled. " +
-            `(${err.message})`
-        );
-      });
+    async function loadGoogleMaps() {
+      try {
+        setOptions({
+          key: GOOGLE_MAPS_API_KEY,
+          v: "weekly",
+        });
+
+        await importLibrary("maps");
+
+        if (!cancelled) {
+          setMapLoaded(true);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : String(err);
+
+          setMapError(
+            "Google Maps failed to load — check that your API key is valid and has the Maps JavaScript API enabled. " +
+              `(${message})`
+          );
+        }
+      }
+    }
+
+    loadGoogleMaps();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -106,7 +128,11 @@ export default function MapView({
       mapTypeControl: false,
       fullscreenControl: false,
       styles: [
-        { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+        {
+          featureType: "poi",
+          elementType: "labels",
+          stylers: [{ visibility: "off" }],
+        },
       ],
     });
 
@@ -114,8 +140,10 @@ export default function MapView({
 
     const dataLayer = new google.maps.Data({ map });
     dataLayerRef.current = dataLayer;
+    infoWindowRef.current = new google.maps.InfoWindow();
 
     return () => {
+      dataLayer.setMap(null);
       mapInstanceRef.current = null;
       dataLayerRef.current = null;
     };
@@ -124,39 +152,50 @@ export default function MapView({
   useEffect(() => {
     const dataLayer = dataLayerRef.current;
     const map = mapInstanceRef.current;
+
     if (!dataLayer || !map) return;
 
-    const hexagons = hexagonData || data?.hexagons || [];
-    if (hexagons.length === 0) return;
+    const hexagons: Array<{ h3_cell: string; value?: number; fused_pm25?: number | null; label?: string; message?: string }> =
+      hexagonData || data?.hexagons || [];
 
-    dataLayer.forEach((f) => dataLayer.remove(f));
+    dataLayer.forEach((feature) => dataLayer.remove(feature));
+
+    if (hexagons.length === 0) return;
 
     const features: google.maps.Data.Feature[] = [];
 
     for (const hex of hexagons) {
+      const h3Cell = hex.h3_cell;
+
       let value: number | null;
+
       if (hexagonData) {
-        value = (hex as { value: number }).value;
+        value = hex.value ?? null;
       } else {
-        const attr = hex as HexagonAttribution;
-        value = attr.fused_pm25 ?? null;
+        value = hex.fused_pm25 ?? null;
       }
 
       try {
-        const boundary = cellToBoundary((hex as HexagonAttribution).h3_cell || (hex as { h3_cell: string }).h3_cell);
-        const coords = boundary.map((coord) => ({ lat: coord[0], lng: coord[1] }));
+        const boundary = cellToBoundary(h3Cell);
+
+        const coordinates = boundary.map(([lat, lng]) => ({
+          lat,
+          lng,
+        }));
 
         const feature = new google.maps.Data.Feature({
-          geometry: new google.maps.Data.Polygon([coords]),
+          geometry: new google.maps.Data.Polygon([coordinates]),
           properties: {
-            h3_cell: (hex as HexagonAttribution).h3_cell || (hex as { h3_cell: string }).h3_cell,
+            h3_cell: h3Cell,
             value,
+            label: hex.label || "Air-quality area",
+            message: hex.message || `${pm25ToBand(value)} air quality`,
           },
         });
 
         features.push(feature);
       } catch {
-        // skip invalid hexagons
+        // Ignore malformed or incompatible H3 cells.
       }
     }
 
@@ -165,13 +204,13 @@ export default function MapView({
     }
 
     dataLayer.setStyle((feature) => {
-      const val = feature.getProperty("value") as number | null;
-      const h3 = feature.getProperty("h3_cell") as string;
-      const color = pm25ToAQIColor(val);
-      const isHighlighted = highlightedCells.includes(h3);
+      const value = feature.getProperty("value") as number | null;
+      const h3Cell = feature.getProperty("h3_cell") as string;
+      const color = pm25ToAQIColor(value);
+      const isHighlighted = highlightedCells.includes(h3Cell);
 
       return {
-        fillColor: isHighlighted ? color.fill : color.fill,
+        fillColor: color.fill,
         fillOpacity: isHighlighted ? 0.75 : 0.55,
         strokeWeight: isHighlighted ? 2 : 1,
         strokeColor: isHighlighted ? "#1D1D1F" : "#D2D2D7",
@@ -179,17 +218,28 @@ export default function MapView({
       };
     });
 
-    const clickListener = dataLayer.addListener("click", (event: google.maps.Data.MouseEvent) => {
-      const h3 = event.feature.getProperty("h3_cell") as string;
-      if (h3 && onHexagonClick) {
-        onHexagonClick(h3);
+    const clickListener = dataLayer.addListener(
+      "click",
+      (event: google.maps.Data.MouseEvent) => {
+        const h3Cell = event.feature.getProperty("h3_cell") as string;
+        const label = event.feature.getProperty("label") as string;
+        const message = event.feature.getProperty("message") as string;
+        if (infoWindowRef.current && event.latLng) {
+          infoWindowRef.current.setContent(`<strong>${label}</strong><br/>${message}`);
+          infoWindowRef.current.setPosition(event.latLng);
+          infoWindowRef.current.open(map);
+        }
+
+        if (h3Cell && onHexagonClick) {
+          onHexagonClick(h3Cell);
+        }
       }
-    });
+    );
 
     return () => {
       google.maps.event.removeListener(clickListener);
     };
-  }, [data, hexagonData, highlightedCells, onHexagonClick]);
+  }, [data, hexagonData, highlightedCells, onHexagonClick, colorBy]);
 
   if (mapError) {
     return (
@@ -203,7 +253,7 @@ export default function MapView({
     );
   }
 
-  if (isLoading || !mapLoaded) {
+  if ((isLoading && !hexagonData) || !mapLoaded) {
     return (
       <div className={`map-container${fullHeight ? " map-container--full" : ""}`}>
         <div className="map-placeholder">
@@ -214,14 +264,20 @@ export default function MapView({
     );
   }
 
-  if (isError) {
+  if (isError && !hexagonData) {
     return (
       <div className={`map-container${fullHeight ? " map-container--full" : ""}`}>
         <div className="map-placeholder">
           <div className="map-placeholder__error">
             <p>Couldn't load live air quality data</p>
-            <p style={{ fontSize: 12, marginTop: 4 }}>{(error as Error)?.message}</p>
-            <button className="map-placeholder__retry" onClick={() => refetch()} type="button">
+            <p style={{ fontSize: 12, marginTop: 4 }}>
+              {(error as Error)?.message}
+            </p>
+            <button
+              className="map-placeholder__retry"
+              onClick={() => refetch()}
+              type="button"
+            >
               Retry
             </button>
           </div>
@@ -233,6 +289,13 @@ export default function MapView({
   return (
     <div className={`map-container${fullHeight ? " map-container--full" : ""}`}>
       <div ref={mapRef} className="map-container__map" />
+      <div className="map-legend" aria-label="Air quality colour legend">
+        <span><i style={{ background: "#4CAF50" }} />Good</span>
+        <span><i style={{ background: "#F5C518" }} />Moderate</span>
+        <span><i style={{ background: "#F58220" }} />Poor</span>
+        <span><i style={{ background: "#E2401C" }} />Very poor</span>
+        <span><i style={{ background: "#7E0023" }} />Severe</span>
+      </div>
     </div>
   );
 }

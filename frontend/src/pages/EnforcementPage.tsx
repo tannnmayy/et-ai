@@ -3,35 +3,23 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import MapView from "../components/MapView";
 import HexDetailPanel from "../components/HexDetailPanel";
-import { getEnforcementPriority } from "../api/client";
-import type { EnforcementPriorityResponse, RankedHexagon } from "../api/types";
+import { getAirQualityMap, getEnforcementPriority } from "../api/client";
 
 const TOP_K_OPTIONS = [5, 10, 25, 50];
 
-function dominantCategory(attr: RankedHexagon["source_attribution"]): string {
-  let maxKey = "traffic";
-  let maxVal = 0;
-  for (const [key, val] of Object.entries(attr)) {
-    if (val > maxVal) {
-      maxVal = val;
-      maxKey = key;
-    }
-  }
-  return maxKey.charAt(0).toUpperCase() + maxKey.slice(1);
-}
-
 export default function EnforcementPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const highlightParam = searchParams.get("highlight");
   const [topK, setTopK] = useState(10);
   const [selectedCell, setSelectedCell] = useState<string | null>(highlightParam);
   const tableRef = useRef<HTMLTableElement>(null);
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["enforcementPriority", "bengaluru", topK],
     queryFn: () => getEnforcementPriority("bengaluru", topK),
     staleTime: 60_000,
   });
+  const { data: airQualityMap } = useQuery({ queryKey: ["airQualityMap"], queryFn: getAirQualityMap, staleTime: 60_000 });
 
   useEffect(() => {
     if (highlightParam) {
@@ -126,11 +114,7 @@ export default function EnforcementPage() {
     );
   }
 
-  const mapData = data?.ranked_hexagons.map((h) => ({
-    h3_cell: h.h3_cell,
-    value: h.priority_score,
-    fused_pm25: h.fused_pm25,
-  })) as Array<{ h3_cell: string; value: number; fused_pm25: number | null }> | undefined;
+  const mapData = airQualityMap?.cells.map((cell) => ({ h3_cell: cell.h3_cell, value: cell.pm25, label: cell.nearest_station, message: cell.message }));
 
   return (
     <div className="enforcement-page">

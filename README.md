@@ -162,3 +162,19 @@ Visit `http://localhost:8000/docs` for the interactive API explorer.
 ## Disclaimer
 
 AQI Sentinel is a decision-support and hackathon prototype. Attribution, forecasting, and suitability outputs are estimates built from real but incomplete data sources, and are not a substitute for certified regulatory monitoring or medical advice. Where the underlying data doesn't support a confident answer, the system is designed to say so rather than guess.
+# Run the application
+
+Start the API from the project root:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
+```
+
+In a second terminal, start the web app:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+Open the URL shown by Vite (normally http://localhost:5173). The frontend proxies `/api` requests to FastAPI automatically. The existing root `.env` browser Maps key is detected for local development; never expose the server Maps key.

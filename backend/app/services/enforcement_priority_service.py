@@ -17,7 +17,7 @@ from backend.app.config import (
 )
 from backend.app.services.artifact_adapter import get_latest_station_reading
 from backend.app.services.weather_forecast_service import get_weather_forecast
-from pipeline.station_registry import BENGALURU_STATIONS
+from pipeline.station_registry import get_registry_stations
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ def _get_current_wind() -> dict[str, Any]:
     return {"direction_deg": None, "speed_kmh": None, "retrieved_at": None}
 
 
-def _estimate_fused_pm25(hex_df: pd.DataFrame) -> np.ndarray:
+def _estimate_fused_pm25(hex_df: pd.DataFrame, *, fill_from_nearest: bool = False) -> np.ndarray:
     """
     Estimate fused PM2.5 for every hexagon via vectorised IDW from station
     readings.  Returns a float array aligned to hex_df's row order.
@@ -169,7 +169,10 @@ def _estimate_fused_pm25(hex_df: pd.DataFrame) -> np.ndarray:
     station_lons: list[float] = []
     station_vals: list[float] = []
 
-    for station in BENGALURU_STATIONS:
+    # The legacy fallback registry has no coordinates. Always read the
+    # CSV-backed registry so the spatial interpolation has real station
+    # locations instead of silently producing an all-zero risk surface.
+    for station in get_registry_stations():
         if not station.forecast_eligible or station.latitude is None or station.longitude is None:
             continue
         reading = get_latest_station_reading(station.station_id, "pm25")
@@ -201,11 +204,13 @@ def _estimate_fused_pm25(hex_df: pd.DataFrame) -> np.ndarray:
     weights = np.where(in_range, 1.0 / np.maximum(dist_mat, 1.0), 0.0)
     weight_sum = weights.sum(axis=0)  # (n_hexagons,)
 
-    fused = np.where(
-        weight_sum > 0,
-        (s_vals[:, None] * weights).sum(axis=0) / weight_sum,
-        np.nan,
-    )
+    numerator = (s_vals[:, None] * weights).sum(axis=0)
+    fused = np.divide(numerator, weight_sum, out=np.full(n_hex, np.nan), where=weight_sum > 0)
+    if fill_from_nearest:
+        # Give every map cell a cautious nearest-station estimate rather than
+        # leaving large blank areas outside a 5 km fusion radius.
+        nearest_idx = np.argmin(dist_mat, axis=0)
+        fused = np.where(np.isnan(fused), s_vals[nearest_idx], fused)
     return fused
 
 
@@ -329,3 +334,44 @@ def compute_enforcement_priorities(
         "ranked_hexagons": ranked_hexagons,
         "wind_used": wind_data,
     }
+
+
+def get_enforcement_map(city: str = "bengaluru", max_cells: int = 900) -> dict[str, Any]:
+    """Map-ready, evenly sampled cells with human-readable current risk."""
+    if city not in SUPPORTED_CITIES:
+        return {"error": f"Unsupported city: '{city}'"}
+    hex_df = _load_hexagon_features()
+    if hex_df.empty:
+        return {"error": "Hexagon features not available."}
+
+    stations = [s for s in get_registry_stations() if s.forecast_eligible and s.latitude is not None and s.longitude is not None]
+    fused = _estimate_fused_pm25(hex_df, fill_from_nearest=True)
+    indices = np.linspace(0, len(hex_df) - 1, min(max_cells, len(hex_df)), dtype=int)
+
+    def risk(pm25: float) -> str:
+        if pm25 <= 30: return "Good"
+        if pm25 <= 60: return "Satisfactory"
+        if pm25 <= 90: return "Moderate"
+        if pm25 <= 120: return "Poor"
+        if pm25 <= 250: return "Very Poor"
+        return "Severe"
+
+    cells = []
+    for idx in indices:
+        value = fused[idx]
+        if np.isnan(value):
+            continue
+        pm25 = round(float(value), 1)
+        distances = [
+            _haversine_m(float(hex_df.iloc[idx]["center_lat"]), float(hex_df.iloc[idx]["center_lon"]), np.array([s.latitude]), np.array([s.longitude]))[0]
+            for s in stations
+        ]
+        nearest_station = stations[int(np.argmin(distances))].display_name if distances else "nearest monitoring station"
+        cells.append({
+            "h3_cell": str(hex_df.iloc[idx]["h3_cell"]),
+            "pm25": pm25,
+            "risk_label": risk(pm25),
+            "nearest_station": nearest_station,
+            "message": f"{risk(pm25)} air quality — estimated PM2.5 {pm25} µg/m³",
+        })
+    return {"city": city, "computed_at": datetime.now(tz=timezone.utc).isoformat(), "cells": cells}

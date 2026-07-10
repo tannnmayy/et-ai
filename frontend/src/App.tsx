@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AppHeader from "./components/AppHeader";
 import HomePage from "./pages/HomePage";
 import EnforcementPage from "./pages/EnforcementPage";
-import ComingSoonPage from "./pages/ComingSoonPage";
+import CopilotPage from "./pages/CopilotPage";
+import NeighbourhoodsPage from "./pages/NeighbourhoodsPage";
 
 const queryClient = new QueryClient();
 
@@ -15,8 +16,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/enforcement" element={<EnforcementPage />} />
-          <Route path="/copilot" element={<ComingSoonPage title="Copilot" />} />
-          <Route path="/neighbourhoods" element={<ComingSoonPage title="Neighbourhoods" />} />
+          <Route path="/copilot" element={<CopilotPage />} />
+          <Route path="/neighbourhoods" element={<NeighbourhoodsPage />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

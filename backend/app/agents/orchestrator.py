@@ -251,7 +251,9 @@ def run_orchestrator(
     audit.set_intent(intent.value)
 
     llm = get_llm_provider()
-    if not explicit_intent and llm.is_available and (intent == Intent.unsupported or _is_compound_query(query)):
+    # The hosted path is deliberately LLM-led: intent and tool selection come
+    # from the LangGraph planner rather than the legacy keyword router.
+    if not explicit_intent and llm.is_available:
         intent = Intent.dynamic_planning
         state.intent = intent
         audit.set_intent(intent.value)

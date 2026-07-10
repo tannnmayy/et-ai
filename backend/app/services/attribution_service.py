@@ -396,6 +396,7 @@ def get_single_hexagon_attribution(
 def get_city_grid_attribution(
     city: str = "bengaluru",
     include_fusion: bool = True,
+    max_hexagons: int | None = None,
 ) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
@@ -403,6 +404,13 @@ def get_city_grid_attribution(
     hex_df = _load_hexagon_features()
     if hex_df.empty:
         return {"error": "Hexagon features not available. Run pipeline/build_hexagon_features.py first."}
+
+    # The full city grid has nearly 10k cells. An interactive map only needs a
+    # representative, evenly distributed mesh; sampling both targets and
+    # source context avoids an O(n²) request on the API event loop.
+    if max_hexagons is not None and len(hex_df) > max_hexagons:
+        indices = np.linspace(0, len(hex_df) - 1, max_hexagons, dtype=int)
+        hex_df = hex_df.iloc[indices].reset_index(drop=True)
 
     wind_data = _get_current_wind(city)
     firms_lookup = _build_firms_lookup(city)
