@@ -1,25 +1,40 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import AppHeader from "./components/AppHeader";
-import HomePage from "./pages/HomePage";
-import EnforcementPage from "./pages/EnforcementPage";
-import CopilotPage from "./pages/CopilotPage";
-import NeighbourhoodsPage from "./pages/NeighbourhoodsPage";
+import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import MainLayout from './components/MainLayout';
+import MapPage from './pages/MapPage';
+import EnforcementPage from './pages/EnforcementPage';
+import CopilotPage from './pages/CopilotPage';
+import NeighbourhoodsPage from './pages/NeighbourhoodsPage';
 
-const queryClient = new QueryClient();
+// Initialize the TanStack Query Client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: false,
+    },
+  },
+});
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AppHeader />
+      <HashRouter>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/enforcement" element={<EnforcementPage />} />
-          <Route path="/copilot" element={<CopilotPage />} />
-          <Route path="/neighbourhoods" element={<NeighbourhoodsPage />} />
+          <Route path="/" element={<MainLayout />}>
+            {/* Core routes matching navigation items */}
+            <Route index element={<MapPage />} />
+            <Route path="map" element={<Navigate to="/" replace />} />
+            <Route path="enforcement" element={<EnforcementPage />} />
+            <Route path="copilot" element={<CopilotPage />} />
+            <Route path="neighbourhoods" element={<NeighbourhoodsPage />} />
+            
+            {/* Fallback routing to main map */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </QueryClientProvider>
   );
 }

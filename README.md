@@ -170,7 +170,7 @@ AQI Sentinel is a decision-support and hackathon prototype. Attribution, forecas
 Start the API from the project root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8010
 ```
 
 In a second terminal, start the web app:

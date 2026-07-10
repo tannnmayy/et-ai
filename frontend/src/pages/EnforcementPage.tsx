@@ -1,179 +1,270 @@
-import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import MapView from "../components/MapView";
-import HexDetailPanel from "../components/HexDetailPanel";
-import { getAirQualityMap, getEnforcementPriority } from "../api/client";
-
-const TOP_K_OPTIONS = [5, 10, 25, 50];
+import React, { useState } from 'react';
+import { usePriorities } from '../api/client';
+import { PriorityHex } from '../types';
+import MapContainer from '../components/MapContainer';
+import SourceIcon from '../components/SourceIcon';
+import { AlertCircle, ShieldAlert, X, ChevronRight, Compass, Plus, Minus, Navigation, Info, ShieldCheck } from 'lucide-react';
 
 export default function EnforcementPage() {
-  const [searchParams] = useSearchParams();
-  const highlightParam = searchParams.get("highlight");
-  const [topK, setTopK] = useState(10);
-  const [selectedCell, setSelectedCell] = useState<string | null>(highlightParam);
-  const tableRef = useRef<HTMLTableElement>(null);
+  const { data: priorities = [], isLoading } = usePriorities();
+  const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
+  const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["enforcementPriority", "bengaluru", topK],
-    queryFn: () => getEnforcementPriority("bengaluru", topK),
-    staleTime: 60_000,
-  });
-  const { data: airQualityMap } = useQuery({ queryKey: ["airQualityMap"], queryFn: getAirQualityMap, staleTime: 60_000 });
+  const activeHex = selectedHex || priorities[0] || null;
 
-  useEffect(() => {
-    if (highlightParam) {
-      setSelectedCell(highlightParam);
-      // Scroll to row after a short delay to allow render
-      const timeout = setTimeout(() => {
-        const row = tableRef.current?.querySelector(
-          `[data-h3="${highlightParam}"]`
-        ) as HTMLElement | null;
-        row?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 100);
-      return () => clearTimeout(timeout);
-    }
-  }, [highlightParam, data]);
-
-  const selectedHex = selectedCell
-    ? data?.ranked_hexagons.find((h) => h.h3_cell === selectedCell) ?? null
-    : null;
-
-  const handleRowClick = (h3: string) => {
-    setSelectedCell((prev) => (prev === h3 ? null : h3));
+  const handleDispatch = (hexId: string) => {
+    setDispatchedUnits(prev => ({ ...prev, [hexId]: true }));
+    setTimeout(() => {
+      alert(`Dispatch ordered for Hexagon ${hexId}. Dispatch Code: ENF-992`);
+    }, 150);
   };
 
-  const options = TOP_K_OPTIONS.map((k) => (
-    <option key={k} value={k}>
-      Top {k}
-    </option>
-  ));
-
-  let tableContent;
-  if (isLoading) {
-    tableContent = (
-      <tbody>
-        {Array.from({ length: 10 }).map((_, i) => (
-          <tr key={i}>
-            {Array.from({ length: 6 }).map((_, j) => (
-              <td key={j}>
-                <div className="skeleton skeleton--text" style={{ width: `${60 + Math.random() * 30}%` }} />
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    );
-  } else if (isError) {
-    tableContent = (
-      <tbody>
-        <tr>
-          <td colSpan={6} style={{ textAlign: "center", padding: 40 }}>
-            <div className="error-message" style={{ justifyContent: "center" }}>
-              <span>Couldn't load enforcement priorities</span>
-              <button className="error-message__retry" onClick={() => refetch()} type="button">
-                Retry
-              </button>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    );
-  } else if (data) {
-    tableContent = (
-      <tbody>
-        {data.ranked_hexagons.map((hex) => (
-          <tr
-            key={hex.h3_cell}
-            data-h3={hex.h3_cell}
-            className={`enforcement-table__row${
-              selectedCell === hex.h3_cell ? " enforcement-table__row--active" : ""
-            }${
-              highlightParam === hex.h3_cell ? " enforcement-table__row--highlighted" : ""
-            }`}
-            onClick={() => handleRowClick(hex.h3_cell)}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleRowClick(hex.h3_cell);
-              }
-            }}
-          >
-            <td className="enforcement-table__mono">{hex.rank}</td>
-            <td className="enforcement-table__mono" style={{ fontSize: 12 }}>
-              {hex.h3_cell.slice(0, 10)}…
-            </td>
-            <td className="enforcement-table__score">{hex.priority_score.toFixed(4)}</td>
-            <td className="enforcement-table__mono">{hex.scoring_breakdown.exposure_weight.toFixed(3)}</td>
-            <td className="enforcement-table__mono">{hex.scoring_breakdown.attributable_magnitude.toFixed(3)}</td>
-            <td className="enforcement-table__mono">{hex.scoring_breakdown.actionability_weight.toFixed(3)}</td>
-          </tr>
-        ))}
-      </tbody>
-    );
-  }
-
-  const mapData = airQualityMap?.cells.map((cell) => ({ h3_cell: cell.h3_cell, value: cell.pm25, label: cell.nearest_station, message: cell.message }));
+  const getActionabilityStyle = (act: string) => {
+    switch (act) {
+      case 'IMMEDIATE':
+        return {
+          bg: 'bg-brand-red/10 border-brand-red/20 text-brand-red',
+          dot: 'bg-brand-red shadow-[0_0_4px_#ff453a]',
+          text: 'IMMEDIATE',
+        };
+      case 'HIGH':
+        return {
+          bg: 'bg-brand-orange/10 border-brand-orange/20 text-brand-orange',
+          dot: 'bg-brand-orange shadow-[0_0_4px_#FF9F0A]',
+          text: 'HIGH',
+        };
+      default:
+        return {
+          bg: 'bg-brand-blue/10 border-brand-blue/20 text-brand-blue',
+          dot: 'bg-brand-blue shadow-[0_0_4px_#0A84FF]',
+          text: 'MONITOR',
+        };
+    }
+  };
 
   return (
-    <div className="enforcement-page">
-      <div className="enforcement-page__controls">
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <h2>Enforcement Priorities</h2>
-          {data && (
-            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-              {data.city} · {data.total_hexagons} hexagons · {data.computed_at.slice(0, 10)}
-            </span>
-          )}
-        </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-          Show:
-          <select
-            className="enforcement-page__top-k"
-            value={topK}
-            onChange={(e) => setTopK(Number(e.target.value))}
-          >
-            {options}
-          </select>
-        </label>
-      </div>
-
-      <div className="enforcement-page__content">
-        <div className="enforcement-page__table-wrapper">
-          <table className="enforcement-table" ref={tableRef}>
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Hexagon</th>
-                <th>Priority Score</th>
-                <th>Exposure</th>
-                <th>Magnitude</th>
-                <th>Actionability</th>
-              </tr>
-            </thead>
-            {tableContent}
-          </table>
+    <div className="w-full h-full flex flex-col md:flex-row bg-black overflow-hidden">
+      {/* Left Column: Data Table (55%) */}
+      <section className="w-full md:w-[55%] h-full flex flex-col bg-black p-6 border-r border-apple-border">
+        {/* Page Header */}
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-white tracking-tight leading-snug">
+              Enforcement Priorities
+            </h2>
+            <p className="text-xs text-apple-secondary font-sans mt-0.5">
+              Real-time localized intervention targets based on compound risk scores.
+            </p>
+          </div>
+          <div className="relative group cursor-pointer rounded-full px-4 py-2 bg-apple-card hover:bg-apple-modal border border-apple-border transition-colors flex items-center gap-2 select-none">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-apple-secondary">Show:</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-white">Top 10</span>
+          </div>
         </div>
 
-        <div className="enforcement-page__map-wrapper">
-          <MapView
-            city="bengaluru"
-            colorBy="priority_score"
-            onHexagonClick={(h3) => setSelectedCell(h3)}
-            highlightedCells={selectedCell ? [selectedCell] : []}
-            hexagonData={mapData as any}
-            fullHeight
+        {/* Priorities Table Structure */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Table Headers */}
+          <div className="grid grid-cols-[50px_1fr_120px_90px_100px_110px] gap-4 px-4 py-3 border-b border-apple-border mb-2">
+            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">RANK</div>
+            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase pl-2">HEXAGON</div>
+            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">SCORE</div>
+            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase text-right">EXPOSURE</div>
+            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">MAGNITUDE</div>
+            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase text-right">ACTION</div>
+          </div>
+
+          {/* Scrollable Rows */}
+          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+            {priorities.map((item, idx) => {
+              const rankStr = String(idx + 1).padStart(2, '0');
+              const isSelected = activeHex?.id === item.id;
+              const actionStyle = getActionabilityStyle(item.actionability);
+
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedHex(item)}
+                  className={`group grid grid-cols-[50px_1fr_120px_90px_100px_110px] gap-4 items-center rounded-xl cursor-pointer transition-all duration-200 py-3 relative overflow-hidden ${
+                    isSelected
+                      ? 'bg-apple-card border border-brand-blue/30 shadow-lg'
+                      : 'bg-apple-card/40 hover:bg-apple-card border border-transparent'
+                  }`}
+                >
+                  {/* Active selected state line indicator */}
+                  {isSelected && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-blue" />
+                  )}
+
+                  {/* Rank */}
+                  <div className="font-mono text-xs font-bold text-apple-secondary text-right pr-2">
+                    {rankStr}
+                  </div>
+
+                  {/* Hexagon & Name */}
+                  <div className="flex items-center gap-3 pl-2 min-w-0">
+                    <div
+                      className="w-2.5 h-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.priorityScore > 95 ? '#ff453a' : '#FF9F0A' }}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs font-bold text-white truncate">
+                        {item.id}
+                      </div>
+                      <div className="text-[10px] font-sans text-apple-secondary truncate mt-0.5">
+                        {item.name}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Priority Score */}
+                  <div className="font-mono text-sm font-bold text-white text-right">
+                    {item.priorityScore}
+                    <div className="text-[9px] font-mono font-normal mt-0.5" style={{ color: item.changeVal >= 0 ? '#ff453a' : '#34C759' }}>
+                      {item.changeVal >= 0 ? `+${item.changeVal}` : item.changeVal} vs prev
+                    </div>
+                  </div>
+
+                  {/* Exposure */}
+                  <div className="font-sans text-xs font-bold text-apple-secondary text-right select-none">
+                    {item.exposure}
+                  </div>
+
+                  {/* Magnitude */}
+                  <div className="font-mono text-xs text-white text-right">
+                    +{item.magnitude}%
+                    <div className="text-[9px] font-mono text-apple-secondary mt-0.5 select-none">
+                      {item.confidence}% conf
+                    </div>
+                  </div>
+
+                  {/* Actionability Status Pill */}
+                  <div className="flex justify-end items-center pr-3">
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold select-none ${actionStyle.bg}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${actionStyle.dot}`} />
+                      {actionStyle.text}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Right Column: Digital Map + Detail Bottom Sheet (45%) */}
+      <section className="w-full md:w-[45%] h-full relative bg-apple-bg flex flex-col justify-between">
+        {/* Background Map Placeholder */}
+        <div className="flex-1 w-full h-full relative">
+          <MapContainer
+            selectedHex={activeHex}
+            onSelectHex={(hex) => setSelectedHex(hex)}
+            allHexes={priorities}
+            viewMode="enforcement"
           />
-        </div>
-      </div>
 
-      {selectedHex && (
-        <HexDetailPanel
-          hexagon={selectedHex}
-          onClose={() => setSelectedCell(null)}
-        />
-      )}
+          {/* Simulated Tactical Overlay Panels */}
+          <div className="absolute top-20 right-4 flex flex-col gap-2 z-10">
+            <button className="w-9 h-9 rounded-full bg-apple-modal/90 backdrop-blur-md border border-apple-border flex items-center justify-center text-white hover:bg-apple-card transition-colors shadow-lg">
+              <Plus size={16} />
+            </button>
+            <button className="w-9 h-9 rounded-full bg-apple-modal/90 backdrop-blur-md border border-apple-border flex items-center justify-center text-white hover:bg-apple-card transition-colors shadow-lg">
+              <Minus size={16} />
+            </button>
+            <button className="w-9 h-9 rounded-full bg-apple-modal/90 backdrop-blur-md border border-apple-border flex items-center justify-center text-white hover:bg-apple-card transition-colors shadow-lg mt-3">
+              <Navigation size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* Enforcement Active Hex Details Bottom Sheet */}
+        {activeHex && (
+          <div className="p-4 sm:p-6 bg-apple-modal/95 border-t border-apple-border backdrop-blur-xl z-20 shadow-2xl relative">
+            <div className="max-w-xl mx-auto flex flex-col gap-5">
+              {/* Top Row Header info */}
+              <div className="flex justify-between items-start border-b border-apple-border/50 pb-4">
+                <div className="flex gap-3.5 items-center">
+                  <div className="h-11 w-11 rounded-xl bg-brand-red/10 border border-brand-red/20 flex items-center justify-center text-brand-red shrink-0">
+                    <ShieldAlert size={20} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-mono text-sm font-bold text-white tracking-tight">
+                        {activeHex.id}
+                      </h3>
+                      <span className="bg-brand-red text-white font-mono text-[9px] font-bold px-2 py-0.5 rounded-full select-none">
+                        PRIORITY 1
+                      </span>
+                    </div>
+                    <p className="text-xs text-apple-secondary font-sans leading-relaxed mt-0.5">
+                      {activeHex.name} Industrial Sector
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedHex(null)}
+                  className="w-8 h-8 rounded-full bg-apple-card hover:bg-apple-border/20 border border-apple-border flex items-center justify-center text-apple-secondary hover:text-white transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Specs Metric Row */}
+              <div className="grid grid-cols-3 gap-6">
+                {/* Metric 1 */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary">
+                    PM2.5 CONCENTRATION
+                  </span>
+                  <div className="flex items-end gap-1.5 mt-1">
+                    <span className="font-mono text-xl font-bold text-brand-red leading-none select-none">
+                      {activeHex.pm25}
+                    </span>
+                    <span className="font-mono text-[9px] text-apple-secondary pb-0.5">
+                      µg/m³
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metric 2 */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary">
+                    PRIMARY SOURCE
+                  </span>
+                  <div className="text-xs font-semibold text-white flex items-center gap-1.5 mt-1">
+                    <SourceIcon sourceType={activeHex.primarySource} size={16} />
+                    {activeHex.primarySource}
+                  </div>
+                </div>
+
+                {/* Action dispatch button */}
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleDispatch(activeHex.id)}
+                    disabled={dispatchedUnits[activeHex.id]}
+                    className={`px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors duration-200 flex items-center gap-1.5 shadow-md ${
+                      dispatchedUnits[activeHex.id]
+                        ? 'bg-brand-green/20 text-brand-green border border-brand-green/30 cursor-not-allowed'
+                        : 'bg-brand-blue hover:bg-blue-600 text-white'
+                    }`}
+                  >
+                    {dispatchedUnits[activeHex.id] ? (
+                      <>
+                        <ShieldCheck size={12} /> DISPATCHED
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert size={12} /> DISPATCH UNIT
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
