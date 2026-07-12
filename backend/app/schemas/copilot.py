@@ -15,6 +15,7 @@ class CopilotQueryRequest(BaseModel):
     profile: str = Field(default="general", description="Advisory profile")
     language: str = Field(default="en", description="Language code")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of top results")
+    force_dynamic_planning: bool = Field(default=False, description="Opt into multi-step AI planning (slower, more thorough)")
 
 
 class AgentToolResult(BaseModel):

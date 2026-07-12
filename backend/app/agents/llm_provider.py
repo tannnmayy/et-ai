@@ -121,9 +121,11 @@ class LLMProvider:
     def _call_groq(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         try:
             import openai
+            from openai import APITimeoutError
             client = openai.OpenAI(
                 api_key=self.api_key,
                 base_url="https://api.groq.com/openai/v1",
+                timeout=15.0,
             )
             model = self.model or "openai/gpt-oss-120b"
             system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
@@ -139,6 +141,9 @@ class LLMProvider:
             return resp.choices[0].message.content
         except ImportError:
             logger.warning("openai package not installed")
+            return None
+        except APITimeoutError:
+            logger.warning("Groq API call timed out after 15s — falling back to deterministic mode")
             return None
         except Exception as exc:
             logger.warning("Groq call failed: %s", exc)

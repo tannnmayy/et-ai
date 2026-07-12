@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useCopilotHistory, useSendMessage } from '../api/client';
 import { ChatMessage } from '../types';
-import { Bot, User, Send, Plus, Mic, ChevronRight, ChevronDown, CheckCircle, Factory, Shield, Map, Paperclip } from 'lucide-react';
+import { Bot, User, Send, Plus, Mic, ChevronRight, ChevronDown, CheckCircle, Factory, Shield, Map, Paperclip, AlertCircle } from 'lucide-react';
 
 export default function CopilotPage() {
-  const { data: messages = [], isLoading } = useCopilotHistory();
+  const { data: messages = [], isError, isLoading } = useCopilotHistory();
   const sendMessageMutation = useSendMessage();
   const [inputText, setInputText] = useState('');
-  const [openReasoning, setOpenReasoning] = useState<Record<string, boolean>>({ 'msg-2': true });
+  const [openReasoning, setOpenReasoning] = useState<Record<string, boolean>>({});
+  const [deepReasoning, setDeepReasoning] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,7 +22,13 @@ export default function CopilotPage() {
 
     const text = inputText;
     setInputText('');
-    await sendMessageMutation.mutateAsync(text);
+    setMutationError(null);
+    try {
+      await sendMessageMutation.mutateAsync({ message: text, force_dynamic_planning: deepReasoning });
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || 'Request failed';
+      setMutationError(detail);
+    }
   };
 
   const handleSuggestedAction = (action: string) => {
@@ -39,6 +47,27 @@ export default function CopilotPage() {
           SYSTEM INITIALIZED: COPILOT ALPHA
         </span>
       </div>
+
+      {/* Error states */}
+      {isError && (
+        <div className="flex justify-center pt-20">
+          <div className="flex items-center gap-3 px-5 py-3 bg-brand-red/10 border border-brand-red/20 rounded-2xl text-sm text-brand-red font-mono max-w-md text-center">
+            <AlertCircle size={16} />
+            Unable to load conversation history. Backend may be offline.
+          </div>
+        </div>
+      )}
+
+      {mutationError && (
+        <div className="flex justify-center">
+          <div className="flex items-center gap-3 px-5 py-3 bg-brand-red/10 border border-brand-red/20 rounded-2xl text-sm text-brand-red font-mono max-w-md text-center">
+            <AlertCircle size={16} />
+            {deepReasoning
+              ? `Deep Reasoning failed: ${mutationError}`
+              : `Request failed: ${mutationError}`}
+          </div>
+        </div>
+      )}
 
       {/* Main message feed */}
       <div className="flex-1 overflow-y-auto px-4 py-16 md:px-8 space-y-6 flex flex-col pb-44">
@@ -121,8 +150,14 @@ export default function CopilotPage() {
               <div className="w-8 h-8 rounded-full bg-brand-blue/10 border border-brand-blue/20 flex items-center justify-center text-brand-blue animate-spin">
                 <Bot size={15} />
               </div>
-              <div className="px-5 py-3.5 bg-apple-card/40 border border-apple-border/50 text-apple-secondary rounded-2xl rounded-tl-[4px] text-xs font-mono select-none">
-                Copilot is compiling telemetry logs...
+              <div className={`px-5 py-3.5 rounded-2xl rounded-tl-[4px] text-xs font-mono select-none ${
+                deepReasoning
+                  ? 'bg-amber-900/20 border border-amber-600/30 text-amber-400'
+                  : 'bg-apple-card/40 border border-apple-border/50 text-apple-secondary'
+              }`}>
+                {deepReasoning
+                  ? 'Gathering data... → Analyzing sources... → Composing answer...'
+                  : 'Copilot is compiling telemetry logs...'}
               </div>
             </div>
           </div>
@@ -135,6 +170,35 @@ export default function CopilotPage() {
       <div className="absolute bottom-0 left-0 w-full p-4 md:p-6 bg-gradient-to-t from-black via-black/95 to-transparent pb-8 z-20">
         <div className="max-w-3xl mx-auto flex flex-col gap-4">
           
+          {/* Deep Reasoning Mode Toggle */}
+          <div className="flex justify-center items-center gap-2 select-none mb-1">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={deepReasoning}
+                onClick={() => setDeepReasoning(!deepReasoning)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${
+                  deepReasoning ? 'bg-amber-600' : 'bg-apple-border/50'
+                }`}
+              >
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-200 ${
+                  deepReasoning ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                }`} />
+              </button>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                deepReasoning ? 'text-amber-400' : 'text-apple-secondary'
+              }`}>
+                Deep Reasoning Mode
+              </span>
+            </label>
+            {deepReasoning && (
+              <span className="text-[9px] text-amber-500/70 font-mono tracking-tight">
+                Uses multi-step AI planning — slower, more thorough
+              </span>
+            )}
+          </div>
+
           {/* Quick interactive pills suggestions */}
           <div className="flex justify-center gap-3 select-none">
             <button

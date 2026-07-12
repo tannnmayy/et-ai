@@ -46,7 +46,7 @@ def hexagon_attribution(
 def city_grid_attribution(
     city: str = "bengaluru",
     include_fusion: bool = False,
-    max_hexagons: int | None = Query(default=None, ge=1, le=2000, description="Optional evenly sampled grid size for interactive maps"),
+    max_hexagons: int | None = Query(default=2000, ge=1, le=9999, description="Evenly sampled grid size (default 2000 for interactive maps; pass -1 for full grid)"),
 ) -> CityGridAttributionResponse:
     result = get_city_grid_attribution(city=city, include_fusion=include_fusion, max_hexagons=max_hexagons)
     if "error" in result:
@@ -64,8 +64,9 @@ def city_grid_attribution(
 )
 def city_grid_fusion(
     city: str = "bengaluru",
+    max_hexagons: int | None = Query(default=2000, ge=1, le=9999, description="Evenly sampled grid size (default 2000 for interactive maps; pass -1 for full grid)"),
 ) -> CityGridFusionResponse:
-    result = get_city_grid_fusion_only(city=city)
+    result = get_city_grid_fusion_only(city=city, max_hexagons=max_hexagons)
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return CityGridFusionResponse(**result)

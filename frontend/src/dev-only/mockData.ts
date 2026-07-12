@@ -1,3 +1,8 @@
+// ⚠️  DEV-ONLY: This file is quarantined from production code paths.
+// It must NEVER be imported by apiClient.ts or any production service.
+// Contains fake (and geographically wrong) data — e.g. "Okhla Phase II"
+// is a Delhi location, not Bengaluru. Use only for local frontend-only
+// prototyping with a stopped backend.
 import { Station, PriorityHex, ChatMessage, Neighbourhood } from '../types';
 
 export const mockStations: Station[] = [

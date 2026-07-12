@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useDashboardData } from '../api/client';
 import { Neighbourhood } from '../types';
-import { Search, Plus, X, BarChart3, Shield, Info, Building2, HelpCircle } from 'lucide-react';
+import { Search, Plus, X, BarChart3, Shield, Info, Building2, HelpCircle, AlertTriangle } from 'lucide-react';
 
 export default function NeighbourhoodsPage() {
-  const { data: dashboard, isLoading } = useDashboardData();
+  const { data: dashboard, isError, isLoading } = useDashboardData();
   const [activeView, setActiveView] = useState<'analytics' | 'coming-soon'>('analytics');
   const [compareList, setCompareList] = useState<Neighbourhood[]>([
     {
@@ -53,6 +53,34 @@ export default function NeighbourhoodsPage() {
     handleAddLocation();
     setSearchInput('');
   };
+
+  if (isLoading) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-mono uppercase tracking-widest text-apple-secondary">Loading dashboard data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
+          <div className="w-12 h-12 rounded-full bg-brand-red/10 border border-brand-red/20 flex items-center justify-center text-brand-red">
+            <AlertTriangle size={24} />
+          </div>
+          <h2 className="text-lg font-bold text-white">Dashboard Unavailable</h2>
+          <p className="text-sm text-apple-secondary leading-relaxed">
+            Unable to load neighbourhood analytics from the API.
+            Comparison cards below use hardcoded demo data for layout demonstration.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full bg-black overflow-y-auto px-6 py-8 md:px-8 space-y-12">

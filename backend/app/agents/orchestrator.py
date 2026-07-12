@@ -225,6 +225,7 @@ def run_orchestrator(
     language: str = "en",
     top_k: int = 5,
     explicit_intent: str | None = None,
+    force_dynamic_planning: bool = False,
 ) -> dict[str, Any]:
 
     request_id = str(uuid.uuid4())
@@ -251,9 +252,17 @@ def run_orchestrator(
     audit.set_intent(intent.value)
 
     llm = get_llm_provider()
-    # The hosted path is deliberately LLM-led: intent and tool selection come
-    # from the LangGraph planner rather than the legacy keyword router.
-    if not explicit_intent and llm.is_available:
+
+    # Explicit override: user opted into deep reasoning
+    if force_dynamic_planning and llm.is_available:
+        intent = Intent.dynamic_planning
+        state.intent = intent
+        audit.set_intent(intent.value)
+
+    # Automatic dynamic planning only for genuinely ambiguous queries
+    elif not explicit_intent and llm.is_available and (
+        intent == Intent.unsupported or _is_compound_query(query)
+    ):
         intent = Intent.dynamic_planning
         state.intent = intent
         audit.set_intent(intent.value)

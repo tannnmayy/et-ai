@@ -5,7 +5,7 @@ export function useDashboardData() {
   return useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
-      const { data } = await apiClient.get<any>('/analytics/dashboard');
+      const { data } = await apiClient.get('/intelligence/cities/bengaluru/briefing');
       return data;
     },
   });

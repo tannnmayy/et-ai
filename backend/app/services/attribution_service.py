@@ -35,12 +35,34 @@ def _haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) ->
     return _EARTH_RADIUS_M * 2 * asin(sqrt(a))
 
 
+def _haversine_distance_m_vectorized(
+    lat1: float, lon1: float, lats2: np.ndarray, lons2: np.ndarray
+) -> np.ndarray:
+    lat1_r, lon1_r = np.radians(lat1), np.radians(lon1)
+    lats2_r, lons2_r = np.radians(lats2), np.radians(lons2)
+    dlat = lats2_r - lat1_r
+    dlon = lons2_r - lon1_r
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1_r) * np.cos(lats2_r) * np.sin(dlon / 2.0) ** 2
+    return 2 * _EARTH_RADIUS_M * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
+
 def _bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlon = radians(lon2 - lon1)
     y = sin(dlon) * cos(radians(lat2))
     x = cos(radians(lat1)) * sin(radians(lat2)) - sin(radians(lat1)) * cos(radians(lat2)) * cos(dlon)
     bearing = (np.degrees(np.arctan2(y, x)) + 360) % 360
     return bearing
+
+
+def _bearing_deg_vectorized(
+    lat1: float, lon1: float, lats2: np.ndarray, lons2: np.ndarray
+) -> np.ndarray:
+    lat1_r, lon1_r = np.radians(lat1), np.radians(lon1)
+    lats2_r, lons2_r = np.radians(lats2), np.radians(lons2)
+    dlon = lons2_r - lon1_r
+    y = np.sin(dlon) * np.cos(lats2_r)
+    x = np.cos(lat1_r) * np.sin(lats2_r) - np.sin(lat1_r) * np.cos(lats2_r) * np.cos(dlon)
+    return (np.degrees(np.arctan2(y, x)) + 360) % 360
 
 
 def _cosine_weight(
@@ -50,6 +72,15 @@ def _cosine_weight(
     air_movement_dir = (wind_direction_met_deg + 180) % 360
     angle_diff_rad = radians(bearing_source_to_target_deg - air_movement_dir)
     return max(0.0, cos(angle_diff_rad))
+
+
+def _cosine_weight_vectorized(
+    bearings: np.ndarray,
+    wind_direction_met_deg: float,
+) -> np.ndarray:
+    air_movement_dir = (wind_direction_met_deg + 180) % 360
+    angle_diff_rad = np.radians(bearings - air_movement_dir)
+    return np.maximum(0.0, np.cos(angle_diff_rad))
 
 
 def _load_hexagon_features() -> pd.DataFrame:
@@ -109,10 +140,9 @@ def compute_attribution_for_hexagon(
     wd = wind_data.get("direction_deg")
     ws = wind_data.get("speed_kmh")
 
-    distances_m = np.array([
-        _haversine_distance_m(tlat, tlon, r["center_lat"], r["center_lon"])
-        for _, r in hex_df.iterrows()
-    ])
+    lats_arr = hex_df["center_lat"].to_numpy()
+    lons_arr = hex_df["center_lon"].to_numpy()
+    distances_m = _haversine_distance_m_vectorized(tlat, tlon, lats_arr, lons_arr)
     within_range = (distances_m <= search_radius_m) & (distances_m > 0)
     source_indices = np.where(within_range)[0]
     source_distances = distances_m[source_indices]
@@ -149,11 +179,11 @@ def compute_attribution_for_hexagon(
     idw_weights = 1.0 / np.maximum(source_distances, 1.0)
 
     if method == "wind_weighted" and wd is not None:
-        bearings = np.array([
-            _bearing_deg(r["center_lat"], r["center_lon"], tlat, tlon)
-            for _, r in src_df.iterrows()
-        ])
-        dir_weights = np.array([_cosine_weight(b, wd) for b in bearings])
+        src_lats = src_df["center_lat"].to_numpy()
+        src_lons = src_df["center_lon"].to_numpy()
+        bearings_target_to_source = _bearing_deg_vectorized(tlat, tlon, src_lats, src_lons)
+        bearings = (bearings_target_to_source + 180) % 360
+        dir_weights = _cosine_weight_vectorized(bearings, wd)
         combined_weights = idw_weights * dir_weights
     else:
         combined_weights = idw_weights
@@ -445,6 +475,7 @@ def get_city_grid_attribution(
 
 def get_city_grid_fusion_only(
     city: str = "bengaluru",
+    max_hexagons: int | None = None,
 ) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
@@ -452,6 +483,10 @@ def get_city_grid_fusion_only(
     hex_df = _load_hexagon_features()
     if hex_df.empty:
         return {"error": "Hexagon features not available. Run pipeline/build_hexagon_features.py first."}
+
+    if max_hexagons is not None and len(hex_df) > max_hexagons:
+        indices = np.linspace(0, len(hex_df) - 1, max_hexagons, dtype=int)
+        hex_df = hex_df.iloc[indices].reset_index(drop=True)
 
     wind_data = _get_current_wind(city)
     firms_lookup = _build_firms_lookup(city)

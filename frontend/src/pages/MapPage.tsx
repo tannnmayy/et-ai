@@ -6,10 +6,38 @@ import SourceIcon from '../components/SourceIcon';
 import { Shield, AlertTriangle, Compass, Wind, ArrowRight, ChevronDown, CheckCircle, MapPin } from 'lucide-react';
 
 export default function MapPage() {
-  const { data: priorities = [], isLoading: loadingPriorities } = usePriorities();
-  const { data: stations = [] } = useStations();
+  const { data: priorities = [], isError: prioritiesError, isLoading: prioritiesLoading } = usePriorities();
+  const { data: stations = [], isError: stationsError, isLoading: stationsLoading } = useStations();
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
+
+  if (prioritiesLoading || stationsLoading) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-mono uppercase tracking-widest text-apple-secondary">Loading sensor data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (prioritiesError && stationsError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
+          <div className="w-12 h-12 rounded-full bg-brand-red/10 border border-brand-red/20 flex items-center justify-center text-brand-red">
+            <AlertTriangle size={24} />
+          </div>
+          <h2 className="text-lg font-bold text-white">Data Unavailable</h2>
+          <p className="text-sm text-apple-secondary leading-relaxed">
+            Unable to load enforcement priorities or station data from the API. 
+            Please check that the backend is running and try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Default to first hex (Okhla / Whitefield) for rendering side panels
   const activeHex = selectedHex || priorities[0] || null;

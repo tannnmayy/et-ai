@@ -93,6 +93,7 @@ def copilot_query(body: CopilotQueryRequest) -> CopilotResponse:
         profile=body.profile,
         language=body.language,
         top_k=body.top_k,
+        force_dynamic_planning=body.force_dynamic_planning,
     )
     return CopilotResponse(**result)
 

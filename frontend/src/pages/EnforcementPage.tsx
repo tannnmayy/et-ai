@@ -6,11 +6,39 @@ import SourceIcon from '../components/SourceIcon';
 import { AlertCircle, ShieldAlert, X, ChevronRight, Compass, Plus, Minus, Navigation, Info, ShieldCheck } from 'lucide-react';
 
 export default function EnforcementPage() {
-  const { data: priorities = [], isLoading } = usePriorities();
+  const { data: priorities = [], isError, isLoading } = usePriorities();
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
 
   const activeHex = selectedHex || priorities[0] || null;
+
+  if (isLoading) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-mono uppercase tracking-widest text-apple-secondary">Loading enforcement data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
+          <div className="w-12 h-12 rounded-full bg-brand-red/10 border border-brand-red/20 flex items-center justify-center text-brand-red">
+            <AlertCircle size={24} />
+          </div>
+          <h2 className="text-lg font-bold text-white">Data Unavailable</h2>
+          <p className="text-sm text-apple-secondary leading-relaxed">
+            Unable to load enforcement priorities from the API.
+            Please check that the backend is running and try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const handleDispatch = (hexId: string) => {
     setDispatchedUnits(prev => ({ ...prev, [hexId]: true }));
