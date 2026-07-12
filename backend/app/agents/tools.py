@@ -193,7 +193,7 @@ def tool_get_attribution(city: str = "bengaluru", h3_cell: str | None = None, la
             cell = _h3.latlng_to_cell(lat, lon, 9)
             result = get_single_hexagon_attribution(cell, city=city, include_fusion=include_fusion)
         else:
-            result = get_city_grid_attribution(city=city, include_fusion=include_fusion)
+            result = get_city_grid_attribution(city=city, include_fusion=include_fusion, max_hexagons=2000)
         if "error" in result:
             return {"_tool_error": result["error"], "_error_type": "ServiceError"}
         return result

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "retrieved_at": "2026-07-11T19:31:54.402448+00:00",
+  "retrieved_at": "2026-07-12T01:31:48.609686+00:00",
   "city": "bengaluru",
   "source": "VIIRS_NOAA20_NRT",
   "data": {
@@ -12,6 +12,6 @@
     "freshness": "fresh",
     "age_minutes": 0.0,
     "warnings": [],
-    "retrieved_at": "2026-07-11T19:31:54.400698+00:00"
+    "retrieved_at": "2026-07-12T01:31:48.609686+00:00"
   }
 }

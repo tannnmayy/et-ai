@@ -331,7 +331,7 @@ class TestGroqProvider:
         import openai as openai_module
         constructor_kwargs = {}
 
-        def mock_constructor(api_key=None, base_url=None):
+        def mock_constructor(api_key=None, base_url=None, **kwargs):
             constructor_kwargs["api_key"] = api_key
             constructor_kwargs["base_url"] = base_url
             raise ImportError("stop before real call")

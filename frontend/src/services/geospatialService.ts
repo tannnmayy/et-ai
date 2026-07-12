@@ -70,6 +70,12 @@ function mapRealHex(hex: any, index: number) {
     pm25: Math.round(hex.fused_pm25 || hex.predicted_pm25 || 0),
     primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
     sourceType: sourceTypeMap[maxSource] || ('Heavy Ind.' as const),
+    sourceAttribution: {
+      traffic: hex.source_attribution?.traffic ?? 0,
+      industrial: hex.source_attribution?.industrial ?? 0,
+      construction: hex.source_attribution?.construction ?? 0,
+      burning: hex.source_attribution?.burning ?? 0,
+    },
     lat,
     lng,
   };

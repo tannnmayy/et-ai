@@ -39,7 +39,7 @@ export default function MapPage() {
     );
   }
 
-  // Default to first hex (Okhla / Whitefield) for rendering side panels
+  // Default to first hex for rendering side panels
   const activeHex = selectedHex || priorities[0] || null;
 
   const handleDispatch = (hexId: string) => {
@@ -137,29 +137,78 @@ export default function MapPage() {
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between items-center text-[10px] font-mono uppercase text-apple-secondary">
                   <span>Source Attribution</span>
-                  <span className="text-brand-blue flex items-center gap-1 bg-brand-blue/10 px-2 py-0.5 rounded-full font-bold">
-                    WIND_WEIGHTED
-                  </span>
+                  {activeHex.sourceAttribution && (() => {
+                    const total = activeHex.sourceAttribution.traffic + activeHex.sourceAttribution.industrial + activeHex.sourceAttribution.construction + activeHex.sourceAttribution.burning;
+                    return total > 0 ? (
+                      <span className="text-brand-blue flex items-center gap-1 bg-brand-blue/10 px-2 py-0.5 rounded-full font-bold">
+                        WIND_WEIGHTED
+                      </span>
+                    ) : (
+                      <span className="text-apple-secondary flex items-center gap-1 bg-apple-border/20 px-2 py-0.5 rounded-full font-bold">
+                        UNAVAILABLE
+                      </span>
+                    );
+                  })()}
                 </div>
 
-                {/* Multicolored bar */}
-                <div className="w-full h-3 flex rounded-full overflow-hidden mt-1.5 bg-apple-border/50">
-                  <div className="bg-[#A2845E] w-[45%]" title="Construction: 45%" />
-                  <div className="bg-[#5AC8FA] w-[30%]" title="Traffic: 30%" />
-                  <div className="bg-brand-orange w-[15%]" title="Industrial: 15%" />
-                  <div className="bg-brand-red w-[10%]" title="Waste Burn: 10%" />
-                </div>
+                {(() => {
+                  const attr = activeHex.sourceAttribution;
+                  const total = attr ? (attr.traffic + attr.industrial + attr.construction + attr.burning) : 0;
+                  if (!attr || total === 0) {
+                    return (
+                      <div className="w-full h-12 flex items-center justify-center text-[10px] font-mono text-apple-secondary bg-apple-border/10 rounded-lg">
+                        <span className="flex items-center gap-1.5">
+                          <AlertTriangle size={11} />
+                          No attribution data available
+                        </span>
+                      </div>
+                    );
+                  }
 
-                <div className="flex flex-wrap justify-between text-[10px] font-mono text-apple-secondary mt-1.5 gap-y-1">
-                  <div className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#A2845E]" />
-                    45% Const.
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#5AC8FA]" />
-                    30% Traffic
-                  </div>
-                </div>
+                  const pct = (v: number) => `${Math.round(v * 100)}%`;
+                  const pctVal = (v: number) => Math.round(v * 100);
+                  const segments = [
+                    { key: 'construction', label: 'Const.', color: '#A2845E', value: pctVal(attr.construction) },
+                    { key: 'traffic', label: 'Traffic', color: '#5AC8FA', value: pctVal(attr.traffic) },
+                    { key: 'industrial', label: 'Industrial', color: '#FF9F0A', value: pctVal(attr.industrial) },
+                    { key: 'burning', label: 'Waste Burn', color: '#FF453A', value: pctVal(attr.burning) },
+                  ].filter(s => s.value > 0);
+
+                  if (segments.length === 0) {
+                    return (
+                      <div className="w-full h-12 flex items-center justify-center text-[10px] font-mono text-apple-secondary bg-apple-border/10 rounded-lg">
+                        <span className="flex items-center gap-1.5">
+                          <AlertTriangle size={11} />
+                          No attribution data available
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <div className="w-full h-3 flex rounded-full overflow-hidden mt-1.5 bg-apple-border/50">
+                        {segments.map(s => (
+                          <div
+                            key={s.key}
+                            className="transition-all duration-500"
+                            style={{ backgroundColor: s.color, width: `${s.value}%` }}
+                            title={`${s.label}: ${s.value}%`}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-mono text-apple-secondary mt-1.5">
+                        {segments.map(s => (
+                          <div key={s.key} className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                            {s.value}% {s.label}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Signature Wind compass gauge */}

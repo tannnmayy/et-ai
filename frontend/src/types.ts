@@ -15,14 +15,15 @@ export interface PriorityHex {
   id: string;
   name: string;
   priorityScore: number;
-  changeVal: number; // e.g. +2.4 or -1.2
+  changeVal: number;
   exposure: 'Low' | 'Medium' | 'High' | 'Critical';
-  magnitude: number; // e.g. 42 (percent)
-  confidence: number; // e.g. 92 (percent)
+  magnitude: number;
+  confidence: number;
   actionability: 'IMMEDIATE' | 'HIGH' | 'MONITOR';
   pm25: number;
   primarySource: string;
   sourceType: 'Heavy Ind.' | 'Construction' | 'Traffic Hub' | 'Waste Burning';
+  sourceAttribution: { traffic: number; industrial: number; construction: number; burning: number };
   lat: number;
   lng: number;
 }
