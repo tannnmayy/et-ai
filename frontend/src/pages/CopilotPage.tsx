@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useCopilotHistory, useSendMessage } from '../api/client';
+import { useSendMessage } from '../api/client';
 import { ChatMessage } from '../types';
 import { Bot, User, Send, Plus, Mic, ChevronRight, ChevronDown, CheckCircle, Factory, Shield, Map, Paperclip, AlertCircle } from 'lucide-react';
 
 export default function CopilotPage() {
-  const { data: messages = [], isError, isLoading } = useCopilotHistory();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const sendMessageMutation = useSendMessage();
   const [inputText, setInputText] = useState('');
   const [openReasoning, setOpenReasoning] = useState<Record<string, boolean>>({});
@@ -23,8 +23,27 @@ export default function CopilotPage() {
     const text = inputText;
     setInputText('');
     setMutationError(null);
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      sender: 'Operative K.',
+    };
+    setMessages(prev => [...prev, userMsg]);
+
     try {
-      await sendMessageMutation.mutateAsync({ message: text, force_dynamic_planning: deepReasoning });
+      const data = await sendMessageMutation.mutateAsync({ message: text, force_dynamic_planning: deepReasoning });
+      const assistantMsg: ChatMessage = {
+        id: `bot-${Date.now()}`,
+        role: 'assistant',
+        content: data.answer || data.text || JSON.stringify(data),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sender: 'Copilot AI',
+        reasoning: data.tool_steps || data.reasoning_steps,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       const detail = err?.response?.data?.detail || err?.message || 'Request failed';
       setMutationError(detail);
@@ -47,16 +66,6 @@ export default function CopilotPage() {
           SYSTEM INITIALIZED: COPILOT ALPHA
         </span>
       </div>
-
-      {/* Error states */}
-      {isError && (
-        <div className="flex justify-center pt-20">
-          <div className="flex items-center gap-3 px-5 py-3 bg-brand-red/10 border border-brand-red/20 rounded-2xl text-sm text-brand-red font-mono max-w-md text-center">
-            <AlertCircle size={16} />
-            Unable to load conversation history. Backend may be offline.
-          </div>
-        </div>
-      )}
 
       {mutationError && (
         <div className="flex justify-center">

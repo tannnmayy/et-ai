@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { usePriorities, useStations } from '../api/client';
+import { useAttributionGrid, usePriorities, useStations } from '../api/client';
 import { PriorityHex } from '../types';
 import MapContainer from '../components/MapContainer';
 import SourceIcon from '../components/SourceIcon';
 import { Shield, AlertTriangle, Compass, Wind, ArrowRight, ChevronDown, CheckCircle, MapPin } from 'lucide-react';
 
 export default function MapPage() {
-  const { data: priorities = [], isError: prioritiesError, isLoading: prioritiesLoading } = usePriorities();
-  const { data: stations = [], isError: stationsError, isLoading: stationsLoading } = useStations();
+  const { data: gridHexes = [], isError: gridError, isLoading: gridLoading } = useAttributionGrid();
+  const { data: priorities = [] } = usePriorities();
+  const { isError: stationsError, isLoading: stationsLoading } = useStations();
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
 
-  if (prioritiesLoading || stationsLoading) {
+  if (gridLoading || stationsLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4">
@@ -22,7 +23,7 @@ export default function MapPage() {
     );
   }
 
-  if (prioritiesError && stationsError) {
+  if (gridError && stationsError) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
@@ -31,7 +32,7 @@ export default function MapPage() {
           </div>
           <h2 className="text-lg font-bold text-white">Data Unavailable</h2>
           <p className="text-sm text-apple-secondary leading-relaxed">
-            Unable to load enforcement priorities or station data from the API. 
+            Unable to load attribution grid data from the API. 
             Please check that the backend is running and try again.
           </p>
         </div>
@@ -40,7 +41,7 @@ export default function MapPage() {
   }
 
   // Default to first hex for rendering side panels
-  const activeHex = selectedHex || priorities[0] || null;
+  const activeHex = selectedHex || gridHexes[0] || null;
 
   const handleDispatch = (hexId: string) => {
     setDispatchedUnits(prev => ({ ...prev, [hexId]: true }));
@@ -56,7 +57,7 @@ export default function MapPage() {
         <MapContainer
           selectedHex={activeHex}
           onSelectHex={(hex) => setSelectedHex(hex)}
-          allHexes={priorities}
+          allHexes={gridHexes}
           viewMode="aqi"
         />
 
@@ -323,6 +324,24 @@ export default function MapPage() {
                     {isDispatched && <span className="text-brand-green uppercase font-bold">DISPATCHED</span>}
                   </div>
                 </div>
+
+                {/* Explanation snippet */}
+                {p.explanation && (
+                  <div className="mt-3 pt-3 border-t border-apple-border/30">
+                    <p className="text-[9px] text-apple-secondary leading-relaxed line-clamp-2">
+                      {p.explanation.text}
+                    </p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Shield size={9} className="text-brand-blue/60" />
+                      <span className="text-[8px] font-mono text-brand-blue/60 uppercase">
+                        Guidance
+                      </span>
+                      {p.explanation.generated_by === 'llm' && (
+                        <span className="text-[7px] font-mono text-brand-blue/40 ml-auto">AI</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

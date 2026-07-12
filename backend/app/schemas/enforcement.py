@@ -11,6 +11,11 @@ class ScoringBreakdown(BaseModel):
     actionability_weight: float = Field(description="How directly enforceable the dominant source category is")
 
 
+class Explanation(BaseModel):
+    text: str
+    generated_by: str
+
+
 class RankedHexagon(BaseModel):
     h3_cell: str
     priority_score: float
@@ -19,6 +24,7 @@ class RankedHexagon(BaseModel):
     fused_pm25: float | None = None
     source_attribution: SourceAttribution
     method: str
+    explanation: Explanation = Field(description="Actionable enforcement guidance for this hexagon")
 
 
 class EnforcementPriorityResponse(BaseModel):

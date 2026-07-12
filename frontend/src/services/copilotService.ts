@@ -1,19 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '../api/axiosClient';
-import { ChatMessage } from '../types';
-
-export function useCopilotHistory() {
-  return useQuery<ChatMessage[]>({
-    queryKey: ['copilot-history'],
-    queryFn: async () => {
-      const { data } = await apiClient.get<{ history: ChatMessage[] }>('/copilot/history');
-      return data.history;
-    },
-  });
-}
 
 export function useSendMessage() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: string | { message: string; force_dynamic_planning?: boolean }) => {
       const message = typeof payload === 'string' ? payload : payload.message;
@@ -26,9 +14,6 @@ export function useSendMessage() {
         force_dynamic_planning,
       });
       return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['copilot-history'] });
     },
   });
 }

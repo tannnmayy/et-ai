@@ -27,6 +27,23 @@ _CAUSAL_EXPLANATION_SYSTEM_PROMPT = (
     "Respond only with the explanation — no extra commentary, no disclaimers."
 )
 
+_ENFORCEMENT_ACTION_SYSTEM_PROMPT = (
+    "You are an air quality enforcement advisor generating actionable intervention guidance. "
+    "Given the source attribution breakdown, risk scores, and PM2.5 estimate for a specific "
+    "Bengaluru hexagon, produce a brief actionable recommendation. "
+    "Your response must include:\n"
+    "1. The dominant actionable source category (traffic / industrial / construction / burning).\n"
+    "2. A concrete recommended enforcement action — specific enough that an inspector "
+    "could act on it (e.g. \"inspect active construction sites for dust suppression compliance\", "
+    "\"coordinate with traffic police for congestion management during peak hours\", "
+    "\"verify industrial emissions compliance at nearby factories\", "
+    "\"check for open waste burning in residential zones\").\n"
+    "3. Reference to the real data driving the recommendation (the actual exposure weight, "
+    "attributable magnitude, and PM2.5 reading — use the numbers provided).\n"
+    "Do not invent data. Do not add information not present in the breakdown. "
+    "Keep the response to 2-3 sentences. Be direct and actionable."
+)
+
 
 class LLMProvider:
     def __init__(self) -> None:

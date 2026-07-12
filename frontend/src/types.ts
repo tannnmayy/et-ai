@@ -24,6 +24,7 @@ export interface PriorityHex {
   primarySource: string;
   sourceType: 'Heavy Ind.' | 'Construction' | 'Traffic Hub' | 'Waste Burning';
   sourceAttribution: { traffic: number; industrial: number; construction: number; burning: number };
+  explanation?: { text: string; generated_by: string };
   lat: number;
   lng: number;
 }

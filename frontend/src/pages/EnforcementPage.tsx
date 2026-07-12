@@ -3,7 +3,7 @@ import { usePriorities } from '../api/client';
 import { PriorityHex } from '../types';
 import MapContainer from '../components/MapContainer';
 import SourceIcon from '../components/SourceIcon';
-import { AlertCircle, ShieldAlert, X, ChevronRight, Compass, Plus, Minus, Navigation, Info, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ShieldAlert, Shield, X, ChevronRight, Compass, Plus, Minus, Navigation, Info, ShieldCheck } from 'lucide-react';
 
 export default function EnforcementPage() {
   const { data: priorities = [], isError, isLoading } = usePriorities();
@@ -218,14 +218,14 @@ export default function EnforcementPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-mono text-sm font-bold text-white tracking-tight">
-                        {activeHex.id}
+                        {activeHex.name || activeHex.id}
                       </h3>
                       <span className="bg-brand-red text-white font-mono text-[9px] font-bold px-2 py-0.5 rounded-full select-none">
-                        PRIORITY 1
+                        PRIORITY {activeHex.priorityScore > 70 ? '1' : activeHex.priorityScore > 40 ? '2' : '3'}
                       </span>
                     </div>
                     <p className="text-xs text-apple-secondary font-sans leading-relaxed mt-0.5">
-                      {activeHex.name} Industrial Sector
+                      {activeHex.name}
                     </p>
                   </div>
                 </div>
@@ -236,6 +236,26 @@ export default function EnforcementPage() {
                   <X size={14} />
                 </button>
               </div>
+
+              {/* Actionable Explanation */}
+              {activeHex.explanation && (
+                <div className="bg-apple-card/60 border border-brand-blue/20 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={14} className="text-brand-blue" />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-brand-blue">
+                      Enforcement Guidance
+                    </span>
+                    {activeHex.explanation.generated_by === 'llm' && (
+                      <span className="text-[8px] font-mono uppercase px-1.5 py-0.5 rounded bg-brand-blue/10 text-brand-blue/60 ml-auto">
+                        AI
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-apple-secondary leading-relaxed">
+                    {activeHex.explanation.text}
+                  </p>
+                </div>
+              )}
 
               {/* Specs Metric Row */}
               <div className="grid grid-cols-3 gap-6">

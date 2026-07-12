@@ -5,6 +5,7 @@ from typing import Any
 
 from backend.app.agents.llm_provider import (
     _CAUSAL_EXPLANATION_SYSTEM_PROMPT,
+    _ENFORCEMENT_ACTION_SYSTEM_PROMPT,
     get_llm_provider,
 )
 from backend.app.config import SUPPORTED_LANGUAGES
@@ -182,4 +183,70 @@ def generate_causal_explanation(
         "language": language,
         "generated_by": "template",
         "wind_method": method,
+    }
+
+
+_ACTION_TEMPLATES: dict[str, str] = {
+    "traffic": "Coordinate with traffic police for congestion management and vehicle emissions checks during peak hours in this zone.",
+    "industrial": "Inspect nearby industrial facilities for emissions compliance and verify stack emission controls are operational.",
+    "construction": "Dispatch an inspector to verify dust suppression compliance (water spraying, covers, barriers) at active construction sites in this zone.",
+    "burning": "Patrol for open waste burning and biomass combustion in residential areas; issue fines for violations under air quality regulations.",
+}
+
+
+def generate_enforcement_action_guidance(
+    scoring_breakdown: dict[str, float] | None = None,
+    source_attribution: dict[str, float] | None = None,
+    fused_pm25: float | None = None,
+    top_source: str | None = None,
+) -> dict[str, Any]:
+    """Generate an actionable enforcement recommendation for a ranked hexagon."""
+    if not source_attribution:
+        return {
+            "text": "No source attribution available for this hexagon.",
+            "generated_by": "unavailable",
+        }
+
+    source_attr = source_attribution
+    method = "vectorised_feature_proxy"
+    top_source_name, top_source_pct = _get_top_source(source_attr) if source_attr else ("unknown", 0.0)
+    names = _SOURCE_NAMES["en"]
+    top_source_label = names.get(top_source_name, top_source_name)
+
+    llm = get_llm_provider()
+    if llm.is_available:
+        prompt = (
+            f"Generate an actionable enforcement recommendation for a Bengaluru hexagon.\n\n"
+            f"Top source: {top_source_label} at {top_source_pct * 100:.0f}%\n"
+            f"Source breakdown:\n"
+            f"  Traffic: {source_attr.get('traffic', 0) * 100:.1f}%\n"
+            f"  Industrial: {source_attr.get('industrial', 0) * 100:.1f}%\n"
+            f"  Construction: {source_attr.get('construction', 0) * 100:.1f}%\n"
+            f"  Burning: {source_attr.get('burning', 0) * 100:.1f}%\n"
+            f"Estimated PM2.5: {fused_pm25} µg/m³\n"
+        )
+        if scoring_breakdown:
+            prompt += (
+                f"Exposure weight: {scoring_breakdown.get('exposure_weight', 0):.2f}\n"
+                f"Attributable magnitude: {scoring_breakdown.get('attributable_magnitude', 0):.2f}\n"
+                f"Actionability weight: {scoring_breakdown.get('actionability_weight', 0):.2f}\n"
+            )
+        explanation = llm.summarize(
+            prompt,
+            {"source_attribution": source_attr, "scoring_breakdown": scoring_breakdown or {}},
+            system_prompt=_ENFORCEMENT_ACTION_SYSTEM_PROMPT,
+        )
+        if explanation:
+            return {
+                "text": explanation,
+                "generated_by": "llm",
+            }
+
+    template = _ACTION_TEMPLATES.get(top_source_name,
+        f"Inspect the dominant source category '{top_source_label}' in this zone and verify compliance with applicable regulations.")
+    pct_detail = f" ({top_source_pct * 100:.0f}% of attributed PM2.5)"
+    pm25_detail = f" Estimated PM2.5: {fused_pm25} µg/m³." if fused_pm25 is not None else ""
+    return {
+        "text": f"Priority source: {top_source_label}{pct_detail}. {template}{pm25_detail}",
+        "generated_by": "template",
     }

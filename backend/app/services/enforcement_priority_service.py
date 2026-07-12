@@ -16,6 +16,7 @@ from backend.app.config import (
     get_project_root,
 )
 from backend.app.services.artifact_adapter import get_latest_station_reading
+from backend.app.services.causal_explanation_service import generate_enforcement_action_guidance
 from backend.app.services.weather_forecast_service import get_weather_forecast
 from pipeline.station_registry import get_registry_stations
 
@@ -374,27 +375,34 @@ def compute_enforcement_priorities(
 
     top = result_df.head(top_k)
 
-    ranked_hexagons = [
-        {
+    ranked_hexagons = []
+    for _, row in top.iterrows():
+        source_attr = {
+            "traffic": row["traffic"],
+            "industrial": row["industrial"],
+            "construction": row["construction"],
+            "burning": row["burning"],
+        }
+        scoring = {
+            "exposure_weight": row["exposure_weight"],
+            "attributable_magnitude": row["attributable_magnitude"],
+            "actionability_weight": row["actionability_weight"],
+        }
+        explanation = generate_enforcement_action_guidance(
+            scoring_breakdown=scoring,
+            source_attribution=source_attr,
+            fused_pm25=None if row["fused_pm25"] is None else float(row["fused_pm25"]),
+        )
+        ranked_hexagons.append({
             "h3_cell": row["h3_cell"],
             "priority_score": row["priority_score"],
             "rank": int(row["rank"]),
-            "scoring_breakdown": {
-                "exposure_weight": row["exposure_weight"],
-                "attributable_magnitude": row["attributable_magnitude"],
-                "actionability_weight": row["actionability_weight"],
-            },
+            "scoring_breakdown": scoring,
             "fused_pm25": None if row["fused_pm25"] is None else float(row["fused_pm25"]),
-            "source_attribution": {
-                "traffic": row["traffic"],
-                "industrial": row["industrial"],
-                "construction": row["construction"],
-                "burning": row["burning"],
-            },
+            "source_attribution": source_attr,
             "method": "vectorised_feature_proxy",
-        }
-        for _, row in top.iterrows()
-    ]
+            "explanation": explanation,
+        })
 
     return {
         "city": SUPPORTED_CITIES.get(city, {}).get("display_name", city.title()),
