@@ -20,13 +20,16 @@ function mapRealStation(item: any): { id: string; name: string; lat: number; lng
 }
 
 function mapRealHex(hex: any, index: number) {
-  let lat = 12.9716;
-  let lng = 77.5946;
+  let lat: number;
+  let lng: number;
   try {
     const coords = cellToLatLng(hex.h3_cell);
     lat = coords[0];
     lng = coords[1];
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Skipping hexagon with unparseable h3_cell:', hex.h3_cell);
+    return null;
+  }
 
   let maxSource = 'traffic';
   let maxVal = 0;
@@ -101,7 +104,7 @@ export function usePriorities() {
     queryFn: async () => {
       const { data } = await apiClient.get('/enforcement/priority/bengaluru?top_k=20');
       if (data && data.ranked_hexagons && data.ranked_hexagons.length > 0) {
-        return data.ranked_hexagons.map((hex: any, idx: number) => mapRealHex(hex, idx));
+        return data.ranked_hexagons.map((hex: any, idx: number) => mapRealHex(hex, idx)).filter((h: PriorityHex | null): h is PriorityHex => h !== null);
       }
       throw new Error('No ranked hexagons returned from API');
     },
@@ -114,23 +117,27 @@ export function useFireDetections() {
     queryFn: async () => {
       const { data } = await apiClient.get('/geospatial/fire-detections?city=bengaluru');
       if (data && data.hexagons) {
-        return data.hexagons.map((hex: any) => {
-          let lat = 12.9716;
-          let lng = 77.5946;
+        return data.hexagons.reduce((acc: any[], hex: any) => {
+          let lat: number;
+          let lng: number;
           try {
             const coords = cellToLatLng(hex.h3_cell);
             lat = coords[0];
             lng = coords[1];
-          } catch (e) {}
-          return {
+          } catch (e) {
+            console.warn('Skipping fire detection with unparseable h3_cell:', hex.h3_cell);
+            return acc;
+          }
+          acc.push({
             id: hex.h3_cell,
             lat,
             lng,
             frp: hex.total_frp_mw,
             confidence: hex.max_confidence || 'nominal',
             timestamp: hex.window_end_utc,
-          };
-        });
+          });
+          return acc;
+        }, []);
       }
       throw new Error('No fire detections returned from API');
     },
