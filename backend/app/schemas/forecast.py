@@ -38,6 +38,7 @@ class RealHebbalForecastResponse(BaseModel):
 
 
 class MultiStationStationForecast(BaseModel):
+    model_config = {"protected_namespaces": ()}
     station_id: str
     station_name: str
     data_mode: str
@@ -51,6 +52,7 @@ class MultiStationStationForecast(BaseModel):
 
 
 class MultiStationForecastResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     city: str
     data_mode: str
     generated_at: str
@@ -60,6 +62,7 @@ class MultiStationForecastResponse(BaseModel):
 
 
 class StationStatusItem(BaseModel):
+    model_config = {"protected_namespaces": ()}
     station_id: str
     station_name: str
     data_available: bool

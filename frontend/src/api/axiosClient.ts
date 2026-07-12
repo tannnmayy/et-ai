@@ -240,7 +240,7 @@ apiClient.interceptors.request.use(async (config) => {
       });
 
       if (res.data) {
-        const reply = res.data.response_text;
+        const reply = res.data.answer || res.data.response_text || '';
         const reasoningList: any[] = [];
         if (res.data.audit_trail && res.data.audit_trail.steps) {
           res.data.audit_trail.steps.forEach((step: any, idx: number) => {

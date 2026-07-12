@@ -39,6 +39,7 @@ class QualitySnapshot(BaseModel):
 
 
 class EvaluationSnapshot(BaseModel):
+    model_config = {"protected_namespaces": ()}
     station_id: str
     model_selected_for_serving: str
     persistence_rmse: float
@@ -61,6 +62,7 @@ class EvidenceItem(BaseModel):
 
 
 class ForecastEvidenceResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     station_id: str
     station_name: str
     city: str

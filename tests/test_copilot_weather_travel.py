@@ -47,7 +47,8 @@ class TestWeatherTravelIntentDetection:
 
 
 class TestWeatherTravelOrchestrator:
-    def test_orchestrator_routes_weather_correctly(self):
+    def test_orchestrator_routes_weather_correctly(self, monkeypatch):
+        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
         with patch("backend.app.agents.travel_readiness_agent.tool_get_weather_summary") as mock_summary, \
              patch("backend.app.agents.travel_readiness_agent.tool_get_travel_readiness") as mock_travel:
             mock_summary.return_value = {
@@ -77,7 +78,8 @@ class TestWeatherTravelOrchestrator:
             assert result["structured_data"] is not None
             assert result["audit_trail"]["detected_intent"] == "weather_forecast"
 
-    def test_orchestrator_routes_travel_correctly(self):
+    def test_orchestrator_routes_travel_correctly(self, monkeypatch):
+        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
         with patch("backend.app.agents.travel_readiness_agent.tool_get_weather_summary") as mock_summary, \
              patch("backend.app.agents.travel_readiness_agent.tool_get_travel_readiness") as mock_travel:
             mock_summary.return_value = {
@@ -106,7 +108,8 @@ class TestWeatherTravelOrchestrator:
             assert result["selected_agent"] == "travel_readiness_agent"
             assert result["structured_data"] is not None
 
-    def test_audit_trail_records_weather_tools(self):
+    def test_audit_trail_records_weather_tools(self, monkeypatch):
+        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
         with patch("backend.app.agents.travel_readiness_agent.tool_get_weather_summary") as mock_summary, \
              patch("backend.app.agents.travel_readiness_agent.tool_get_travel_readiness") as mock_travel:
             mock_summary.return_value = {
@@ -141,12 +144,10 @@ class TestWeatherTravelOrchestrator:
             assert "tool_get_weather_summary" in tools
             assert "tool_get_travel_readiness" in tools
 
-    def test_deterministic_fallback_works_no_llm_key(self):
+    def test_deterministic_fallback_works_no_llm_key(self, monkeypatch):
+        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
         with patch("backend.app.agents.travel_readiness_agent.tool_get_weather_summary") as mock_summary, \
-             patch("backend.app.agents.travel_readiness_agent.tool_get_travel_readiness") as mock_travel, \
-             patch("backend.app.agents.llm_provider.get_llm_provider") as mock_llm:
-            mock_llm_instance = type("MockLLM", (), {"is_available": False, "summarize": lambda *a, **kw: ""})()
-            mock_llm.return_value = mock_llm_instance
+             patch("backend.app.agents.travel_readiness_agent.tool_get_travel_readiness") as mock_travel:
             mock_summary.return_value = {
                 "city": "bengaluru",
                 "period": "next_24h",

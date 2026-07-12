@@ -318,11 +318,11 @@ def compute_enforcement_priorities(
         vuln_weight = (vuln / EXPOSURE_WEIGHT_SATURATION_COUNT).clip(0.0, 1.0)
         res_frac = hex_df["residential_fraction"].fillna(0.0).clip(0.0, 1.0)
         res_weight = (res_frac / 0.5).clip(0.0, 1.0)
-        exposure_weight = vuln_weight.to_numpy() * 0.7 + res_weight.to_numpy() * 0.3
+        exposure_weight_s = vuln_weight * 0.7 + res_weight * 0.3
         exposure_data_source = "vulnerability_density"
     else:
         res_frac = hex_df["residential_fraction"].fillna(0.0).clip(0.0, 1.0)
-        exposure_weight = (res_frac / 0.5).clip(0.0, 1.0)
+        exposure_weight_s = (res_frac / 0.5).clip(0.0, 1.0)
         exposure_data_source = "residential_fraction_proxy"
 
     # -----------------------------------------------------------------------
@@ -347,7 +347,7 @@ def compute_enforcement_priorities(
     # 6. Priority score and ranking
     # -----------------------------------------------------------------------
     priority_score = (
-        exposure_weight.to_numpy()
+        exposure_weight_s.to_numpy()
         * attributable_magnitude
         * actionability.to_numpy()
     )
@@ -356,7 +356,7 @@ def compute_enforcement_priorities(
         {
             "h3_cell": hex_df["h3_cell"].values,
             "priority_score": np.round(priority_score, 4),
-            "exposure_weight": np.round(exposure_weight.to_numpy(), 4),
+            "exposure_weight": np.round(exposure_weight_s.to_numpy(), 4),
             "attributable_magnitude": np.round(attributable_magnitude, 4),
             "actionability_weight": np.round(actionability.to_numpy(), 4),
             "fused_pm25": np.where(np.isnan(fused_pm25_arr), None, np.round(fused_pm25_arr, 2)),

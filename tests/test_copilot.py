@@ -196,7 +196,8 @@ class TestGuardrails:
 
 
 class TestLLMFallback:
-    def test_no_api_key_uses_deterministic_mode(self) -> None:
+    def test_no_api_key_uses_deterministic_mode(self, monkeypatch) -> None:
+        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
         llm = LLMProvider()
         assert llm.is_available is False
         result = run_orchestrator(
@@ -205,7 +206,8 @@ class TestLLMFallback:
         assert result["llm_mode"] == "deterministic"
         assert result["fallback_used"] is False
 
-    def test_llm_summarize_returns_none_without_key(self) -> None:
+    def test_llm_summarize_returns_none_without_key(self, monkeypatch) -> None:
+        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
         llm = LLMProvider()
         result = llm.summarize("test prompt", {"key": "value"})
         assert result is None
@@ -217,7 +219,8 @@ class TestLLMFallback:
 
 
 class TestCopilotAPI:
-    def test_post_copilot_query(self) -> None:
+    def test_post_copilot_query(self, monkeypatch) -> None:
+        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
         req = CopilotQueryRequest(
             query="Why is Peenya forecast to worsen?",
             city="bengaluru",
