@@ -35,6 +35,10 @@ class TestEnforcementRouter:
                         "burning": 0.1,
                     },
                     "method": "wind_weighted",
+                    "explanation": {
+                        "text": f"High industrial contribution. PM2.5 {120.0 - i * 5} µg/m³.",
+                        "generated_by": "rule",
+                    },
                 }
                 for i in range(5)
             ],

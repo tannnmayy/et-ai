@@ -163,3 +163,12 @@ class NO2ColumnResponse(BaseModel):
     age_minutes: float | None = Field(None, description="Age of data in minutes")
     retrieved_at: str = Field(description="ISO UTC timestamp of data retrieval")
     warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
+
+
+class ReverseGeocodeResponse(BaseModel):
+    h3_cell: str = Field(description="H3 cell ID")
+    latitude: float = Field(description="Latitude of the queried point")
+    longitude: float = Field(description="Longitude of the queried point")
+    locality: str = Field(description="Resolved locality or sublocality name")
+    formatted_address: str = Field(description="Full formatted address from Google")
+    source_status: str = Field(description="Data freshness status: fresh, cached, or unavailable")

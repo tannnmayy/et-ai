@@ -146,11 +146,14 @@ export default function MapContainer({
               } as any)}
             >
               {allHexes.map((hex) => {
-                const color =
-                  hex.priorityScore > 90
-                    ? '#ff453a'
-                    : hex.priorityScore > 70
-                    ? '#FF9F0A'
+                const pm = hex.pm25;
+                const color = viewMode === 'aqi'
+                  ? pm <= 50 ? '#34C759'
+                    : pm <= 100 ? '#FFCC00'
+                    : pm <= 250 ? '#FF9F0A'
+                    : '#ff453a'
+                  : hex.priorityScore > 90 ? '#ff453a'
+                    : hex.priorityScore > 70 ? '#FF9F0A'
                     : '#0A84FF';
                 return (
                   <AdvancedMarker
@@ -184,12 +187,10 @@ export default function MapContainer({
             {/* Hexagon overlays for simulation */}
             {allHexes.map((hex) => {
               const { x, y } = project(hex.lat, hex.lng);
-              const color =
-                hex.priorityScore > 90
-                  ? '#ff453a'
-                  : hex.priorityScore > 70
-                  ? '#FF9F0A'
-                  : '#0A84FF';
+              const pm = hex.pm25;
+              const color = (viewMode === 'aqi')
+              ? (pm <= 50 ? '#34C759' : pm <= 100 ? '#FFCC00' : pm <= 250 ? '#FF9F0A' : '#ff453a')
+              : (hex.priorityScore > 90 ? '#ff453a' : hex.priorityScore > 70 ? '#FF9F0A' : '#0A84FF');
               const isSelected = selectedHex?.id === hex.id;
               return (
                 <g

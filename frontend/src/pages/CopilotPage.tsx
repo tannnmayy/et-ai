@@ -50,8 +50,33 @@ export default function CopilotPage() {
     }
   };
 
-  const handleSuggestedAction = (action: string) => {
-    setInputText(action);
+  const handleSuggestedAction = async (action: string) => {
+    if (action === 'exposedraft') {
+      setInputText('Fetching enforcement priority...');
+      try {
+        const { default: apiClient } = await import('../api/axiosClient');
+        const { data } = await apiClient.get('/enforcement/priority/bengaluru?top_k=1');
+        if (data && data.ranked_hexagons && data.ranked_hexagons.length > 0) {
+          const top = data.ranked_hexagons[0];
+          const areaName = top.display_name || top.area_name || top.h3_cell?.slice(-6) || 'Unknown';
+          const pm25 = Math.round(top.fused_pm25 || top.predicted_pm25 || top.pm25 || 0);
+          let domSource = '';
+          if (top.source_attribution) {
+            const sa = top.source_attribution;
+            const maxKey = Object.entries(sa).reduce((a, b) => (b[1] > a[1] ? b : a), ['', 0])[0];
+            const pct = Math.round((sa[maxKey] || 0) * 100);
+            domSource = `${maxKey} ${pct}%`;
+          }
+          setInputText(`Draft an enforcement dispatch for ${areaName} — dominant source: ${domSource}, PM2.5 ${pm25} µg/m³ — based on the current top enforcement priority.`);
+        } else {
+          setInputText('Draft an enforcement dispatch for the current top priority location in Bengaluru.');
+        }
+      } catch {
+        setInputText('Draft an enforcement dispatch for the current top priority location in Bengaluru.');
+      }
+    } else {
+      setInputText(action);
+    }
   };
 
   const toggleReasoning = (msgId: string) => {
@@ -211,7 +236,7 @@ export default function CopilotPage() {
           {/* Quick interactive pills suggestions */}
           <div className="flex justify-center gap-3 select-none">
             <button
-              onClick={() => handleSuggestedAction('Draft Dispatch to Sector 44')}
+              onClick={() => handleSuggestedAction('exposedraft')}
               className="text-[10px] font-bold uppercase tracking-wider text-apple-secondary bg-apple-card border border-apple-border rounded-full px-4 py-1.5 hover:bg-apple-modal hover:text-white transition-colors flex items-center gap-1.5"
             >
               <Shield size={11} className="text-brand-orange" />

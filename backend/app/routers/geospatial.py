@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.schemas.geospatial import (
     CityCoverageSummary,
     FireDetectionResponse,
     NO2ColumnResponse,
+    ReverseGeocodeResponse,
     StationGeospatialContext,
 )
 from backend.app.services.geospatial_evidence_service import (
@@ -16,6 +19,8 @@ from backend.app.services.geospatial_evidence_service import (
 )
 
 router = APIRouter(prefix="/geospatial", tags=["geospatial"])
+
+_REVERSE_GEOCODE_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _handle_errors(func, *args, **kwargs):
@@ -86,3 +91,46 @@ def hex_no2_column_density(city: str = "bengaluru") -> NO2ColumnResponse:
     from pipeline.sentinel5p_ingestion import get_no2_column_density
 
     return get_no2_column_density(city=city)
+
+
+@router.get(
+    "/reverse-geocode",
+    response_model=ReverseGeocodeResponse,
+    summary="Reverse geocode coordinates to a locality name",
+    description="Resolves latitude/longitude to a locality or sublocality name using the "
+    "Google Geocoding API. Results are cached in-memory by H3 cell ID. "
+    "Only hexagons within Bengaluru bounds are supported.",
+)
+def reverse_geocode(
+    lat: float = Query(..., description="Latitude of the point to reverse geocode"),
+    lon: float = Query(..., description="Longitude of the point to reverse geocode"),
+) -> ReverseGeocodeResponse:
+    import h3 as _h3
+
+    h3_cell = _h3.latlng_to_cell(lat, lon, 9)
+
+    cached = _REVERSE_GEOCODE_CACHE.get(h3_cell)
+    if cached is not None:
+        return ReverseGeocodeResponse(**cached, source_status="cached")
+
+    from backend.app.services.google_maps_client import reverse_geocode as _reverse_geocode
+
+    try:
+        result = _reverse_geocode(lat, lon)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    if not result.get("success"):
+        raise HTTPException(status_code=422, detail=result.get("error", "Reverse geocoding failed."))
+
+    data = result["data"]
+    entry = {
+        "h3_cell": "",
+        "latitude": data["latitude"],
+        "longitude": data["longitude"],
+        "locality": data["label"],
+        "formatted_address": data["formatted_address"],
+        "source_status": "fresh",
+    }
+    _REVERSE_GEOCODE_CACHE[h3_cell] = entry
+    return ReverseGeocodeResponse(h3_cell=h3_cell, **entry)

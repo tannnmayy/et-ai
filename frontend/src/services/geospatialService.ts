@@ -233,6 +233,53 @@ export function useAttributionGrid() {
     },
     staleTime: 60_000,
   });
+async function resolveHexName(h3_cell: string, lat: number, lng: number): Promise<string> {
+  const area = _lookupArea(lat, lng);
+  if (area) return area;
+  try {
+    const { data } = await apiClient.get(`/geospatial/reverse-geocode?lat=${lat}&lon=${lng}`);
+    if (data && data.locality) return data.locality;
+  } catch {
+  }
+  return `Grid ${h3_cell.slice(-6)}`;
+}
+
+export function useCityExtremes() {
+  return useQuery<{ best: PriorityHex[]; worst: PriorityHex[]; totalWithData: number; totalInGrid: number }>({
+    queryKey: ['city-extremes'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/attribution/city/bengaluru/extremes?n=15');
+      if (!data || !data.best || !data.worst) {
+        throw new Error('No extremes data returned from API');
+      }
+      const mapExtreme = (h: any) => ({
+        id: h.h3_cell,
+        name: '',
+        priorityScore: Math.round(h.fused_pm25 || 0),
+        changeVal: 0,
+        exposure: 'Medium' as const,
+        magnitude: 0,
+        confidence: 0,
+        actionability: 'MONITOR' as const,
+        pm25: Math.round(h.fused_pm25 || 0),
+        primarySource: '',
+        sourceType: 'Heavy Ind.' as const,
+        sourceAttribution: {
+          traffic: h.source_attribution?.traffic ?? 0,
+          industrial: h.source_attribution?.industrial ?? 0,
+          construction: h.source_attribution?.construction ?? 0,
+          burning: h.source_attribution?.burning ?? 0,
+        },
+        lat: h.center_lat,
+        lng: h.center_lon,
+      });
+      const allHexes = [...data.best.map(mapExtreme), ...data.worst.map(mapExtreme)];
+      const names = await Promise.all(allHexes.map(h => resolveHexName(h.id, h.lat, h.lng)));
+      allHexes.forEach((h, i) => { h.name = names[i]; });
+      return { best: allHexes.slice(0, 15), worst: allHexes.slice(15), totalWithData: data.total_hexagons_with_data, totalInGrid: data.total_hexagons_in_grid };
+    },
+    staleTime: 60_000,
+  });
 }
 
 export function useFireDetections() {

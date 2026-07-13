@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { useAttributionGrid, usePriorities, useStations } from '../api/client';
+import { useCityExtremes, usePriorities, useStations } from '../api/client';
 import { PriorityHex } from '../types';
 import MapContainer from '../components/MapContainer';
 import SourceIcon from '../components/SourceIcon';
-import { Shield, AlertTriangle, Compass, Wind, ArrowRight, ChevronDown, CheckCircle, MapPin } from 'lucide-react';
+import { Shield, AlertTriangle, Compass, Wind, ArrowRight, ChevronDown, CheckCircle, MapPin, Layers } from 'lucide-react';
+
+type ExtremeView = 'best' | 'worst' | 'all';
 
 export default function MapPage() {
-  const { data: gridHexes = [], isError: gridError, isLoading: gridLoading } = useAttributionGrid();
+  const { data: extremes, isError: extremesError, isLoading: extremesLoading } = useCityExtremes();
   const { data: priorities = [] } = usePriorities();
   const { isError: stationsError, isLoading: stationsLoading } = useStations();
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
+  const [extremeView, setExtremeView] = useState<ExtremeView>('all');
 
-  if (gridLoading || stationsLoading) {
+  if (extremesLoading || stationsLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4">
@@ -23,7 +26,7 @@ export default function MapPage() {
     );
   }
 
-  if (gridError && stationsError) {
+  if (extremesError && stationsError) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
@@ -32,7 +35,7 @@ export default function MapPage() {
           </div>
           <h2 className="text-lg font-bold text-white">Data Unavailable</h2>
           <p className="text-sm text-apple-secondary leading-relaxed">
-            Unable to load attribution grid data from the API. 
+            Unable to load extremes data from the API.
             Please check that the backend is running and try again.
           </p>
         </div>
@@ -40,8 +43,11 @@ export default function MapPage() {
     );
   }
 
-  // Default to first hex for rendering side panels
-  const activeHex = selectedHex || gridHexes[0] || null;
+  const allHexes: PriorityHex[] = extremes
+    ? (extremeView === 'best' ? extremes.best : extremeView === 'worst' ? extremes.worst : [...extremes.best, ...extremes.worst])
+    : [];
+
+  const activeHex = selectedHex || allHexes[0] || null;
 
   const handleDispatch = (hexId: string) => {
     setDispatchedUnits(prev => ({ ...prev, [hexId]: true }));
@@ -57,12 +63,12 @@ export default function MapPage() {
         <MapContainer
           selectedHex={activeHex}
           onSelectHex={(hex) => setSelectedHex(hex)}
-          allHexes={gridHexes}
+          allHexes={allHexes}
           viewMode="aqi"
         />
 
         {/* Legend Overlay (Floating at bottom-left) */}
-        <div className="absolute bottom-6 left-6 z-10 bg-apple-card/90 border border-apple-border backdrop-blur-md p-4 rounded-2xl max-w-[200px] shadow-2xl">
+        <div className="absolute bottom-6 left-6 z-10 bg-apple-card/90 border border-apple-border backdrop-blur-md p-4 rounded-2xl max-w-[220px] shadow-2xl">
           <div className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest mb-3">
             PM2.5 Levels (µg/m³)
           </div>
@@ -96,16 +102,56 @@ export default function MapPage() {
               <span className="text-apple-secondary text-[10px] font-medium">Severe</span>
             </div>
           </div>
+
+          {/* Honesty note about data coverage */}
+          {extremes && (
+            <div className="mt-3 pt-3 border-t border-apple-border/40">
+              <div className="text-[8px] font-mono uppercase tracking-wider text-apple-secondary/60 leading-relaxed">
+                Ranked among {extremes.totalWithData} hexagons with live station coverage out of {extremes.totalInGrid} total
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Floating toggle for Cleanest / Most Polluted view */}
+        <div className="absolute top-4 right-4 z-10 flex bg-apple-card/85 backdrop-blur-md rounded-full p-1 border border-apple-border shadow-lg">
+          <button
+            type="button"
+            onClick={() => setExtremeView('best')}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
+              extremeView === 'best' ? 'bg-brand-green text-white' : 'text-apple-secondary hover:text-white'
+            }`}
+          >
+            Top 15 Cleanest
+          </button>
+          <button
+            type="button"
+            onClick={() => setExtremeView('all')}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
+              extremeView === 'all' ? 'bg-brand-blue text-white' : 'text-apple-secondary hover:text-white'
+            }`}
+          >
+            Both
+          </button>
+          <button
+            type="button"
+            onClick={() => setExtremeView('worst')}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
+              extremeView === 'worst' ? 'bg-brand-red text-white' : 'text-apple-secondary hover:text-white'
+            }`}
+          >
+            Top 15 Most Polluted
+          </button>
         </div>
 
         {/* Floating Sidebar Detail Panel (Right side) */}
         {activeHex && (
-          <div className="absolute right-6 top-6 bottom-6 w-80 bg-apple-modal/95 border border-apple-border backdrop-blur-xl rounded-2xl shadow-2xl flex flex-col overflow-hidden z-20">
+          <div className="absolute right-6 top-24 bottom-6 w-80 bg-apple-modal/95 border border-apple-border backdrop-blur-xl rounded-2xl shadow-2xl flex flex-col overflow-hidden z-20">
             {/* Header */}
             <div className="p-5 border-b border-apple-border flex flex-col gap-1 bg-apple-card/30">
               <span className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest flex items-center gap-1.5">
                 <MapPin size={10} className="text-brand-blue" />
-                Sector Grid: {activeHex.id}
+                {activeHex.name}
               </span>
               <h2 className="text-lg font-bold text-white tracking-tight leading-snug mt-1">
                 Local Plume Analysis
@@ -119,12 +165,16 @@ export default function MapPage() {
             <div className="p-5 flex flex-col gap-6 flex-1 overflow-y-auto">
               {/* Giant AQI Circle */}
               <div className="flex items-end gap-3.5">
-                <div className="text-5xl font-bold font-mono text-brand-orange select-none leading-none">
+                <div className={`text-5xl font-bold font-mono select-none leading-none ${
+                  activeHex.pm25 <= 50 ? 'text-[#34C759]' : activeHex.pm25 <= 100 ? 'text-[#FFCC00]' : activeHex.pm25 <= 250 ? 'text-brand-orange' : 'text-brand-red'
+                }`}>
                   {activeHex.pm25}
                 </div>
                 <div className="flex flex-col pb-0.5">
-                  <span className="text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full bg-brand-orange/10 border border-brand-orange/30 text-brand-orange font-bold mb-1 w-fit">
-                    {activeHex.pm25 > 250 ? 'Severe' : 'Poor'}
+                  <span className={`text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full border font-bold mb-1 w-fit ${
+                    activeHex.pm25 <= 50 ? 'bg-[#34C759]/10 border-[#34C759]/30 text-[#34C759]' : activeHex.pm25 <= 100 ? 'bg-[#FFCC00]/10 border-[#FFCC00]/30 text-[#FFCC00]' : activeHex.pm25 <= 250 ? 'bg-brand-orange/10 border-brand-orange/30 text-brand-orange' : 'bg-brand-red/10 border-brand-red/30 text-brand-red'
+                  }`}>
+                    {activeHex.pm25 <= 50 ? 'Good' : activeHex.pm25 <= 100 ? 'Moderate' : activeHex.pm25 <= 250 ? 'Poor' : 'Severe'}
                   </span>
                   <span className="text-[10px] font-mono text-apple-secondary leading-none">
                     PM2.5 (µg/m³)
@@ -160,7 +210,7 @@ export default function MapPage() {
                       <div className="w-full h-12 flex items-center justify-center text-[10px] font-mono text-apple-secondary bg-apple-border/10 rounded-lg">
                         <span className="flex items-center gap-1.5">
                           <AlertTriangle size={11} />
-                          No attribution data available
+                          No attribution data
                         </span>
                       </div>
                     );
@@ -180,7 +230,7 @@ export default function MapPage() {
                       <div className="w-full h-12 flex items-center justify-center text-[10px] font-mono text-apple-secondary bg-apple-border/10 rounded-lg">
                         <span className="flex items-center gap-1.5">
                           <AlertTriangle size={11} />
-                          No attribution data available
+                          No attribution data
                         </span>
                       </div>
                     );
@@ -231,7 +281,6 @@ export default function MapPage() {
                   <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                     <circle cx="50" cy="50" fill="none" r="44" stroke="#2C2C2E" strokeDasharray="3 3" strokeWidth="2" />
                     <circle cx="50" cy="50" fill="none" r="44" stroke="#FF9F0A" strokeWidth="3" strokeDasharray="120 280" strokeLinecap="round" />
-                    {/* Compass needle pointing East */}
                     <polygon fill="#FF9F0A" points="50,14 46,36 54,36" transform="rotate(90, 50, 50)" />
                   </svg>
                   <div className="z-10 flex flex-col items-center">

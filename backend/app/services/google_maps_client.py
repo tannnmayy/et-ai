@@ -269,6 +269,92 @@ def geocode_address(query: str) -> dict[str, Any]:
     )
 
 
+def _extract_locality(results: list[dict[str, Any]]) -> str | None:
+    for result in results:
+        for component in result.get("address_components", []):
+            types = component.get("types", [])
+            if "sublocality" in types or "locality" in types:
+                return component.get("long_name")
+    return None
+
+
+def reverse_geocode(latitude: float, longitude: float) -> dict[str, Any]:
+    if not GOOGLE_MAPS_GEOCODING_ENABLED:
+        raise GoogleMapsUnavailableError("Geocoding is disabled.")
+
+    _validate_bengaluru_coordinates(latitude, longitude)
+    key = _get_server_key()
+
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {
+        "latlng": f"{latitude},{longitude}",
+        "key": key,
+        "region": "in",
+        "result_type": "sublocality|locality|political",
+    }
+
+    last_error: Exception | None = None
+    for attempt in range(1 + GOOGLE_MAPS_MAX_RETRIES):
+        try:
+            with _build_client() as client:
+                response = client.get(url, params=params)
+                response.raise_for_status()
+                raw = response.json()
+                _validate_provider_response(raw)
+
+                status = raw.get("status", "")
+                if status != "OK":
+                    return {
+                        "success": False,
+                        "provider_status": status,
+                        "source_status": "unavailable",
+                        "error": f"Reverse geocoding API error: {status}",
+                    }
+
+                results = raw.get("results", [])
+                if not results:
+                    return {
+                        "success": False,
+                        "provider_status": status,
+                        "source_status": "unavailable",
+                        "error": "No reverse geocoding results found.",
+                    }
+
+                locality = _extract_locality(results)
+                if not locality:
+                    locality = results[0].get("formatted_address", "Unknown Area")
+
+                return {
+                    "success": True,
+                    "provider_status": status,
+                    "source_status": "fresh",
+                    "data": {
+                        "label": locality,
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "formatted_address": results[0].get("formatted_address", ""),
+                        "place_id": results[0].get("place_id"),
+                    },
+                }
+        except GoogleMapsOutOfScopeError:
+            raise
+        except httpx.TimeoutException as e:
+            last_error = e
+            logger.warning("Reverse geocoding timeout (attempt %d/%d)", attempt + 1, 1 + GOOGLE_MAPS_MAX_RETRIES)
+        except httpx.HTTPStatusError as e:
+            raise GoogleMapsProviderError(
+                f"Reverse geocoding API HTTP error: {e.response.status_code}",
+                status_code=e.response.status_code,
+            )
+        except httpx.RequestError as e:
+            last_error = e
+            logger.warning("Reverse geocoding request error (attempt %d/%d): %s", attempt + 1, 1 + GOOGLE_MAPS_MAX_RETRIES, e)
+
+    raise GoogleMapsUnavailableError(
+        f"Reverse geocoding unavailable after {1 + GOOGLE_MAPS_MAX_RETRIES} attempts: {last_error}"
+    )
+
+
 def _build_routes_v2_body(
     origin_lat: float,
     origin_lng: float,

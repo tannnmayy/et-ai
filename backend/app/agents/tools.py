@@ -201,6 +201,17 @@ def tool_get_attribution(city: str = "bengaluru", h3_cell: str | None = None, la
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 
 
+def tool_get_city_extremes(city: str = "bengaluru", n: int = 15) -> dict[str, Any]:
+    from backend.app.services.attribution_service import get_city_extremes
+    try:
+        result = get_city_extremes(city=city, n=n)
+        if "error" in result:
+            return {"_tool_error": result["error"], "_error_type": "ServiceError"}
+        return result
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
 def tool_get_enforcement_priority(city: str = "bengaluru", top_k: int = 10) -> dict[str, Any]:
     from backend.app.services.enforcement_priority_service import compute_enforcement_priorities
     try:

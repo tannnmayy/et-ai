@@ -9,6 +9,7 @@ from backend.app.agents.tools import (
     tool_get_causal_explanation,
     tool_get_citizen_advisory,
     tool_get_city_briefing,
+    tool_get_city_extremes,
     tool_get_enforcement_priority,
     tool_get_forecast_confidence,
     tool_get_forecast_evidence,
@@ -43,6 +44,7 @@ PLANNING_TOOL_REGISTRY: dict[str, Callable[..., dict[str, Any]]] = {
     "tool_get_location_intelligence": tool_get_location_intelligence,
     "tool_compare_neighbourhoods": tool_compare_neighbourhoods,
     "tool_get_attribution": tool_get_attribution,
+    "tool_get_city_extremes": tool_get_city_extremes,
     "tool_get_enforcement_priority": tool_get_enforcement_priority,
     "tool_get_causal_explanation": tool_get_causal_explanation,
     "tool_get_grid_suitability": tool_get_grid_suitability,
@@ -192,6 +194,13 @@ PLANNING_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "parameters": {
             "city": "string (optional, default 'bengaluru') — city name",
             "top_k": "integer (optional, default 10) — number of top-ranked hexagons to return",
+        },
+    },
+    "tool_get_city_extremes": {
+        "description": "Get the top N cleanest and top N most polluted hexagons in a city, ranked by fused PM2.5 estimate. Only hexagons with real station data coverage are included.",
+        "parameters": {
+            "city": "string (optional, default 'bengaluru') — city name",
+            "n": "integer (optional, default 15) — number of best/worst hexagons to return",
         },
     },
     "tool_get_causal_explanation": {

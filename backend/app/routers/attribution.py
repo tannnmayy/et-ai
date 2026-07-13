@@ -3,11 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.schemas.attribution import (
+    CityExtremesResponse,
     CityGridAttributionResponse,
     CityGridFusionResponse,
     SingleHexagonResponse,
 )
 from backend.app.services.attribution_service import (
+    get_city_extremes,
     get_city_grid_attribution,
     get_city_grid_fusion_only,
     get_single_hexagon_attribution,
@@ -70,3 +72,22 @@ def city_grid_fusion(
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return CityGridFusionResponse(**result)
+
+
+@router.get(
+    "/city/{city}/extremes",
+    response_model=CityExtremesResponse,
+    summary="Get best and worst hexagons by fused PM2.5",
+    description="Returns the top N cleanest and top N most polluted hexagons in a city, "
+    "ranked by fused PM2.5 estimate. Only hexagons with a real fused estimate are included "
+    "in the ranking. The response includes total_hexagons_with_data vs total_hexagons_in_grid "
+    "to surface data coverage honestly.",
+)
+def city_extremes(
+    city: str = "bengaluru",
+    n: int = Query(default=15, ge=1, le=100, description="Number of best/worst hexagons to return"),
+) -> CityExtremesResponse:
+    result = get_city_extremes(city=city, n=n)
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+    return CityExtremesResponse(**result)
