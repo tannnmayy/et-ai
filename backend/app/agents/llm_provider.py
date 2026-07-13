@@ -5,7 +5,23 @@ import logging
 import os
 from typing import Any
 
+from dotenv import load_dotenv
+from backend.app.config import get_project_root
+
 logger = logging.getLogger(__name__)
+
+
+def _has_broken_loopback_proxy() -> bool:
+    """Detect the known unusable local proxy without overriding real proxies."""
+    proxy_values = (
+        os.getenv("HTTPS_PROXY", ""),
+        os.getenv("HTTP_PROXY", ""),
+        os.getenv("ALL_PROXY", ""),
+        os.getenv("https_proxy", ""),
+        os.getenv("http_proxy", ""),
+        os.getenv("all_proxy", ""),
+    )
+    return any("127.0.0.1:9" in value or "localhost:9" in value for value in proxy_values)
 
 _SUMMARIZER_SYSTEM_PROMPT = (
     "You are an air quality assistant. "
@@ -47,9 +63,35 @@ _ENFORCEMENT_ACTION_SYSTEM_PROMPT = (
 
 class LLMProvider:
     def __init__(self) -> None:
-        self.api_key: str | None = os.getenv("AQI_SENTINEL_LLM_API_KEY")
+        # Provider workers can be imported before FastAPI starts. Loading the
+        # workspace environment here prevents import order from disabling Deep
+        # Reasoning even when credentials are configured.
+        load_dotenv(get_project_root() / ".env")
+        self.provider = os.getenv("AQI_SENTINEL_LLM_PROVIDER", "groq").strip().lower()
         self.model: str = os.getenv("AQI_SENTINEL_LLM_MODEL", "")
-        self._available = bool(self.api_key)
+        self.gemini_model = os.getenv("AQI_SENTINEL_GEMINI_MODEL") or (
+            self.model if self.provider == "gemini" and self.model.startswith("gemini-") else "gemini-2.5-flash"
+        )
+        self.openrouter_model = os.getenv("AQI_SENTINEL_OPENROUTER_MODEL") or (
+            self.model if self.provider == "openrouter" else "openrouter/free"
+        )
+        self._keys = {
+            "gemini": os.getenv("AQI_SENTINEL_GEMINI_API_KEY"),
+            "openrouter": os.getenv("AQI_SENTINEL_OPENROUTER_API_KEY"),
+            "groq": os.getenv("AQI_SENTINEL_LLM_API_KEY"),
+        }
+        self._providers = self._configured_providers()
+        self.api_key: str | None = self._keys.get(self.provider)
+        self.last_provider: str | None = None
+        self._available = bool(self._providers)
+
+    def _configured_providers(self) -> list[str]:
+        """Prefer the selected service and use other configured services as fallbacks."""
+        configured: list[str] = []
+        for provider in (self.provider, "gemini", "openrouter", "groq"):
+            if provider in self._keys and self._keys[provider] and provider not in configured:
+                configured.append(provider)
+        return configured
 
     @property
     def is_available(self) -> bool:
@@ -133,18 +175,101 @@ class LLMProvider:
             return None
 
     def _call_llm(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
-        return self._call_groq(prompt, structured_data, system_prompt=system_prompt)
+        for provider in self._providers:
+            if provider == "gemini":
+                response = self._call_gemini(prompt, structured_data, system_prompt=system_prompt)
+            elif provider == "openrouter":
+                response = self._call_openai_compatible(
+                    provider="openrouter",
+                    base_url="https://openrouter.ai/api/v1",
+                    model=self.openrouter_model,
+                    prompt=prompt,
+                    structured_data=structured_data,
+                    system_prompt=system_prompt,
+                )
+            else:
+                response = self._call_groq(prompt, structured_data, system_prompt=system_prompt)
+            if response:
+                self.last_provider = provider
+                return response
+        return None
+
+    def _call_gemini(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
+        """Use Gemini's native REST API; no extra SDK is required."""
+        try:
+            import requests
+
+            model = self.gemini_model
+            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
+            session = requests.Session()
+            if _has_broken_loopback_proxy():
+                logger.info("Ignoring unavailable loopback proxy for Gemini")
+                session.trust_env = False
+            response = session.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                params={"key": self._keys["gemini"]},
+                json={
+                    "system_instruction": {"parts": [{"text": system_msg}]},
+                    "contents": [{"role": "user", "parts": [{"text": f"{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}"}]}],
+                    "generationConfig": {"temperature": 0.3, "maxOutputTokens": 500},
+                },
+                timeout=20,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+            text = "".join(part.get("text", "") for part in parts).strip()
+            if not text:
+                logger.warning("Gemini returned no text content")
+            return text or None
+        except Exception as exc:
+            logger.warning("Gemini call failed: %s", exc)
+            return None
+
+    def _call_openai_compatible(
+        self,
+        *,
+        provider: str,
+        base_url: str,
+        model: str,
+        prompt: str,
+        structured_data: dict[str, Any],
+        system_prompt: str | None = None,
+    ) -> str | None:
+        try:
+            import openai
+            import httpx
+
+            http_client = httpx.Client(timeout=20.0, trust_env=not _has_broken_loopback_proxy())
+            client = openai.OpenAI(api_key=self._keys[provider], base_url=base_url, timeout=20.0, http_client=http_client)
+            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": f"{prompt}\n\nData:\n{json.dumps(structured_data, indent=2)}"},
+                    ],
+                    temperature=0.3,
+                    max_tokens=500,
+                )
+                return resp.choices[0].message.content
+            finally:
+                http_client.close()
+        except Exception as exc:
+            logger.warning("%s call failed: %s", provider.title(), exc)
+            return None
 
     def _call_groq(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
         try:
             import openai
             from openai import APITimeoutError
             client = openai.OpenAI(
-                api_key=self.api_key,
+                api_key=self._keys["groq"],
                 base_url="https://api.groq.com/openai/v1",
                 timeout=15.0,
             )
-            model = self.model or "openai/gpt-oss-120b"
+            model = self.model if self.provider == "groq" and self.model else "openai/gpt-oss-120b"
             system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
             resp = client.chat.completions.create(
                 model=model,

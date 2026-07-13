@@ -17,6 +17,7 @@ from backend.app.config import (
     get_project_root,
 )
 from backend.app.services.artifact_adapter import get_latest_station_reading
+from backend.app.services.fusion_estimation_service import estimate_fused_pm25
 from backend.app.services.weather_forecast_service import get_weather_forecast
 from pipeline.firms_ingestion import get_fire_detections
 from pipeline.sentinel5p_ingestion import get_no2_column_density
@@ -519,48 +520,8 @@ def get_city_grid_fusion_only(
 
 
 def _estimate_fused_pm25_for_grid(hex_df: pd.DataFrame) -> np.ndarray:
-    from pipeline.station_registry import get_registry_stations
-
-    station_lats: list[float] = []
-    station_lons: list[float] = []
-    station_vals: list[float] = []
-
-    for station in get_registry_stations():
-        if not station.forecast_eligible or station.latitude is None or station.longitude is None:
-            continue
-        reading = get_latest_station_reading(station.station_id, "pm25")
-        if not reading.get("available") or reading.get("value") is None:
-            continue
-        station_lats.append(station.latitude)
-        station_lons.append(station.longitude)
-        station_vals.append(float(reading["value"]))
-
-    hex_lats = hex_df["center_lat"].to_numpy()
-    hex_lons = hex_df["center_lon"].to_numpy()
-    n_hex = len(hex_df)
-
-    if not station_vals:
-        return np.full(n_hex, np.nan)
-
-    s_lats = np.array(station_lats)
-    s_lons = np.array(station_lons)
-    s_vals = np.array(station_vals)
-
-    dist_mat = np.stack(
-        [_haversine_distance_m_vectorized(s_lats[i], s_lons[i], hex_lats, hex_lons) for i in range(len(s_lats))],
-        axis=0,
-    )
-
-    in_range = dist_mat <= FUSION_STATION_RANGE_METERS
-    weights = np.where(in_range, 1.0 / np.maximum(dist_mat, 1.0), 0.0)
-    weight_sum = weights.sum(axis=0)
-
-    numerator = (s_vals[:, None] * weights).sum(axis=0)
-    fused = np.divide(numerator, weight_sum, out=np.full(n_hex, np.nan), where=weight_sum > 0)
-
-    nearest_idx = np.argmin(dist_mat, axis=0)
-    fused = np.where(np.isnan(fused), s_vals[nearest_idx], fused)
-    return fused
+    """Compatibility wrapper around the shared range-limited fusion estimator."""
+    return estimate_fused_pm25(hex_df)
 
 
 def get_city_extremes(city: str = "bengaluru", n: int = 15) -> dict[str, Any]:
@@ -602,6 +563,21 @@ def get_city_extremes(city: str = "bengaluru", n: int = 15) -> dict[str, Any]:
     scored.sort(key=lambda h: h["fused_pm25"])
     best = scored[:n]
     worst = list(reversed(scored[-n:]))
+
+    # Geocode only the entries returned to the client, never the full city grid.
+    from backend.app.services.google_maps_client import reverse_geocode
+
+    def _add_names(hexagons: list[dict[str, Any]]) -> None:
+        for hexagon in hexagons:
+            try:
+                result = reverse_geocode(hexagon["center_lat"], hexagon["center_lon"])
+                hexagon["name"] = result.get("data", {}).get("label") or None
+            except Exception as exc:
+                logger.debug("Could not reverse geocode %s: %s", hexagon["h3_cell"], exc)
+                hexagon["name"] = None
+
+    _add_names(best)
+    _add_names(worst)
 
     return {
         "city": city,

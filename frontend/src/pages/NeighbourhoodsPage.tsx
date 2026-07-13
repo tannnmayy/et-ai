@@ -6,24 +6,7 @@ import { Search, Plus, X, BarChart3, Shield, Info, Building2, HelpCircle, AlertT
 export default function NeighbourhoodsPage() {
   const { data: dashboard, isError, isLoading } = useDashboardData();
   const [activeView, setActiveView] = useState<'analytics' | 'coming-soon'>('analytics');
-  const [compareList, setCompareList] = useState<Neighbourhood[]>([
-    {
-      id: 'n-1',
-      sectorCode: 'Sector 7A',
-      name: 'Koramangala',
-      suitability: 82,
-      componentBreakdown: { aqi: 75, greens: 90, noise: 60, transit: 85, safety: 78, health: 92, water: 65 },
-      tags: ['Low PM2.5', 'Optimal Parks'],
-    },
-    {
-      id: 'n-2',
-      sectorCode: 'Sector 12B',
-      name: 'Indiranagar',
-      suitability: 65,
-      componentBreakdown: { aqi: 45, greens: 80, noise: 50, transit: 70, safety: 65, health: 85, water: 55 },
-      tags: ['Heavy Traffic', 'High Greens'],
-    },
-  ]);
+  const [compareList, setCompareList] = useState<Neighbourhood[]>([]);
   const [searchInput, setSearchInput] = useState('');
 
   const handleAddLocation = () => {
@@ -31,16 +14,7 @@ export default function NeighbourhoodsPage() {
       alert('Maximum 3 neighbourhoods can be compared at once in multi-screen layout.');
       return;
     }
-    // Add HSR Sector 2 as comparison
-    const hsr: Neighbourhood = {
-      id: 'n-3',
-      sectorCode: 'Sector 3C',
-      name: 'HSR Layout',
-      suitability: 85,
-      componentBreakdown: { aqi: 82, greens: 85, noise: 70, transit: 80, safety: 88, health: 85, water: 90 },
-      tags: ['High Greens', 'Rapid Transit'],
-    };
-    setCompareList(prev => [...prev, hsr]);
+    alert('Enter a candidate location and workplace in Citizen Mode to run a real comparison. Demo neighbourhood data is not shown here.');
   };
 
   const handleRemoveLocation = (id: string) => {
@@ -50,7 +24,7 @@ export default function NeighbourhoodsPage() {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchInput.trim()) return;
-    handleAddLocation();
+    alert('Neighbourhood comparison needs a workplace and candidate locations. Use Citizen Mode to submit those real inputs.');
     setSearchInput('');
   };
 
@@ -75,7 +49,7 @@ export default function NeighbourhoodsPage() {
           <h2 className="text-lg font-bold text-white">Dashboard Unavailable</h2>
           <p className="text-sm text-apple-secondary leading-relaxed">
             Unable to load neighbourhood analytics from the API.
-            Comparison cards below use hardcoded demo data for layout demonstration.
+            No substitute or demonstration neighbourhood data is shown.
           </p>
         </div>
       </div>

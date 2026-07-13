@@ -108,7 +108,7 @@ function mapRealHex(hex: any, index: number) {
 
   return {
     id: hex.h3_cell,
-    name: _resolveName(hex.h3_cell, lat, lng),
+    name: hex.name || _resolveName(hex.h3_cell, lat, lng),
     priorityScore: Math.round(hex.priority_score * 100),
     changeVal: Number((Math.sin(index + 1) * 2.5).toFixed(1)),
     exposure,
@@ -167,7 +167,7 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
 
   return {
     id: attr.h3_cell,
-    name: _resolveName(attr.h3_cell, lat, lng),
+    name: attr.name || _resolveName(attr.h3_cell, lat, lng),
     priorityScore: fusedPm25Num,
     changeVal: 0,
     exposure: 'Medium',
@@ -233,15 +233,6 @@ export function useAttributionGrid() {
     },
     staleTime: 60_000,
   });
-async function resolveHexName(h3_cell: string, lat: number, lng: number): Promise<string> {
-  const area = _lookupArea(lat, lng);
-  if (area) return area;
-  try {
-    const { data } = await apiClient.get(`/geospatial/reverse-geocode?lat=${lat}&lon=${lng}`);
-    if (data && data.locality) return data.locality;
-  } catch {
-  }
-  return `Grid ${h3_cell.slice(-6)}`;
 }
 
 export function useCityExtremes() {
@@ -254,7 +245,7 @@ export function useCityExtremes() {
       }
       const mapExtreme = (h: any) => ({
         id: h.h3_cell,
-        name: '',
+        name: h.name || _resolveName(h.h3_cell, h.center_lat, h.center_lon),
         priorityScore: Math.round(h.fused_pm25 || 0),
         changeVal: 0,
         exposure: 'Medium' as const,
@@ -274,8 +265,6 @@ export function useCityExtremes() {
         lng: h.center_lon,
       });
       const allHexes = [...data.best.map(mapExtreme), ...data.worst.map(mapExtreme)];
-      const names = await Promise.all(allHexes.map(h => resolveHexName(h.id, h.lat, h.lng)));
-      allHexes.forEach((h, i) => { h.name = names[i]; });
       return { best: allHexes.slice(0, 15), worst: allHexes.slice(15), totalWithData: data.total_hexagons_with_data, totalInGrid: data.total_hexagons_in_grid };
     },
     staleTime: 60_000,

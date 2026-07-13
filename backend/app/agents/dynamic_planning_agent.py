@@ -7,6 +7,7 @@ from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
 from backend.app.agents.audit import AuditTrail
+from backend.app.agents.conversation_fallback import run_query_aware_fallback
 from backend.app.agents.llm_provider import get_llm_provider
 from backend.app.agents.state import AgentState
 from backend.app.agents.tool_registry import (
@@ -21,6 +22,9 @@ MAX_PLANNING_STEPS = 5
 
 def _grounded_fallback(state: AgentState, audit: AuditTrail) -> None:
     """Keep Copilot useful when the hosted LLM is temporarily unreachable."""
+    run_query_aware_fallback(state, audit, deep=True)
+    return
+
     from backend.app.services.inspection_priority_service import get_inspection_priorities
 
     priorities = get_inspection_priorities(state.city, top_k=max(3, state.top_k))

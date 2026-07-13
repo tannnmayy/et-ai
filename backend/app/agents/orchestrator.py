@@ -8,6 +8,7 @@ from typing import Any
 from backend.app.agents.audit import AuditTrail
 from backend.app.agents.citizen_advisory_agent import run_citizen_advisory_agent
 from backend.app.agents.city_briefing_agent import run_city_briefing_agent
+from backend.app.agents.conversation_fallback import infer_station_id, run_query_aware_fallback
 from backend.app.agents.dynamic_planning_agent import run_dynamic_planning_agent
 from backend.app.agents.enforcement_planning_agent import run_enforcement_planning_agent
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
@@ -242,55 +243,58 @@ def run_orchestrator(
 
     audit = AuditTrail(request_id)
 
+    # The web client sends free text only. Recover a station from a locality
+    # name (for example, "Peenya") before routing instead of requiring a
+    # station_id that the UI never supplies.
+    if not state.station_id:
+        state.station_id = infer_station_id(query) or ""
+
     input_warnings = _validate_input(state)
     for w in input_warnings:
         state.warnings.append(w)
         audit.add_warning(w)
 
-    intent = _detect_intent(query, explicit_intent, station_id)
+    intent = _detect_intent(query, explicit_intent, state.station_id)
     state.intent = intent
     audit.set_intent(intent.value)
 
     llm = get_llm_provider()
 
     # Explicit override: user opted into deep reasoning
-    if force_dynamic_planning and llm.is_available:
+    if force_dynamic_planning:
         intent = Intent.dynamic_planning
         state.intent = intent
         audit.set_intent(intent.value)
 
-    # Automatic dynamic planning only for genuinely ambiguous queries
-    elif not explicit_intent and llm.is_available and (
-        intent == Intent.unsupported or _is_compound_query(query)
-    ):
+    # Automatic planning is reserved for compound questions. Unmatched short
+    # questions are handled immediately by the query-aware fallback instead of
+    # waiting for a provider that may be temporarily unreachable.
+    elif not explicit_intent and llm.is_available and _is_compound_query(query):
         intent = Intent.dynamic_planning
         state.intent = intent
         audit.set_intent(intent.value)
 
     if intent == Intent.unsupported:
-        state.selected_agent = "none"
-        state.response = "I could not determine what you are asking about. Please ask about air quality forecasts, evidence, confidence, inspection priorities, health advisories, city briefings, weather forecasts, or travel readiness."
-        state.structured_data = {}
-        audit.set_agent("none")
-        llm = get_llm_provider()
+        state.selected_agent = "query_aware_fallback"
+        audit.set_agent(state.selected_agent)
+        run_query_aware_fallback(state, audit)
+        audit.set_llm_mode(state.llm_status)
+        audit.set_fallback(state.fallback_used)
+        return _build_response(state, audit)
 
-        if llm.is_available:
-            audit.set_llm_mode("hosted")
-            llm_response = llm.summarize(
-                f"The user asked: '{query}'. This query could not be routed to any air quality agent. Provide a helpful response suggesting available capabilities.",
-                {"available_intents": [e.value for e in Intent if e != Intent.unsupported]},
-            )
-            if llm_response:
-                state.response = llm_response
-                state.llm_status = "hosted"
-            else:
-                state.llm_status = "fallback"
-                audit.set_fallback(True)
-                state.fallback_used = True
-        else:
-            audit.set_llm_mode("deterministic")
-            state.llm_status = "deterministic"
-
+    # A free-text "why is it polluted near <station>" question needs the
+    # station's mapped context, not merely a generic forecast explanation.
+    if (
+        not explicit_intent
+        and intent != Intent.dynamic_planning
+        and state.station_id
+        and any(term in query.lower() for term in ("pollut", "why is the air", "reason for aqi", "reason for air"))
+    ):
+        state.selected_agent = "query_aware_fallback"
+        audit.set_agent(state.selected_agent)
+        run_query_aware_fallback(state, audit)
+        audit.set_llm_mode(state.llm_status)
+        audit.set_fallback(state.fallback_used)
         return _build_response(state, audit)
 
     agent_name = _route_intent(intent)

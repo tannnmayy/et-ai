@@ -17,6 +17,7 @@ from backend.app.config import (
 )
 from backend.app.services.artifact_adapter import get_latest_station_reading
 from backend.app.services.causal_explanation_service import generate_enforcement_action_guidance
+from backend.app.services.fusion_estimation_service import estimate_fused_pm25
 from backend.app.services.weather_forecast_service import get_weather_forecast
 from pipeline.station_registry import get_registry_stations
 
@@ -229,53 +230,9 @@ def _estimate_fused_pm25(hex_df: pd.DataFrame, *, fill_from_nearest: bool = Fals
     readings.  Returns a float array aligned to hex_df's row order.
     NaN means no station in range (FUSION_STATION_RANGE_METERS).
     """
-    station_lats: list[float] = []
-    station_lons: list[float] = []
-    station_vals: list[float] = []
-
-    # The legacy fallback registry has no coordinates. Always read the
-    # CSV-backed registry so the spatial interpolation has real station
-    # locations instead of silently producing an all-zero risk surface.
-    for station in get_registry_stations():
-        if not station.forecast_eligible or station.latitude is None or station.longitude is None:
-            continue
-        reading = get_latest_station_reading(station.station_id, "pm25")
-        if not reading.get("available") or reading.get("value") is None:
-            continue
-        station_lats.append(station.latitude)
-        station_lons.append(station.longitude)
-        station_vals.append(float(reading["value"]))
-
-    hex_lats = hex_df["center_lat"].to_numpy()
-    hex_lons = hex_df["center_lon"].to_numpy()
-    n_hex = len(hex_df)
-
-    if not station_vals:
-        return np.full(n_hex, np.nan)
-
-    # Shape: (n_stations, n_hexagons)
-    s_lats = np.array(station_lats)
-    s_lons = np.array(station_lons)
-    s_vals = np.array(station_vals)
-
-    # Vectorised distances: broadcast station coords against all hexagon coords
-    dist_mat = np.stack(
-        [_haversine_m(s_lats[i], s_lons[i], hex_lats, hex_lons) for i in range(len(s_lats))],
-        axis=0,
-    )  # (n_stations, n_hexagons)
-
-    in_range = dist_mat <= FUSION_STATION_RANGE_METERS  # (n_stations, n_hexagons)
-    weights = np.where(in_range, 1.0 / np.maximum(dist_mat, 1.0), 0.0)
-    weight_sum = weights.sum(axis=0)  # (n_hexagons,)
-
-    numerator = (s_vals[:, None] * weights).sum(axis=0)
-    fused = np.divide(numerator, weight_sum, out=np.full(n_hex, np.nan), where=weight_sum > 0)
     if fill_from_nearest:
-        # Give every map cell a cautious nearest-station estimate rather than
-        # leaving large blank areas outside a 5 km fusion radius.
-        nearest_idx = np.argmin(dist_mat, axis=0)
-        fused = np.where(np.isnan(fused), s_vals[nearest_idx], fused)
-    return fused
+        raise ValueError("Unbounded nearest-station fill is not permitted for fused PM2.5 estimates.")
+    return estimate_fused_pm25(hex_df)
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +313,8 @@ def compute_enforcement_priorities(
     result_df = pd.DataFrame(
         {
             "h3_cell": hex_df["h3_cell"].values,
+            "center_lat": hex_df["center_lat"].values,
+            "center_lon": hex_df["center_lon"].values,
             "priority_score": np.round(priority_score, 4),
             "exposure_weight": np.round(exposure_weight_s.to_numpy(), 4),
             "attributable_magnitude": np.round(attributable_magnitude, 4),
@@ -376,6 +335,8 @@ def compute_enforcement_priorities(
     top = result_df.head(top_k)
 
     ranked_hexagons = []
+    from backend.app.services.google_maps_client import reverse_geocode
+
     for _, row in top.iterrows():
         source_attr = {
             "traffic": row["traffic"],
@@ -402,6 +363,7 @@ def compute_enforcement_priorities(
             "source_attribution": source_attr,
             "method": "vectorised_feature_proxy",
             "explanation": explanation,
+            "name": _reverse_geocode_name(row, reverse_geocode),
         })
 
     return {
@@ -415,6 +377,16 @@ def compute_enforcement_priorities(
     }
 
 
+def _reverse_geocode_name(row: pd.Series, reverse_geocode: Any) -> str | None:
+    """Return a locality label when the configured provider can resolve it."""
+    try:
+        result = reverse_geocode(float(row["center_lat"]), float(row["center_lon"]))
+        return result.get("data", {}).get("label") or None
+    except Exception as exc:
+        logger.debug("Could not reverse geocode %s: %s", row["h3_cell"], exc)
+        return None
+
+
 def get_enforcement_map(city: str = "bengaluru", max_cells: int = 900) -> dict[str, Any]:
     """Map-ready, evenly sampled cells with human-readable current risk."""
     if city not in SUPPORTED_CITIES:
@@ -424,7 +396,9 @@ def get_enforcement_map(city: str = "bengaluru", max_cells: int = 900) -> dict[s
         return {"error": "Hexagon features not available."}
 
     stations = [s for s in get_registry_stations() if s.forecast_eligible and s.latitude is not None and s.longitude is not None]
-    fused = _estimate_fused_pm25(hex_df, fill_from_nearest=True)
+    # Out-of-range cells stay unavailable instead of appearing to have a live
+    # station-informed PM2.5 estimate.
+    fused = _estimate_fused_pm25(hex_df)
     indices = np.linspace(0, len(hex_df) - 1, min(max_cells, len(hex_df)), dtype=int)
 
     def risk(pm25: float) -> str:

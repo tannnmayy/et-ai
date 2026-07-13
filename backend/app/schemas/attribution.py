@@ -90,6 +90,7 @@ class CityGridFusionResponse(BaseModel):
 
 class HexagonExtreme(BaseModel):
     h3_cell: str = Field(description="H3 cell ID at resolution 9")
+    name: str | None = Field(default=None, description="Reverse-geocoded locality label when available")
     center_lat: float = Field(description="Cell centroid latitude")
     center_lon: float = Field(description="Cell centroid longitude")
     source_attribution: SourceAttribution = Field(description="Normalized source-category breakdown")

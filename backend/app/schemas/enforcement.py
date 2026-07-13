@@ -18,6 +18,7 @@ class Explanation(BaseModel):
 
 class RankedHexagon(BaseModel):
     h3_cell: str
+    name: str | None = None
     priority_score: float
     rank: int
     scoring_breakdown: ScoringBreakdown

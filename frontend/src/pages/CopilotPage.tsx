@@ -16,11 +16,11 @@ export default function CopilotPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent, suggestedText?: string) => {
     if (e) e.preventDefault();
-    if (!inputText.trim()) return;
+    if (!(suggestedText ?? inputText).trim()) return;
 
-    const text = inputText;
+    const text = suggestedText ?? inputText;
     setInputText('');
     setMutationError(null);
 
@@ -35,47 +35,23 @@ export default function CopilotPage() {
 
     try {
       const data = await sendMessageMutation.mutateAsync({ message: text, force_dynamic_planning: deepReasoning });
+      const reasoning = (data.audit_trail?.tools_called ?? []).map((tool: any, index: number) => ({
+        id: `${tool.tool}-${index}`,
+        step: `${tool.success ? 'Retrieved' : 'Could not retrieve'} ${tool.tool.replace(/^tool_/, '').replace(/_/g, ' ')}`,
+        completed: Boolean(tool.success),
+      }));
       const assistantMsg: ChatMessage = {
         id: `bot-${Date.now()}`,
         role: 'assistant',
         content: data.answer || data.text || JSON.stringify(data),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sender: 'Copilot AI',
-        reasoning: data.tool_steps || data.reasoning_steps,
+        sender: data.llm_mode?.includes('deep') ? 'Copilot AI · Deep plan' : 'Copilot AI',
+        reasoning,
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       const detail = err?.response?.data?.detail || err?.message || 'Request failed';
       setMutationError(detail);
-    }
-  };
-
-  const handleSuggestedAction = async (action: string) => {
-    if (action === 'exposedraft') {
-      setInputText('Fetching enforcement priority...');
-      try {
-        const { default: apiClient } = await import('../api/axiosClient');
-        const { data } = await apiClient.get('/enforcement/priority/bengaluru?top_k=1');
-        if (data && data.ranked_hexagons && data.ranked_hexagons.length > 0) {
-          const top = data.ranked_hexagons[0];
-          const areaName = top.display_name || top.area_name || top.h3_cell?.slice(-6) || 'Unknown';
-          const pm25 = Math.round(top.fused_pm25 || top.predicted_pm25 || top.pm25 || 0);
-          let domSource = '';
-          if (top.source_attribution) {
-            const sa = top.source_attribution;
-            const maxKey = Object.entries(sa).reduce((a, b) => (b[1] > a[1] ? b : a), ['', 0])[0];
-            const pct = Math.round((sa[maxKey] || 0) * 100);
-            domSource = `${maxKey} ${pct}%`;
-          }
-          setInputText(`Draft an enforcement dispatch for ${areaName} — dominant source: ${domSource}, PM2.5 ${pm25} µg/m³ — based on the current top enforcement priority.`);
-        } else {
-          setInputText('Draft an enforcement dispatch for the current top priority location in Bengaluru.');
-        }
-      } catch {
-        setInputText('Draft an enforcement dispatch for the current top priority location in Bengaluru.');
-      }
-    } else {
-      setInputText(action);
     }
   };
 
@@ -236,14 +212,14 @@ export default function CopilotPage() {
           {/* Quick interactive pills suggestions */}
           <div className="flex justify-center gap-3 select-none">
             <button
-              onClick={() => handleSuggestedAction('exposedraft')}
+              onClick={() => void handleSend(undefined, 'For Bengaluru, prepare an inspection plan using the current enforcement-priority ranking. Include the top location, evidence limits, and recommended actions.')}
               className="text-[10px] font-bold uppercase tracking-wider text-apple-secondary bg-apple-card border border-apple-border rounded-full px-4 py-1.5 hover:bg-apple-modal hover:text-white transition-colors flex items-center gap-1.5"
             >
               <Shield size={11} className="text-brand-orange" />
               Draft Dispatch
             </button>
             <button
-              onClick={() => handleSuggestedAction('Expose active plume overlay on main map')}
+              onClick={() => void handleSend(undefined, 'For Bengaluru, provide a spatial intelligence summary for a map overlay: the highest-priority covered areas, their dominant sources, and the limits of station coverage.')}
               className="text-[10px] font-bold uppercase tracking-wider text-apple-secondary bg-apple-card border border-apple-border rounded-full px-4 py-1.5 hover:bg-apple-modal hover:text-white transition-colors flex items-center gap-1.5"
             >
               <Map size={11} className="text-brand-blue" />
