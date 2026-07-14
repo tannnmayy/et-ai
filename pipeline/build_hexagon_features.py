@@ -17,6 +17,10 @@ from backend.app.config import (
     get_project_root,
 )
 from pipeline.geospatial.osm_client import load_category_geojson
+from pipeline.traffic_features import (
+    compute_corridor_columns_for_hex_df,
+    filter_major_road_geometries,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,12 +212,15 @@ def build_hexagon_features(output_path: str | Path | None = None) -> pd.DataFram
     hex_df = _get_hex_grid()
     logger.info("Hex grid generated: %d cells", len(hex_df))
 
-    road_geoms, _, road_tree = _load_geometries("roads")
+    road_geoms, road_props, road_tree = _load_geometries("roads")
     landuse_geoms, landuse_props, landuse_tree = _load_geometries("landuse")
     construction_geoms, _, construction_tree = _load_geometries("construction")
     facility_geoms, _, facility_tree = _load_geometries("industrial_facility")
     green_geoms, _, green_tree = _load_geometries("green_spaces")
     vulnerability_geoms, _, vulnerability_tree = _load_geometries("vulnerability")
+
+    # Major-road subset for static high-traffic corridor scoring (Phase 1).
+    major_geoms, major_tree = filter_major_road_geometries(road_geoms, road_props)
 
     cell_areas: list[float] = []
     road_lengths: list[float] = []
@@ -275,7 +282,14 @@ def build_hexagon_features(output_path: str | Path | None = None) -> pd.DataFram
         frac_col = col.replace("area_sq_m", "fraction")
         result_df[frac_col] = (result_df[col] / valid_areas).fillna(0.0).clip(0, 1)
 
-    result_df = result_df.drop(columns=["cell_area_sq_m"])
+    # Static high-traffic corridors (optional at attribution time if columns present).
+    # Reattach polygons temporarily for corridor scoring, then drop.
+    result_df = result_df.copy()
+    result_df["polygon"] = hex_df["polygon"].values
+    result_df = compute_corridor_columns_for_hex_df(
+        result_df, major_geoms, major_tree, polygon_col="polygon",
+    )
+    result_df = result_df.drop(columns=["polygon", "cell_area_sq_m"], errors="ignore")
     result_df = result_df.sort_values("h3_cell").reset_index(drop=True)
 
     if output_path is None:

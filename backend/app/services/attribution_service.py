@@ -18,6 +18,7 @@ from backend.app.config import (
 )
 from backend.app.services.artifact_adapter import get_latest_station_reading
 from backend.app.services.fusion_estimation_service import estimate_fused_pm25
+from backend.app.services.traffic_service import traffic_time_metadata
 from backend.app.services.weather_forecast_service import get_weather_forecast
 from pipeline.firms_ingestion import get_fire_detections
 from pipeline.sentinel5p_ingestion import get_no2_column_density
@@ -25,8 +26,26 @@ from pipeline.station_registry import BENGALURU_STATIONS, get_station_by_id
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Feature flags — traffic attribution enhancements
+#
+# When False, behaviour matches the pre-enhancement engine (road_density × NO2
+# only, no time-of-day modulation). Safe defaults are True so demos get the
+# improved traffic signal; flip to False for A/B comparison or regressions.
+# ---------------------------------------------------------------------------
+USE_TRAFFIC_CORRIDOR_SCORE: bool = True
+USE_TIME_OF_DAY_TRAFFIC: bool = True
+
+# Blend for corridor-aware traffic density (only when corridor column exists
+# and USE_TRAFFIC_CORRIDOR_SCORE is True). Weights sum to 1.0.
+#   road_density 0.6 — preserves existing all-roads signal
+#   corridor     0.4 — elevates hexes on motorway/trunk/primary/secondary
+CORRIDOR_ROAD_DENSITY_WEIGHT: float = 0.6
+CORRIDOR_SCORE_WEIGHT: float = 0.4
+
 _EARTH_RADIUS_M = 6_371_000.0
 _CACHE: dict[str, pd.DataFrame | None] = {}
+_CORRIDOR_LOGGED: bool = False
 
 
 def _haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -116,6 +135,48 @@ def _get_current_wind(city: str = "bengaluru") -> dict[str, Any]:
     return {"direction_deg": float(wd), "speed_kmh": float(ws), "retrieved_at": retrieved}
 
 
+def _traffic_density_proxy(src_df: pd.DataFrame) -> tuple[np.ndarray, bool]:
+    """Build per-source-hex traffic density proxy.
+
+    Legacy formula (flag off or corridor column missing)::
+
+        road_density_m_per_sq_m
+
+    Corridor-aware formula (flag on and column present)::
+
+        0.6 * road_density + 0.4 * traffic_corridor_score
+
+    Returns (density_array, corridor_applied).
+    """
+    global _CORRIDOR_LOGGED
+    road_density = src_df["road_density_m_per_sq_m"].fillna(0.0).to_numpy(dtype=float)
+
+    has_corridor_col = "traffic_corridor_score" in src_df.columns
+    if USE_TRAFFIC_CORRIDOR_SCORE and has_corridor_col:
+        corridor = src_df["traffic_corridor_score"].fillna(0.0).to_numpy(dtype=float)
+        density = (
+            CORRIDOR_ROAD_DENSITY_WEIGHT * road_density
+            + CORRIDOR_SCORE_WEIGHT * corridor
+        )
+        if not _CORRIDOR_LOGGED:
+            logger.info(
+                "Traffic corridor score applied (road_density×%.2f + corridor×%.2f)",
+                CORRIDOR_ROAD_DENSITY_WEIGHT,
+                CORRIDOR_SCORE_WEIGHT,
+            )
+            _CORRIDOR_LOGGED = True
+        return density, True
+
+    if USE_TRAFFIC_CORRIDOR_SCORE and not has_corridor_col and not _CORRIDOR_LOGGED:
+        logger.info(
+            "USE_TRAFFIC_CORRIDOR_SCORE is True but traffic_corridor_score column "
+            "missing from hexagon features — falling back to road_density only. "
+            "Run: python -m pipeline.augment_hexagon_traffic_corridors"
+        )
+        _CORRIDOR_LOGGED = True
+    return road_density, False
+
+
 def compute_attribution_for_hexagon(
     target_h3: str,
     hex_df: pd.DataFrame | None = None,
@@ -123,7 +184,17 @@ def compute_attribution_for_hexagon(
     firms_lookup: dict[str, int] | None = None,
     no2_lookup: dict[str, float] | None = None,
     search_radius_m: float = ATTRIBUTION_SEARCH_RADIUS_METERS,
+    simulated_hour: int | None = None,
 ) -> dict[str, Any]:
+    """Wind-weighted multi-source attribution for one H3 cell.
+
+    Parameters
+    ----------
+    simulated_hour:
+        Optional 0–23 hour (Bengaluru local) for demo/A-B of the
+        time-of-day traffic multiplier. ``None`` uses current local time
+        when ``USE_TIME_OF_DAY_TRAFFIC`` is enabled.
+    """
     if hex_df is None:
         hex_df = _load_hexagon_features()
     if hex_df.empty:
@@ -168,7 +239,13 @@ def compute_attribution_for_hexagon(
     else:
         no2_mod = np.ones(len(src_cells))
 
-    traffic_raw = no2_mod * (src_df["road_density_m_per_sq_m"].values * 0.7 + 0.3)
+    # --- Traffic intensity -------------------------------------------------
+    # Base: road density (+ optional major-road corridor blend) × NO2 modulator.
+    # Same structural form as the legacy formula so results stay continuous
+    # when corridor score is 0 everywhere.
+    traffic_density, corridor_applied = _traffic_density_proxy(src_df)
+    traffic_raw = no2_mod * (traffic_density * 0.7 + 0.3)
+
     industrial_raw = no2_mod * (src_df["industrial_fraction"].values * 0.8 + src_df["industrial_facility_count"].values * 0.2 + 0.1)
     construction_raw = src_df["construction_feature_count"].values.astype(float) + 0.1
 
@@ -189,10 +266,26 @@ def compute_attribution_for_hexagon(
     else:
         combined_weights = idw_weights
 
-    traffic_contrib = np.sum(traffic_raw * combined_weights)
-    industrial_contrib = np.sum(industrial_raw * combined_weights)
-    construction_contrib = np.sum(construction_raw * combined_weights)
-    burning_contrib = np.sum(burning_raw * combined_weights)
+    traffic_contrib = float(np.sum(traffic_raw * combined_weights))
+    industrial_contrib = float(np.sum(industrial_raw * combined_weights))
+    construction_contrib = float(np.sum(construction_raw * combined_weights))
+    burning_contrib = float(np.sum(burning_raw * combined_weights))
+
+    # --- Time-of-day traffic multiplier ------------------------------------
+    # Applied only to the traffic channel before renormalisation so industrial
+    # / construction / burning fractions adjust inversely (zero-sum fractions).
+    time_meta: dict[str, Any]
+    if USE_TIME_OF_DAY_TRAFFIC:
+        time_meta = traffic_time_metadata(simulated_hour)
+        mult = float(time_meta["traffic_time_multiplier"])
+        traffic_contrib *= mult
+    else:
+        time_meta = {
+            "traffic_time_multiplier": 1.0,
+            "is_peak_hour": False,
+            "traffic_hour_local": None,
+            "traffic_timezone": "Asia/Kolkata",
+        }
 
     total = traffic_contrib + industrial_contrib + construction_contrib + burning_contrib
     if total <= 0:
@@ -219,6 +312,11 @@ def compute_attribution_for_hexagon(
         },
         "source_hexagons_contributing": int(len(source_indices)),
         "max_distance_m": round(float(np.max(source_distances)), 1),
+        # Optional metadata for Enforcement UI (non-breaking extras)
+        "traffic_time_multiplier": time_meta["traffic_time_multiplier"],
+        "is_peak_hour": time_meta["is_peak_hour"],
+        "traffic_hour_local": time_meta.get("traffic_hour_local"),
+        "traffic_corridor_applied": corridor_applied,
     }
     return result
 
@@ -231,6 +329,10 @@ def _empty_attribution_result(h3_cell: str, reason: str) -> dict[str, Any]:
         "wind_used": {"direction_deg": None, "speed_kmh": None, "retrieved_at": None},
         "source_hexagons_contributing": 0,
         "max_distance_m": 0.0,
+        "traffic_time_multiplier": 1.0,
+        "is_peak_hour": False,
+        "traffic_hour_local": None,
+        "traffic_corridor_applied": False,
     }
 
 
@@ -255,6 +357,7 @@ def compute_fusion_for_hexagon(
     firms_lookup: dict[str, int] | None = None,
     no2_lookup: dict[str, float] | None = None,
     station_range_m: float = FUSION_STATION_RANGE_METERS,
+    simulated_hour: int | None = None,
 ) -> dict[str, Any]:
     if hex_df is None:
         hex_df = _load_hexagon_features()
@@ -268,7 +371,11 @@ def compute_fusion_for_hexagon(
     tlon = target_row.iloc[0]["center_lon"]
 
     if attribution_result is None:
-        attribution_result = compute_attribution_for_hexagon(target_h3, hex_df, wind_data, firms_lookup=firms_lookup, no2_lookup=no2_lookup)
+        attribution_result = compute_attribution_for_hexagon(
+            target_h3, hex_df, wind_data,
+            firms_lookup=firms_lookup, no2_lookup=no2_lookup,
+            simulated_hour=simulated_hour,
+        )
 
     if wind_data is None:
         wind_data = _get_current_wind()
@@ -285,7 +392,11 @@ def compute_fusion_for_hexagon(
         dist = _haversine_distance_m(tlat, tlon, station.latitude, station.longitude)
         if dist <= station_range_m:
             station_h3 = _lat_lon_to_h3_cell(station.latitude, station.longitude)
-            s_attr = compute_attribution_for_hexagon(station_h3, hex_df, wind_data, firms_lookup=firms_lookup, no2_lookup=no2_lookup)
+            s_attr = compute_attribution_for_hexagon(
+                station_h3, hex_df, wind_data,
+                firms_lookup=firms_lookup, no2_lookup=no2_lookup,
+                simulated_hour=simulated_hour,
+            )
             station_attribs.append({
                 "station_id": station.station_id,
                 "distance_m": dist,
@@ -389,6 +500,7 @@ def get_single_hexagon_attribution(
     h3_cell: str,
     city: str = "bengaluru",
     include_fusion: bool = True,
+    simulated_hour: int | None = None,
 ) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'", "h3_cell": h3_cell}
@@ -400,10 +512,20 @@ def get_single_hexagon_attribution(
     wind_data = _get_current_wind(city)
     firms_lookup = _build_firms_lookup(city)
     no2_lookup = _build_no2_lookup(city)
-    attribution = compute_attribution_for_hexagon(h3_cell, hex_df, wind_data, firms_lookup=firms_lookup, no2_lookup=no2_lookup)
+    attribution = compute_attribution_for_hexagon(
+        h3_cell, hex_df, wind_data,
+        firms_lookup=firms_lookup, no2_lookup=no2_lookup,
+        simulated_hour=simulated_hour,
+    )
+
+    target_row = hex_df[hex_df["h3_cell"] == h3_cell]
+    center_lat = float(target_row.iloc[0]["center_lat"]) if not target_row.empty else 0.0
+    center_lon = float(target_row.iloc[0]["center_lon"]) if not target_row.empty else 0.0
 
     result = {
         "h3_cell": h3_cell,
+        "center_lat": center_lat,
+        "center_lon": center_lon,
         **attribution,
         "fused_pm25": None,
         "baseline_pm25": None,
@@ -417,7 +539,11 @@ def get_single_hexagon_attribution(
     }
 
     if include_fusion:
-        fusion = compute_fusion_for_hexagon(h3_cell, hex_df, wind_data, attribution, firms_lookup=firms_lookup, no2_lookup=no2_lookup)
+        fusion = compute_fusion_for_hexagon(
+            h3_cell, hex_df, wind_data, attribution,
+            firms_lookup=firms_lookup, no2_lookup=no2_lookup,
+            simulated_hour=simulated_hour,
+        )
         result.update(fusion)
         result["computed_at"] = datetime.now(tz=timezone.utc).isoformat()
 
@@ -428,6 +554,7 @@ def get_city_grid_attribution(
     city: str = "bengaluru",
     include_fusion: bool = True,
     max_hexagons: int | None = None,
+    simulated_hour: int | None = None,
 ) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
@@ -451,9 +578,17 @@ def get_city_grid_attribution(
     hexagon_results: list[dict[str, Any]] = []
     for _, row in hex_df.iterrows():
         h3_cell = row["h3_cell"]
-        attr = compute_attribution_for_hexagon(h3_cell, hex_df, wind_data, firms_lookup=firms_lookup, no2_lookup=no2_lookup)
+        attr = compute_attribution_for_hexagon(
+            h3_cell, hex_df, wind_data,
+            firms_lookup=firms_lookup, no2_lookup=no2_lookup,
+            simulated_hour=simulated_hour,
+        )
         if include_fusion:
-            fusion = compute_fusion_for_hexagon(h3_cell, hex_df, wind_data, attr, firms_lookup=firms_lookup, no2_lookup=no2_lookup)
+            fusion = compute_fusion_for_hexagon(
+                h3_cell, hex_df, wind_data, attr,
+                firms_lookup=firms_lookup, no2_lookup=no2_lookup,
+                simulated_hour=simulated_hour,
+            )
             attr.update(fusion)
         attr["h3_cell"] = h3_cell
         attr["center_lat"] = row["center_lat"]
@@ -524,7 +659,11 @@ def _estimate_fused_pm25_for_grid(hex_df: pd.DataFrame) -> np.ndarray:
     return estimate_fused_pm25(hex_df)
 
 
-def get_city_extremes(city: str = "bengaluru", n: int = 15) -> dict[str, Any]:
+def get_city_extremes(
+    city: str = "bengaluru",
+    n: int = 15,
+    simulated_hour: int | None = None,
+) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
 
@@ -542,7 +681,11 @@ def get_city_extremes(city: str = "bengaluru", n: int = 15) -> dict[str, Any]:
     hexagon_results: list[dict[str, Any]] = []
     for idx, row in hex_df.iterrows():
         h3_cell = row["h3_cell"]
-        attr = compute_attribution_for_hexagon(h3_cell, hex_df, wind_data, firms_lookup=firms_lookup, no2_lookup=no2_lookup)
+        attr = compute_attribution_for_hexagon(
+            h3_cell, hex_df, wind_data,
+            firms_lookup=firms_lookup, no2_lookup=no2_lookup,
+            simulated_hour=simulated_hour,
+        )
         fusion_val = fused_arr[idx]
         entry = {
             **attr,

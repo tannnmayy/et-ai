@@ -1,29 +1,198 @@
-import React, { useState } from 'react';
-import { usePriorities } from '../api/client';
-import { PriorityHex } from '../types';
+import React, {
+  Suspense,
+  lazy,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
+import { useEnforcementPriorities } from '../api/client';
+import type { ActionTier, ExposureLevel, PriorityHex, SourceKey } from '../types';
 import MapContainer from '../components/MapContainer';
-import SourceIcon from '../components/SourceIcon';
-import { AlertCircle, ShieldAlert, Shield, X, ChevronRight, Compass, Plus, Minus, Navigation, Info, ShieldCheck } from 'lucide-react';
+import EnforcementTableRow from '../components/enforcement/EnforcementTableRow';
+import {
+  AlertCircle,
+  Info,
+  Search,
+  ArrowUpDown,
+  Clock,
+} from 'lucide-react';
+import {
+  actionTierLabel,
+  actionTierStyles,
+  formatLocationName,
+  sortHexes,
+  type SortKey,
+} from '../services/enforcementUtils';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+
+// Lazy: Recharts lives behind the detail panel — keep it out of the first paint.
+const EnforcementDetailPanel = lazy(
+  () => import('../components/enforcement/EnforcementDetailPanel'),
+);
+
+const TOP_OPTIONS = [
+  { label: 'Top 10', value: 10 },
+  { label: 'Top 20', value: 20 },
+  { label: 'Top 50', value: 50 },
+  { label: 'All (100)', value: 100 },
+] as const;
+
+const SIM_OPTIONS: { label: string; hour: number | null }[] = [
+  { label: 'Current time', hour: null },
+  { label: 'Morning peak (8 AM)', hour: 8 },
+  { label: 'Evening peak (6 PM)', hour: 18 },
+  { label: 'Night (2 AM)', hour: 2 },
+];
+
+const SOURCE_FILTERS: { key: SourceKey | 'mixed'; label: string }[] = [
+  { key: 'construction', label: 'Construction' },
+  { key: 'traffic', label: 'Traffic' },
+  { key: 'industrial', label: 'Industrial' },
+  { key: 'burning', label: 'Burning' },
+  { key: 'mixed', label: 'Mixed' },
+];
+
+const TIER_FILTERS: ActionTier[] = ['IMMEDIATE', 'HIGH', 'MONITOR', 'ROUTINE'];
+const EXPOSURE_FILTERS: ExposureLevel[] = ['Low', 'Medium', 'High', 'Critical'];
 
 export default function EnforcementPage() {
-  const { data: priorities = [], isError, isLoading } = usePriorities();
+  // Display window (client-side slice of a cached top-100 fetch)
+  const [topK, setTopK] = useState(20);
+  // Immediate UI value for Simulate; debounced before it hits React Query
+  const [simHourUi, setSimHourUi] = useState<number | null>(null);
+  const simulatedHour = useDebouncedValue(simHourUi, 250);
+
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
 
-  const activeHex = selectedHex || priorities[0] || null;
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
+  const [tierFilter, setTierFilter] = useState<Set<ActionTier>>(new Set());
+  const [exposureFilter, setExposureFilter] = useState<Set<ExposureLevel>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>('rank');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
-  if (isLoading) {
+  const {
+    data: allPriorities = [],
+    isError,
+    isLoading,
+    isFetching,
+    isPlaceholderData,
+  } = useEnforcementPriorities(simulatedHour);
+
+  // Top-N is free after the first fetch (no network)
+  const priorities = useMemo(
+    () => allPriorities.slice(0, topK),
+    [allPriorities, topK],
+  );
+
+  const filtered = useMemo(() => {
+    let list = priorities;
+    const q = debouncedSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (h) =>
+          formatLocationName(h).toLowerCase().includes(q) ||
+          h.id.toLowerCase().includes(q) ||
+          h.primarySource.toLowerCase().includes(q),
+      );
+    }
+    if (sourceFilter.size > 0) {
+      list = list.filter((h) => sourceFilter.has(h.primarySourceKey));
+    }
+    if (tierFilter.size > 0) {
+      list = list.filter((h) => tierFilter.has(h.actionTier));
+    }
+    if (exposureFilter.size > 0) {
+      list = list.filter((h) => exposureFilter.has(h.exposure));
+    }
+    return sortHexes(list, sortKey, sortDir);
+  }, [
+    priorities,
+    debouncedSearch,
+    sourceFilter,
+    tierFilter,
+    exposureFilter,
+    sortKey,
+    sortDir,
+  ]);
+
+  // Stable map hex list — avoid recreating array identity when empty filter fallback
+  const mapHexes = useMemo(
+    () => (filtered.length > 0 ? filtered : priorities),
+    [filtered, priorities],
+  );
+
+  const activeHex = useMemo(() => {
+    if (selectedHex) {
+      const stillVisible = filtered.find((h) => h.id === selectedHex.id);
+      if (stillVisible) return stillVisible;
+      // Keep selection even if filtered out (detail stays open)
+      return selectedHex;
+    }
+    return filtered[0] || null;
+  }, [selectedHex, filtered]);
+
+  const handleSelectHex = useCallback((hex: PriorityHex) => {
+    setSelectedHex(hex);
+  }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedHex(null);
+  }, []);
+
+  const toggleSet = useCallback(<T,>(set: Set<T>, value: T, updater: (s: Set<T>) => void) => {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    updater(next);
+  }, []);
+
+  const handleSort = useCallback(
+    (key: SortKey) => {
+      if (sortKey === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortKey(key);
+        setSortDir(key === 'name' || key === 'source' ? 'asc' : 'desc');
+      }
+    },
+    [sortKey],
+  );
+
+  const handleDispatch = useCallback(
+    (hexId: string) => {
+      setDispatchedUnits((prev) => ({ ...prev, [hexId]: true }));
+      const hex = allPriorities.find((h) => h.id === hexId);
+      const loc = hex ? formatLocationName(hex) : hexId;
+      window.setTimeout(() => {
+        alert(
+          `Dispatch ordered for ${loc}.\nCode: ENF-${hexId.slice(-4).toUpperCase()}\nPrimary: ${hex?.primarySource ?? '—'}\nTier: ${hex ? actionTierLabel(hex.actionTier) : '—'}`,
+        );
+      }, 120);
+    },
+    [allPriorities],
+  );
+
+  const handleDispatchActive = useCallback(() => {
+    if (activeHex) handleDispatch(activeHex.id);
+  }, [activeHex, handleDispatch]);
+
+  if (isLoading && allPriorities.length === 0) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4">
           <div className="w-8 h-8 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs font-mono uppercase tracking-widest text-apple-secondary">Loading enforcement data...</span>
+          <span className="text-xs font-mono uppercase tracking-widest text-apple-secondary">
+            Loading enforcement intelligence...
+          </span>
         </div>
       </div>
     );
   }
 
-  if (isError) {
+  if (isError && allPriorities.length === 0) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
@@ -32,285 +201,238 @@ export default function EnforcementPage() {
           </div>
           <h2 className="text-lg font-bold text-white">Data Unavailable</h2>
           <p className="text-sm text-apple-secondary leading-relaxed">
-            Unable to load enforcement priorities from the API.
-            Please check that the backend is running and try again.
+            Unable to load enforcement priorities from the API. Check that the backend is
+            running on port 8010.
           </p>
         </div>
       </div>
     );
   }
 
-  const handleDispatch = (hexId: string) => {
-    setDispatchedUnits(prev => ({ ...prev, [hexId]: true }));
-    setTimeout(() => {
-      alert(`Dispatch ordered for Hexagon ${hexId}. Dispatch Code: ENF-992`);
-    }, 150);
-  };
-
-  const getActionabilityStyle = (act: string) => {
-    switch (act) {
-      case 'IMMEDIATE':
-        return {
-          bg: 'bg-brand-red/10 border-brand-red/20 text-brand-red',
-          dot: 'bg-brand-red shadow-[0_0_4px_#ff453a]',
-          text: 'IMMEDIATE',
-        };
-      case 'HIGH':
-        return {
-          bg: 'bg-brand-orange/10 border-brand-orange/20 text-brand-orange',
-          dot: 'bg-brand-orange shadow-[0_0_4px_#FF9F0A]',
-          text: 'HIGH',
-        };
-      default:
-        return {
-          bg: 'bg-brand-blue/10 border-brand-blue/20 text-brand-blue',
-          dot: 'bg-brand-blue shadow-[0_0_4px_#0A84FF]',
-          text: 'MONITOR',
-        };
-    }
-  };
+  const SortBtn = ({ k, children }: { k: SortKey; children: React.ReactNode }) => (
+    <button
+      type="button"
+      onClick={() => handleSort(k)}
+      className="inline-flex items-center gap-1 hover:text-white transition-colors"
+      aria-label={`Sort by ${k}`}
+    >
+      {children}
+      <ArrowUpDown size={10} className={sortKey === k ? 'text-brand-blue' : 'opacity-40'} />
+    </button>
+  );
 
   return (
     <div className="w-full h-full flex flex-col md:flex-row bg-black overflow-hidden">
-      {/* Left Column: Data Table (55%) */}
-      <section className="w-full md:w-[55%] h-full flex flex-col bg-black p-6 border-r border-apple-border">
-        {/* Page Header */}
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+      <section className="w-full md:w-[55%] h-full flex flex-col bg-black p-4 sm:p-6 border-r border-apple-border min-h-0">
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-4 shrink-0">
           <div>
             <h2 className="text-2xl font-bold text-white tracking-tight leading-snug">
-              Enforcement Priorities
+              Enforcement Intelligence
             </h2>
             <p className="text-xs text-apple-secondary font-sans mt-0.5">
-              Real-time localized intervention targets based on compound risk scores.
+              Evidence-backed intervention targets — exposure × magnitude × actionability.
             </p>
           </div>
-          <div className="relative group cursor-pointer rounded-full px-4 py-2 bg-apple-card hover:bg-apple-modal border border-apple-border transition-colors flex items-center gap-2 select-none">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-apple-secondary">Show:</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-white">Top 10</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 rounded-full px-3 py-2 bg-apple-card border border-apple-border text-[10px] font-bold uppercase tracking-wider">
+              <Clock size={12} className="text-brand-blue" />
+              <span className="text-apple-secondary">Simulate</span>
+              <select
+                value={simHourUi ?? ''}
+                onChange={(e) =>
+                  setSimHourUi(e.target.value === '' ? null : Number(e.target.value))
+                }
+                className="bg-transparent text-white outline-none cursor-pointer max-w-[140px]"
+                aria-label="Simulate time of day for traffic weighting"
+              >
+                {SIM_OPTIONS.map((o) => (
+                  <option key={o.label} value={o.hour ?? ''} className="bg-apple-card text-white">
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-center gap-2 rounded-full px-3 py-2 bg-apple-card border border-apple-border text-[10px] font-bold uppercase tracking-wider">
+              <span className="text-apple-secondary">Show</span>
+              <select
+                value={topK}
+                onChange={(e) => setTopK(Number(e.target.value))}
+                className="bg-transparent text-white outline-none cursor-pointer"
+                aria-label="Number of priority hexagons to display"
+              >
+                {TOP_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value} className="bg-apple-card">
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
 
-        {/* Priorities Table Structure */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Table Headers */}
-          <div className="grid grid-cols-[50px_1fr_120px_90px_100px_110px] gap-4 px-4 py-3 border-b border-apple-border mb-2">
-            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">RANK</div>
-            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase pl-2">HEXAGON</div>
-            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">SCORE</div>
-            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase text-right">EXPOSURE</div>
-            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">MAGNITUDE</div>
-            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase text-right">ACTION</div>
+        <div className="mb-3 px-3 py-2.5 rounded-xl bg-apple-card/40 border border-apple-border/60 text-[10px] text-apple-secondary leading-relaxed shrink-0">
+          <div className="flex items-start gap-2">
+            <Info size={12} className="text-brand-blue shrink-0 mt-0.5" />
+            <div>
+              <strong className="text-white">Score (0–10)</strong> = exposure × attributable
+              magnitude × actionability. Top-N is client-side (instant). Time simulation is
+              cached per hour.
+              {(isFetching || isPlaceholderData) && (
+                <span className="ml-2 text-brand-blue animate-pulse">
+                  {isPlaceholderData ? 'Loading simulation…' : 'Refreshing…'}
+                </span>
+              )}
+            </div>
           </div>
+        </div>
 
-          {/* Scrollable Rows */}
-          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-            {priorities.map((item, idx) => {
-              const rankStr = String(idx + 1).padStart(2, '0');
-              const isSelected = activeHex?.id === item.id;
-              const actionStyle = getActionabilityStyle(item.actionability);
-
+        <div className="flex flex-col gap-2 mb-3 shrink-0">
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-secondary"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search location…"
+              className="w-full min-h-[40px] pl-9 pr-3 py-2 rounded-xl bg-apple-card border border-apple-border text-sm text-white placeholder:text-apple-secondary focus:outline-none focus:border-brand-blue"
+              aria-label="Search locations"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {SOURCE_FILTERS.map((s) => {
+              const on = sourceFilter.has(s.key);
               return (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedHex(item)}
-                  className={`group grid grid-cols-[50px_1fr_120px_90px_100px_110px] gap-4 items-center rounded-xl cursor-pointer transition-all duration-200 py-3 relative overflow-hidden ${
-                    isSelected
-                      ? 'bg-apple-card border border-brand-blue/30 shadow-lg'
-                      : 'bg-apple-card/40 hover:bg-apple-card border border-transparent'
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => toggleSet(sourceFilter, s.key, setSourceFilter)}
+                  className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                    on
+                      ? 'bg-brand-blue/15 border-brand-blue text-brand-blue'
+                      : 'bg-apple-card border-apple-border text-apple-secondary hover:text-white'
                   }`}
                 >
-                  {/* Active selected state line indicator */}
-                  {isSelected && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-blue" />
-                  )}
-
-                  {/* Rank */}
-                  <div className="font-mono text-xs font-bold text-apple-secondary text-right pr-2">
-                    {rankStr}
-                  </div>
-
-                  {/* Hexagon & Name */}
-                  <div className="flex items-center gap-3 pl-2 min-w-0">
-                    <div
-                      className="w-2.5 h-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: item.priorityScore > 95 ? '#ff453a' : '#FF9F0A' }}
-                    />
-                    <div className="min-w-0">
-                      <div className="font-mono text-xs font-bold text-white truncate">
-                        {item.id}
-                      </div>
-                      <div className="text-[10px] font-sans text-apple-secondary truncate mt-0.5">
-                        {item.name}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Priority Score */}
-                  <div className="font-mono text-sm font-bold text-white text-right">
-                    {item.priorityScore}
-                    <div className="text-[9px] font-mono font-normal mt-0.5" style={{ color: item.changeVal >= 0 ? '#ff453a' : '#34C759' }}>
-                      {item.changeVal >= 0 ? `+${item.changeVal}` : item.changeVal} vs prev
-                    </div>
-                  </div>
-
-                  {/* Exposure */}
-                  <div className="font-sans text-xs font-bold text-apple-secondary text-right select-none">
-                    {item.exposure}
-                  </div>
-
-                  {/* Magnitude */}
-                  <div className="font-mono text-xs text-white text-right">
-                    +{item.magnitude}%
-                    <div className="text-[9px] font-mono text-apple-secondary mt-0.5 select-none">
-                      {item.confidence}% conf
-                    </div>
-                  </div>
-
-                  {/* Actionability Status Pill */}
-                  <div className="flex justify-end items-center pr-3">
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold select-none ${actionStyle.bg}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${actionStyle.dot}`} />
-                      {actionStyle.text}
-                    </div>
-                  </div>
-                </div>
+                  {s.label}
+                </button>
               );
             })}
+            <span className="w-px h-5 bg-apple-border self-center mx-0.5" />
+            {TIER_FILTERS.map((t) => {
+              const on = tierFilter.has(t);
+              const st = actionTierStyles(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleSet(tierFilter, t, setTierFilter)}
+                  className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                    on ? st.bg : 'bg-apple-card border-apple-border text-apple-secondary hover:text-white'
+                  }`}
+                >
+                  {actionTierLabel(t)}
+                </button>
+              );
+            })}
+            <span className="w-px h-5 bg-apple-border self-center mx-0.5" />
+            {EXPOSURE_FILTERS.map((e) => {
+              const on = exposureFilter.has(e);
+              return (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => toggleSet(exposureFilter, e, setExposureFilter)}
+                  className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                    on
+                      ? 'bg-white/10 border-white/30 text-white'
+                      : 'bg-apple-card border-apple-border text-apple-secondary hover:text-white'
+                  }`}
+                >
+                  {e}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] font-mono text-apple-secondary">
+            Showing {filtered.length} of {priorities.length} displayed
+            {allPriorities.length > priorities.length
+              ? ` (${allPriorities.length} cached)`
+              : ''}
+            {simulatedHour != null ? ` · simulated hour ${simulatedHour}:00 IST` : ''}
+          </p>
+        </div>
+
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <div className="grid grid-cols-[44px_minmax(0,1.4fr)_72px_88px_72px_80px_100px] gap-2 px-3 py-2 border-b border-apple-border mb-1.5 shrink-0">
+            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">
+              <SortBtn k="rank">#</SortBtn>
+            </div>
+            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase pl-1">
+              <SortBtn k="name">Location</SortBtn>
+            </div>
+            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase">
+              <SortBtn k="source">Source</SortBtn>
+            </div>
+            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">
+              <SortBtn k="score">Score</SortBtn>
+            </div>
+            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase text-right">
+              <SortBtn k="exposure">Exp.</SortBtn>
+            </div>
+            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">
+              <SortBtn k="magnitude">Mag.</SortBtn>
+            </div>
+            <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase text-right pr-1">
+              Action
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+            {filtered.length === 0 && (
+              <div className="py-12 text-center text-sm text-apple-secondary">
+                No targets match the current filters.
+              </div>
+            )}
+            {filtered.map((item) => (
+              <EnforcementTableRow
+                key={item.id}
+                item={item}
+                isSelected={activeHex?.id === item.id}
+                onSelect={handleSelectHex}
+              />
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Right Column: Digital Map + Detail Bottom Sheet (45%) */}
-      <section className="w-full md:w-[45%] h-full relative bg-apple-bg flex flex-col justify-between">
-        {/* Background Map Placeholder */}
-        <div className="flex-1 w-full h-full relative">
+      <section className="w-full md:w-[45%] h-full relative bg-apple-bg flex flex-col justify-between min-h-0">
+        <div className="flex-1 w-full min-h-0 relative">
           <MapContainer
             selectedHex={activeHex}
-            onSelectHex={(hex) => setSelectedHex(hex)}
-            allHexes={priorities}
+            onSelectHex={handleSelectHex}
+            allHexes={mapHexes}
             viewMode="enforcement"
           />
-
-          {/* Simulated Tactical Overlay Panels */}
-          <div className="absolute top-20 right-4 flex flex-col gap-2 z-10">
-            <button className="w-9 h-9 rounded-full bg-apple-modal/90 backdrop-blur-md border border-apple-border flex items-center justify-center text-white hover:bg-apple-card transition-colors shadow-lg">
-              <Plus size={16} />
-            </button>
-            <button className="w-9 h-9 rounded-full bg-apple-modal/90 backdrop-blur-md border border-apple-border flex items-center justify-center text-white hover:bg-apple-card transition-colors shadow-lg">
-              <Minus size={16} />
-            </button>
-            <button className="w-9 h-9 rounded-full bg-apple-modal/90 backdrop-blur-md border border-apple-border flex items-center justify-center text-white hover:bg-apple-card transition-colors shadow-lg mt-3">
-              <Navigation size={15} />
-            </button>
-          </div>
         </div>
 
-        {/* Enforcement Active Hex Details Bottom Sheet */}
         {activeHex && (
-          <div className="p-4 sm:p-6 bg-apple-modal/95 border-t border-apple-border backdrop-blur-xl z-20 shadow-2xl relative">
-            <div className="max-w-xl mx-auto flex flex-col gap-5">
-              {/* Top Row Header info */}
-              <div className="flex justify-between items-start border-b border-apple-border/50 pb-4">
-                <div className="flex gap-3.5 items-center">
-                  <div className="h-11 w-11 rounded-xl bg-brand-red/10 border border-brand-red/20 flex items-center justify-center text-brand-red shrink-0">
-                    <ShieldAlert size={20} className="animate-pulse" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-mono text-sm font-bold text-white tracking-tight">
-                        {activeHex.name || activeHex.id}
-                      </h3>
-                      <span className="bg-brand-red text-white font-mono text-[9px] font-bold px-2 py-0.5 rounded-full select-none">
-                        PRIORITY {activeHex.priorityScore > 70 ? '1' : activeHex.priorityScore > 40 ? '2' : '3'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-apple-secondary font-sans leading-relaxed mt-0.5">
-                      {activeHex.name}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedHex(null)}
-                  className="w-8 h-8 rounded-full bg-apple-card hover:bg-apple-border/20 border border-apple-border flex items-center justify-center text-apple-secondary hover:text-white transition-colors"
-                >
-                  <X size={14} />
-                </button>
+          <Suspense
+            fallback={
+              <div className="p-6 border-t border-apple-border bg-apple-modal/95 text-xs text-apple-secondary text-center">
+                Loading detail panel…
               </div>
-
-              {/* Actionable Explanation */}
-              {activeHex.explanation && (
-                <div className="bg-apple-card/60 border border-brand-blue/20 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Shield size={14} className="text-brand-blue" />
-                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-brand-blue">
-                      Enforcement Guidance
-                    </span>
-                    {activeHex.explanation.generated_by === 'llm' && (
-                      <span className="text-[8px] font-mono uppercase px-1.5 py-0.5 rounded bg-brand-blue/10 text-brand-blue/60 ml-auto">
-                        AI
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-apple-secondary leading-relaxed">
-                    {activeHex.explanation.text}
-                  </p>
-                </div>
-              )}
-
-              {/* Specs Metric Row */}
-              <div className="grid grid-cols-3 gap-6">
-                {/* Metric 1 */}
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary">
-                    PM2.5 CONCENTRATION
-                  </span>
-                  <div className="flex items-end gap-1.5 mt-1">
-                    <span className="font-mono text-xl font-bold text-brand-red leading-none select-none">
-                      {activeHex.pm25}
-                    </span>
-                    <span className="font-mono text-[9px] text-apple-secondary pb-0.5">
-                      µg/m³
-                    </span>
-                  </div>
-                </div>
-
-                {/* Metric 2 */}
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary">
-                    PRIMARY SOURCE
-                  </span>
-                  <div className="text-xs font-semibold text-white flex items-center gap-1.5 mt-1">
-                    <SourceIcon sourceType={activeHex.primarySource} size={16} />
-                    {activeHex.primarySource}
-                  </div>
-                </div>
-
-                {/* Action dispatch button */}
-                <div className="flex items-center justify-end">
-                  <button
-                    type="button"
-                    onClick={() => handleDispatch(activeHex.id)}
-                    disabled={dispatchedUnits[activeHex.id]}
-                    className={`px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors duration-200 flex items-center gap-1.5 shadow-md ${
-                      dispatchedUnits[activeHex.id]
-                        ? 'bg-brand-green/20 text-brand-green border border-brand-green/30 cursor-not-allowed'
-                        : 'bg-brand-blue hover:bg-blue-600 text-white'
-                    }`}
-                  >
-                    {dispatchedUnits[activeHex.id] ? (
-                      <>
-                        <ShieldCheck size={12} /> DISPATCHED
-                      </>
-                    ) : (
-                      <>
-                        <ShieldAlert size={12} /> DISPATCH UNIT
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+            }
+          >
+            <EnforcementDetailPanel
+              hex={activeHex}
+              onClose={handleCloseDetail}
+              dispatched={!!dispatchedUnits[activeHex.id]}
+              onDispatch={handleDispatchActive}
+            />
+          </Suspense>
         )}
       </section>
     </div>

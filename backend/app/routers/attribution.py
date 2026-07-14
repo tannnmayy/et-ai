@@ -25,14 +25,26 @@ router = APIRouter(prefix="/attribution", tags=["attribution"])
     description="Returns wind-weighted source-category breakdown (traffic, industrial, construction, burning) "
     "and optionally a fused PM2.5 estimate via IDW interpolation of nearby station readings. "
     "The method field indicates whether directional weighting was used ('wind_weighted') "
-    "or fell back to pure inverse-distance ('calm_fallback') due to near-zero wind.",
+    "or fell back to pure inverse-distance ('calm_fallback') due to near-zero wind. "
+    "Optional simulated_hour (0–23) overrides Bengaluru local time for traffic peak weighting.",
 )
 def hexagon_attribution(
     h3_cell: str,
     city: str = "bengaluru",
     include_fusion: bool = True,
+    simulated_hour: int | None = Query(
+        default=None,
+        ge=0,
+        le=23,
+        description="Optional Bengaluru local hour (0–23) for traffic time-of-day simulation",
+    ),
 ) -> SingleHexagonResponse:
-    result = get_single_hexagon_attribution(h3_cell, city=city, include_fusion=include_fusion)
+    result = get_single_hexagon_attribution(
+        h3_cell,
+        city=city,
+        include_fusion=include_fusion,
+        simulated_hour=simulated_hour,
+    )
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return SingleHexagonResponse(**result)
@@ -43,14 +55,31 @@ def hexagon_attribution(
     response_model=CityGridAttributionResponse,
     summary="Get source attribution for all hexagons in a city",
     description="Returns wind-weighted source-category breakdown for every H3 resolution-9 "
-    "hexagon in the city. Can optionally include fused PM2.5 estimates.",
+    "hexagon in the city. Can optionally include fused PM2.5 estimates. "
+    "Optional simulated_hour (0–23) overrides Bengaluru local time for traffic peak weighting.",
 )
 def city_grid_attribution(
     city: str = "bengaluru",
     include_fusion: bool = False,
-    max_hexagons: int | None = Query(default=2000, ge=-1, le=9999, description="Evenly sampled grid size (default 2000 for interactive maps; pass -1 for full grid)"),
+    max_hexagons: int | None = Query(
+        default=2000,
+        ge=-1,
+        le=9999,
+        description="Evenly sampled grid size (default 2000 for interactive maps; pass -1 for full grid)",
+    ),
+    simulated_hour: int | None = Query(
+        default=None,
+        ge=0,
+        le=23,
+        description="Optional Bengaluru local hour (0–23) for traffic time-of-day simulation",
+    ),
 ) -> CityGridAttributionResponse:
-    result = get_city_grid_attribution(city=city, include_fusion=include_fusion, max_hexagons=None if max_hexagons == -1 else max_hexagons)
+    result = get_city_grid_attribution(
+        city=city,
+        include_fusion=include_fusion,
+        max_hexagons=None if max_hexagons == -1 else max_hexagons,
+        simulated_hour=simulated_hour,
+    )
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return CityGridAttributionResponse(**result)
@@ -66,9 +95,16 @@ def city_grid_attribution(
 )
 def city_grid_fusion(
     city: str = "bengaluru",
-    max_hexagons: int | None = Query(default=2000, ge=-1, le=9999, description="Evenly sampled grid size (default 2000 for interactive maps; pass -1 for full grid)"),
+    max_hexagons: int | None = Query(
+        default=2000,
+        ge=-1,
+        le=9999,
+        description="Evenly sampled grid size (default 2000 for interactive maps; pass -1 for full grid)",
+    ),
 ) -> CityGridFusionResponse:
-    result = get_city_grid_fusion_only(city=city, max_hexagons=None if max_hexagons == -1 else max_hexagons)
+    result = get_city_grid_fusion_only(
+        city=city, max_hexagons=None if max_hexagons == -1 else max_hexagons
+    )
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return CityGridFusionResponse(**result)
@@ -81,13 +117,20 @@ def city_grid_fusion(
     description="Returns the top N cleanest and top N most polluted hexagons in a city, "
     "ranked by fused PM2.5 estimate. Only hexagons with a real fused estimate are included "
     "in the ranking. The response includes total_hexagons_with_data vs total_hexagons_in_grid "
-    "to surface data coverage honestly.",
+    "to surface data coverage honestly. "
+    "Optional simulated_hour (0–23) overrides Bengaluru local time for traffic peak weighting.",
 )
 def city_extremes(
     city: str = "bengaluru",
     n: int = Query(default=15, ge=1, le=100, description="Number of best/worst hexagons to return"),
+    simulated_hour: int | None = Query(
+        default=None,
+        ge=0,
+        le=23,
+        description="Optional Bengaluru local hour (0–23) for traffic time-of-day simulation",
+    ),
 ) -> CityExtremesResponse:
-    result = get_city_extremes(city=city, n=n)
+    result = get_city_extremes(city=city, n=n, simulated_hour=simulated_hour)
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return CityExtremesResponse(**result)

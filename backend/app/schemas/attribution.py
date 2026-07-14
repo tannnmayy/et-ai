@@ -36,6 +36,23 @@ class HexagonAttribution(BaseModel):
     wind_used: WindUsed = Field(description="Wind conditions used for this computation")
     source_hexagons_contributing: int = Field(description="Number of source hexagons that contributed")
     max_distance_m: float = Field(description="Maximum distance from which source hexagons were considered")
+    # Optional traffic enhancement metadata (defaults keep old clients happy)
+    traffic_time_multiplier: float | None = Field(
+        default=None,
+        description="Time-of-day multiplier applied to traffic intensity (1.0 if disabled)",
+    )
+    is_peak_hour: bool | None = Field(
+        default=None,
+        description="Whether Bengaluru local hour is a peak commuting window",
+    )
+    traffic_hour_local: int | None = Field(
+        default=None,
+        description="Local hour (0–23, Asia/Kolkata) used for the traffic multiplier",
+    )
+    traffic_corridor_applied: bool | None = Field(
+        default=None,
+        description="True when major-road corridor scores were blended into traffic density",
+    )
 
 
 class HexagonFusion(BaseModel):
@@ -67,6 +84,22 @@ class SingleHexagonResponse(BaseModel):
     fusion_method: str = Field(default="idw_attribution_baseline", description="Fusion method identifier")
     computed_at: str = Field(description="ISO timestamp of computation")
     city: str = Field(default="bengaluru", description="City name")
+    traffic_time_multiplier: float | None = Field(
+        default=None,
+        description="Time-of-day multiplier applied to traffic intensity",
+    )
+    is_peak_hour: bool | None = Field(
+        default=None,
+        description="Whether Bengaluru local hour is a peak commuting window",
+    )
+    traffic_hour_local: int | None = Field(
+        default=None,
+        description="Local hour (0–23, Asia/Kolkata) used for the traffic multiplier",
+    )
+    traffic_corridor_applied: bool | None = Field(
+        default=None,
+        description="True when major-road corridor scores were blended into traffic density",
+    )
 
 
 class CityGridAttributionResponse(BaseModel):
@@ -106,6 +139,10 @@ class HexagonExtreme(BaseModel):
     nearest_station_id: str | None = Field(default=None, description="Nearest station ID")
     nearest_station_distance_m: float | None = Field(default=None, description="Distance to nearest station (m)")
     fusion_method: str = Field(default="idw_attribution_baseline", description="Fusion method identifier")
+    traffic_time_multiplier: float | None = Field(default=None)
+    is_peak_hour: bool | None = Field(default=None)
+    traffic_hour_local: int | None = Field(default=None)
+    traffic_corridor_applied: bool | None = Field(default=None)
 
 
 class CityExtremesResponse(BaseModel):

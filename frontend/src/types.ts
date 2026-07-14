@@ -11,22 +11,51 @@ export interface Station {
   status: 'Good' | 'Moderate' | 'Poor' | 'Severe';
 }
 
+export type SourceKey = 'traffic' | 'industrial' | 'construction' | 'burning';
+export type ExposureLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+export type ActionTier = 'IMMEDIATE' | 'HIGH' | 'MONITOR' | 'ROUTINE';
+
 export interface PriorityHex {
   id: string;
   name: string;
+  /** Display score 0–10 (derived from backend 0–1 priority_score) */
+  score10: number;
+  /** Backend 0–1 priority score (kept for sorting fidelity) */
   priorityScore: number;
+  rank: number;
   changeVal: number;
-  exposure: 'Low' | 'Medium' | 'High' | 'Critical';
+  exposure: ExposureLevel;
+  /** Attributable magnitude 0–100 */
   magnitude: number;
   confidence: number;
-  actionability: 'IMMEDIATE' | 'HIGH' | 'MONITOR';
+  /** @deprecated use actionTier */
+  actionability: ActionTier;
+  actionTier: ActionTier;
   pm25: number;
   primarySource: string;
-  sourceType: 'Heavy Ind.' | 'Construction' | 'Traffic Hub' | 'Waste Burning';
-  sourceAttribution: { traffic: number; industrial: number; construction: number; burning: number };
+  primarySourceKey: SourceKey | 'mixed';
+  sourceType: 'Heavy Ind.' | 'Construction' | 'Traffic Hub' | 'Waste Burning' | 'Mixed';
+  sourceAttribution: {
+    traffic: number;
+    industrial: number;
+    construction: number;
+    burning: number;
+  };
   explanation?: { text: string; generated_by: string };
   lat: number;
   lng: number;
+  // Optional traffic enhancements from backend
+  trafficCorridorScore?: number;
+  isMajorRoadCorridor?: boolean;
+  trafficTimeMultiplier?: number;
+  isPeakHour?: boolean;
+  trafficHourLocal?: number | null;
+  trafficCorridorApplied?: boolean;
+  scoringBreakdown?: {
+    exposure_weight: number;
+    attributable_magnitude: number;
+    actionability_weight: number;
+  };
 }
 
 export interface ChatMessage {

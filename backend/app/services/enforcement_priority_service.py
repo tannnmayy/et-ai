@@ -165,10 +165,39 @@ def _compute_actionability_weight(attr: dict[str, float]) -> float:
 # order correction not needed for ranking purposes.
 # ---------------------------------------------------------------------------
 
-def _compute_attribution_vectors(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a DataFrame with columns traffic / industrial / construction / burning
-    (all floats, each row sums to 1.0) computed from the feature columns."""
-    traffic_raw = df["road_density_m_per_sq_m"].fillna(0.0) * 0.7 + 0.3
+def _compute_attribution_vectors(
+    df: pd.DataFrame,
+    *,
+    simulated_hour: int | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Return source fractions (rows sum to 1.0) + traffic enhancement metadata.
+
+    When ``traffic_corridor_score`` is present, blends major-road corridor
+    density into the traffic raw signal (same 0.6/0.4 mix as attribution_service).
+    When time-of-day traffic is enabled, multiplies traffic raw by the
+    Bengaluru peak-hour multiplier before renormalisation.
+    """
+    from backend.app.services.attribution_service import (
+        CORRIDOR_ROAD_DENSITY_WEIGHT,
+        CORRIDOR_SCORE_WEIGHT,
+        USE_TIME_OF_DAY_TRAFFIC,
+        USE_TRAFFIC_CORRIDOR_SCORE,
+    )
+    from backend.app.services.traffic_service import traffic_time_metadata
+
+    road_density = df["road_density_m_per_sq_m"].fillna(0.0)
+    corridor_applied = False
+    if USE_TRAFFIC_CORRIDOR_SCORE and "traffic_corridor_score" in df.columns:
+        corridor = df["traffic_corridor_score"].fillna(0.0)
+        traffic_density = (
+            CORRIDOR_ROAD_DENSITY_WEIGHT * road_density
+            + CORRIDOR_SCORE_WEIGHT * corridor
+        )
+        corridor_applied = True
+    else:
+        traffic_density = road_density
+
+    traffic_raw = traffic_density * 0.7 + 0.3
     industrial_raw = (
         df["industrial_fraction"].fillna(0.0) * 0.8
         + df["industrial_facility_count"].fillna(0.0) * 0.2
@@ -179,10 +208,22 @@ def _compute_attribution_vectors(df: pd.DataFrame) -> pd.DataFrame:
     # is never zero (avoids division edge cases) but contributes minimally.
     burning_raw = pd.Series(0.01, index=df.index)
 
+    time_meta: dict[str, Any]
+    if USE_TIME_OF_DAY_TRAFFIC:
+        time_meta = traffic_time_metadata(simulated_hour)
+        traffic_raw = traffic_raw * float(time_meta["traffic_time_multiplier"])
+    else:
+        time_meta = {
+            "traffic_time_multiplier": 1.0,
+            "is_peak_hour": False,
+            "traffic_hour_local": None,
+            "traffic_timezone": "Asia/Kolkata",
+        }
+
     total = traffic_raw + industrial_raw + construction_raw + burning_raw
     total = total.replace(0.0, 1.0)  # guard against zero-total rows
 
-    return pd.DataFrame(
+    attr = pd.DataFrame(
         {
             "traffic": traffic_raw / total,
             "industrial": industrial_raw / total,
@@ -191,6 +232,11 @@ def _compute_attribution_vectors(df: pd.DataFrame) -> pd.DataFrame:
         },
         index=df.index,
     )
+    meta = {
+        **time_meta,
+        "traffic_corridor_applied": corridor_applied,
+    }
+    return attr, meta
 
 
 def _haversine_m(lat1: float, lon1: float, lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
@@ -242,6 +288,7 @@ def _estimate_fused_pm25(hex_df: pd.DataFrame, *, fill_from_nearest: bool = Fals
 def compute_enforcement_priorities(
     city: str = "bengaluru",
     top_k: int = 10,
+    simulated_hour: int | None = None,
 ) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
@@ -255,8 +302,11 @@ def compute_enforcement_priorities(
 
     # -----------------------------------------------------------------------
     # 1. Vectorised source-attribution fractions from OSM feature columns
+    #    (optional corridor blend + time-of-day traffic multiplier)
     # -----------------------------------------------------------------------
-    attr_df = _compute_attribution_vectors(hex_df)
+    attr_df, traffic_meta = _compute_attribution_vectors(
+        hex_df, simulated_hour=simulated_hour
+    )
 
     # -----------------------------------------------------------------------
     # 2. Actionability weight (weighted average of per-source weights)
@@ -310,6 +360,17 @@ def compute_enforcement_priorities(
         * actionability.to_numpy()
     )
 
+    corridor_score = (
+        hex_df["traffic_corridor_score"].fillna(0.0).to_numpy()
+        if "traffic_corridor_score" in hex_df.columns
+        else np.zeros(len(hex_df))
+    )
+    is_corridor = (
+        hex_df["is_major_road_corridor"].fillna(False).to_numpy()
+        if "is_major_road_corridor" in hex_df.columns
+        else np.zeros(len(hex_df), dtype=bool)
+    )
+
     result_df = pd.DataFrame(
         {
             "h3_cell": hex_df["h3_cell"].values,
@@ -324,6 +385,8 @@ def compute_enforcement_priorities(
             "industrial": np.round(attr_df["industrial"].to_numpy(), 4),
             "construction": np.round(attr_df["construction"].to_numpy(), 4),
             "burning": np.round(attr_df["burning"].to_numpy(), 4),
+            "traffic_corridor_score": np.round(corridor_score, 4),
+            "is_major_road_corridor": is_corridor,
         }
     )
 
@@ -335,7 +398,11 @@ def compute_enforcement_priorities(
     top = result_df.head(top_k)
 
     ranked_hexagons = []
-    from backend.app.services.google_maps_client import reverse_geocode
+    # NOTE: Sequential Google reverse-geocode for every top_k row made the
+    # priority endpoint multi-second and blocked Simulate / Top-N UI. Names
+    # are resolved on the frontend via locality bounding boxes (and optional
+    # reverse-geocode later for a single detail view). Leaving name=None is
+    # intentional for list performance.
 
     for _, row in top.iterrows():
         source_attr = {
@@ -363,7 +430,13 @@ def compute_enforcement_priorities(
             "source_attribution": source_attr,
             "method": "vectorised_feature_proxy",
             "explanation": explanation,
-            "name": _reverse_geocode_name(row, reverse_geocode),
+            "name": None,
+            "traffic_corridor_score": float(row["traffic_corridor_score"]),
+            "is_major_road_corridor": bool(row["is_major_road_corridor"]),
+            "traffic_time_multiplier": traffic_meta.get("traffic_time_multiplier"),
+            "is_peak_hour": traffic_meta.get("is_peak_hour"),
+            "traffic_hour_local": traffic_meta.get("traffic_hour_local"),
+            "traffic_corridor_applied": traffic_meta.get("traffic_corridor_applied"),
         })
 
     return {
@@ -374,6 +447,10 @@ def compute_enforcement_priorities(
         "ranked_hexagons": ranked_hexagons,
         "exposure_data_source": exposure_data_source,
         "wind_used": wind_data,
+        "traffic_time_multiplier": traffic_meta.get("traffic_time_multiplier"),
+        "is_peak_hour": traffic_meta.get("is_peak_hour"),
+        "traffic_hour_local": traffic_meta.get("traffic_hour_local"),
+        "traffic_corridor_applied": traffic_meta.get("traffic_corridor_applied"),
     }
 
 

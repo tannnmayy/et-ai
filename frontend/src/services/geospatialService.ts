@@ -64,69 +64,106 @@ function mapRealStation(item: any): { id: string; name: string; lat: number; lng
   };
 }
 
-function mapRealHex(hex: any, index: number) {
+function mapRealHex(hex: any, index: number): PriorityHex | null {
   let lat: number;
   let lng: number;
   try {
-    const coords = cellToLatLng(hex.h3_cell);
-    lat = coords[0];
-    lng = coords[1];
+    if (hex.center_lat != null && hex.center_lon != null) {
+      lat = Number(hex.center_lat);
+      lng = Number(hex.center_lon);
+    } else {
+      const coords = cellToLatLng(hex.h3_cell);
+      lat = coords[0];
+      lng = coords[1];
+    }
   } catch (e) {
     console.warn('Skipping hexagon with unparseable h3_cell:', hex.h3_cell);
     return null;
   }
 
+  const sa = hex.source_attribution || {};
+  const sourceAttribution = {
+    traffic: sa.traffic ?? 0,
+    industrial: sa.industrial ?? 0,
+    construction: sa.construction ?? 0,
+    burning: sa.burning ?? 0,
+  };
+
   let maxSource = 'traffic';
   let maxVal = 0;
-  if (hex.source_attribution) {
-    for (const [key, value] of Object.entries(hex.source_attribution)) {
-      if ((value as number) > maxVal) {
-        maxVal = value as number;
-        maxSource = key;
-      }
+  for (const [key, value] of Object.entries(sourceAttribution)) {
+    if ((value as number) > maxVal) {
+      maxVal = value as number;
+      maxSource = key;
     }
   }
+  const secondVals = Object.values(sourceAttribution).sort((a, b) => b - a);
+  const isMixed = maxVal < 0.4 || (secondVals[0] - (secondVals[1] ?? 0) < 0.08);
 
-  const sourceTypeMap: Record<string, 'Traffic Hub' | 'Heavy Ind.' | 'Construction' | 'Waste Burning'> = {
+  const sourceTypeMap: Record<string, PriorityHex['sourceType']> = {
     traffic: 'Traffic Hub',
     industrial: 'Heavy Ind.',
     construction: 'Construction',
     burning: 'Waste Burning',
   };
 
-  let exposure: 'Low' | 'Medium' | 'High' | 'Critical' = 'Medium';
+  let exposure: PriorityHex['exposure'] = 'Medium';
   const expWeight = hex.scoring_breakdown?.exposure_weight ?? 0.5;
   if (expWeight < 0.3) exposure = 'Low';
   else if (expWeight < 0.6) exposure = 'Medium';
   else if (expWeight < 0.8) exposure = 'High';
   else exposure = 'Critical';
 
-  let actionability: 'IMMEDIATE' | 'HIGH' | 'MONITOR' = 'MONITOR';
-  const actWeight = hex.scoring_breakdown?.actionability_weight ?? 0.5;
-  if (actWeight > 0.8) actionability = 'IMMEDIATE';
-  else if (actWeight > 0.4) actionability = 'HIGH';
+  // Backend priority_score is 0–1; display as 0–10 for officer-friendly scale
+  const priority01 = Number(hex.priority_score ?? 0);
+  const score10 = Math.round(Math.min(1, Math.max(0, priority01)) * 100) / 10;
+
+  // Action tier from score + exposure (not just actionability weight)
+  let actionTier: PriorityHex['actionTier'] = 'ROUTINE';
+  const highExp = exposure === 'High' || exposure === 'Critical';
+  if (score10 >= 9 && highExp) actionTier = 'IMMEDIATE';
+  else if (score10 >= 9 || score10 >= 7) actionTier = 'HIGH';
+  else if (score10 >= 5) actionTier = 'MONITOR';
+  else actionTier = 'ROUTINE';
+
+  const magnitude = Math.round((hex.scoring_breakdown?.attributable_magnitude || 0) * 100);
+  // Magnitude already encodes attributable pollution intensity — use as "vs baseline" proxy
+  // rather than synthetic sin-based change values.
+  const changeVal = Number(((hex.scoring_breakdown?.attributable_magnitude || 0) * 5).toFixed(1));
 
   return {
     id: hex.h3_cell,
     name: hex.name || _resolveName(hex.h3_cell, lat, lng),
-    priorityScore: Math.round(hex.priority_score * 100),
-    changeVal: Number((Math.sin(index + 1) * 2.5).toFixed(1)),
+    score10,
+    priorityScore: priority01,
+    rank: Number(hex.rank ?? index + 1),
+    changeVal,
     exposure,
-    magnitude: Math.round((hex.scoring_breakdown?.attributable_magnitude || 0) * 100),
-    confidence: 90,
-    actionability,
+    magnitude,
+    confidence: Math.round((hex.scoring_breakdown?.actionability_weight ?? 0.5) * 100),
+    actionability: actionTier,
+    actionTier,
     pm25: Math.round(hex.fused_pm25 || hex.predicted_pm25 || 0),
-    primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
-    sourceType: sourceTypeMap[maxSource] || ('Heavy Ind.' as const),
-    sourceAttribution: {
-      traffic: hex.source_attribution?.traffic ?? 0,
-      industrial: hex.source_attribution?.industrial ?? 0,
-      construction: hex.source_attribution?.construction ?? 0,
-      burning: hex.source_attribution?.burning ?? 0,
-    },
+    primarySource: isMixed ? 'Mixed' : maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
+    primarySourceKey: isMixed ? 'mixed' : (maxSource as PriorityHex['primarySourceKey']),
+    sourceType: isMixed ? 'Mixed' : sourceTypeMap[maxSource] || 'Heavy Ind.',
+    sourceAttribution,
     explanation: hex.explanation,
     lat,
     lng,
+    trafficCorridorScore: hex.traffic_corridor_score ?? undefined,
+    isMajorRoadCorridor: hex.is_major_road_corridor ?? undefined,
+    trafficTimeMultiplier: hex.traffic_time_multiplier ?? undefined,
+    isPeakHour: hex.is_peak_hour ?? undefined,
+    trafficHourLocal: hex.traffic_hour_local ?? null,
+    trafficCorridorApplied: hex.traffic_corridor_applied ?? undefined,
+    scoringBreakdown: hex.scoring_breakdown
+      ? {
+          exposure_weight: hex.scoring_breakdown.exposure_weight,
+          attributable_magnitude: hex.scoring_breakdown.attributable_magnitude,
+          actionability_weight: hex.scoring_breakdown.actionability_weight,
+        }
+      : undefined,
   };
 }
 
@@ -165,17 +202,22 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
   const fusedPm25 = fusion?.fused_pm25;
   const fusedPm25Num = fusedPm25 != null ? Math.round(fusedPm25) : 0;
 
+  const score10 = Math.min(10, Math.round(fusedPm25Num / 20));
   return {
     id: attr.h3_cell,
     name: attr.name || _resolveName(attr.h3_cell, lat, lng),
-    priorityScore: fusedPm25Num,
+    score10,
+    priorityScore: score10 / 10,
+    rank: 0,
     changeVal: 0,
     exposure: 'Medium',
     magnitude: 0,
     confidence: 0,
     actionability: 'MONITOR',
+    actionTier: 'MONITOR',
     pm25: fusedPm25Num,
     primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
+    primarySourceKey: maxSource as PriorityHex['primarySourceKey'],
     sourceType: sourceTypeMap[maxSource] || ('Heavy Ind.' as const),
     sourceAttribution: {
       traffic: sa.traffic ?? 0,
@@ -202,17 +244,68 @@ export function useStations() {
   });
 }
 
-export function usePriorities() {
+/**
+ * Enforcement priority list.
+ *
+ * Performance notes:
+ * - Fetches a fixed max window (100) so Top-N dropdown can slice client-side
+ *   without another network round-trip.
+ * - `simulatedHour` is part of the queryKey so React Query caches each
+ *   simulation independently (switch back to a prior hour = instant).
+ * - staleTime / gcTime keep results warm during demos.
+ * - placeholderData keeps the previous list visible while a new hour loads.
+ */
+export const ENFORCEMENT_FETCH_TOP_K = 100;
+
+export function usePriorities(
+  _topK: number = 20,
+  simulatedHour: number | null = null,
+) {
+  // `_topK` kept for call-site compatibility (MapPage). Enforcement always
+  // fetches ENFORCEMENT_FETCH_TOP_K and slices client-side for Top-N UI.
   return useQuery<PriorityHex[]>({
-    queryKey: ['priorities'],
+    queryKey: ['enforcement-priorities', 'bengaluru', simulatedHour, ENFORCEMENT_FETCH_TOP_K],
     queryFn: async () => {
-      const { data } = await apiClient.get('/enforcement/priority/bengaluru?top_k=20');
+      const params = new URLSearchParams({
+        top_k: String(ENFORCEMENT_FETCH_TOP_K),
+      });
+      if (simulatedHour != null) {
+        params.set('simulated_hour', String(simulatedHour));
+      }
+      const { data } = await apiClient.get(
+        `/enforcement/priority/bengaluru?${params.toString()}`,
+      );
       if (data && data.ranked_hexagons && data.ranked_hexagons.length > 0) {
-        return data.ranked_hexagons.map((hex: any, idx: number) => mapRealHex(hex, idx)).filter((h: PriorityHex | null): h is PriorityHex => h !== null);
+        return data.ranked_hexagons
+          .map((hex: any, idx: number) => {
+            const mapped = mapRealHex(
+              {
+                ...hex,
+                traffic_time_multiplier:
+                  hex.traffic_time_multiplier ?? data.traffic_time_multiplier,
+                is_peak_hour: hex.is_peak_hour ?? data.is_peak_hour,
+                traffic_hour_local: hex.traffic_hour_local ?? data.traffic_hour_local,
+                traffic_corridor_applied:
+                  hex.traffic_corridor_applied ?? data.traffic_corridor_applied,
+              },
+              idx,
+            );
+            return mapped;
+          })
+          .filter((h: PriorityHex | null): h is PriorityHex => h !== null);
       }
       throw new Error('No ranked hexagons returned from API');
     },
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    // Keep previous hour's list on screen while the next simulation loads
+    placeholderData: (previousData) => previousData,
   });
+}
+
+/** Alias with clearer name for Enforcement page. */
+export function useEnforcementPriorities(simulatedHour: number | null = null) {
+  return usePriorities(ENFORCEMENT_FETCH_TOP_K, simulatedHour);
 }
 
 export function useAttributionGrid() {
@@ -243,27 +336,35 @@ export function useCityExtremes() {
       if (!data || !data.best || !data.worst) {
         throw new Error('No extremes data returned from API');
       }
-      const mapExtreme = (h: any) => ({
-        id: h.h3_cell,
-        name: h.name || _resolveName(h.h3_cell, h.center_lat, h.center_lon),
-        priorityScore: Math.round(h.fused_pm25 || 0),
-        changeVal: 0,
-        exposure: 'Medium' as const,
-        magnitude: 0,
-        confidence: 0,
-        actionability: 'MONITOR' as const,
-        pm25: Math.round(h.fused_pm25 || 0),
-        primarySource: '',
-        sourceType: 'Heavy Ind.' as const,
-        sourceAttribution: {
-          traffic: h.source_attribution?.traffic ?? 0,
-          industrial: h.source_attribution?.industrial ?? 0,
-          construction: h.source_attribution?.construction ?? 0,
-          burning: h.source_attribution?.burning ?? 0,
-        },
-        lat: h.center_lat,
-        lng: h.center_lon,
-      });
+      const mapExtreme = (h: any): PriorityHex => {
+        const pm = Math.round(h.fused_pm25 || 0);
+        const score10 = Math.min(10, Math.round(pm / 20));
+        return {
+          id: h.h3_cell,
+          name: h.name || _resolveName(h.h3_cell, h.center_lat, h.center_lon),
+          score10,
+          priorityScore: score10 / 10,
+          rank: 0,
+          changeVal: 0,
+          exposure: 'Medium',
+          magnitude: 0,
+          confidence: 0,
+          actionability: 'MONITOR',
+          actionTier: 'MONITOR',
+          pm25: pm,
+          primarySource: '',
+          primarySourceKey: 'traffic',
+          sourceType: 'Heavy Ind.',
+          sourceAttribution: {
+            traffic: h.source_attribution?.traffic ?? 0,
+            industrial: h.source_attribution?.industrial ?? 0,
+            construction: h.source_attribution?.construction ?? 0,
+            burning: h.source_attribution?.burning ?? 0,
+          },
+          lat: h.center_lat,
+          lng: h.center_lon,
+        };
+      };
       const allHexes = [...data.best.map(mapExtreme), ...data.worst.map(mapExtreme)];
       return { best: allHexes.slice(0, 15), worst: allHexes.slice(15), totalWithData: data.total_hexagons_with_data, totalInGrid: data.total_hexagons_in_grid };
     },

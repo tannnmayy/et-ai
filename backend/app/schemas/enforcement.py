@@ -26,6 +26,13 @@ class RankedHexagon(BaseModel):
     source_attribution: SourceAttribution
     method: str
     explanation: Explanation = Field(description="Actionable enforcement guidance for this hexagon")
+    # Optional traffic enhancement metadata (backward compatible)
+    traffic_corridor_score: float | None = Field(default=None, description="0–1 major-road corridor density score")
+    is_major_road_corridor: bool | None = Field(default=None, description="Hex overlaps significant major roads")
+    traffic_time_multiplier: float | None = Field(default=None, description="Peak-hour traffic multiplier applied")
+    is_peak_hour: bool | None = Field(default=None)
+    traffic_hour_local: int | None = Field(default=None)
+    traffic_corridor_applied: bool | None = Field(default=None)
 
 
 class EnforcementPriorityResponse(BaseModel):
@@ -34,3 +41,7 @@ class EnforcementPriorityResponse(BaseModel):
     total_hexagons: int
     top_k: int
     ranked_hexagons: list[RankedHexagon]
+    traffic_time_multiplier: float | None = None
+    is_peak_hour: bool | None = None
+    traffic_hour_local: int | None = None
+    traffic_corridor_applied: bool | None = None

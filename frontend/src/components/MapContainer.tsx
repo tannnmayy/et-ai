@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import { APIProvider, Map, AdvancedMarker } from '@vis.gl/react-google-maps';
-import { Shield, MapPin, Eye, Key, Layers, Compass, Wind } from 'lucide-react';
+import { Key } from 'lucide-react';
 import { PriorityHex } from '../types';
+import { actionTierStyles, formatLocationName } from '../services/enforcementUtils';
 
 interface MapContainerProps {
   selectedHex: PriorityHex | null;
@@ -17,7 +18,6 @@ const API_KEY =
 
 const isRealKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY' && !API_KEY.includes('MY_GEMINI');
 
-// Custom dark styled map styles
 const darkMapStyles = [
   { elementType: 'geometry', stylers: [{ color: '#000000' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#000000' }] },
@@ -28,7 +28,7 @@ const darkMapStyles = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0c0c0e' }] },
 ];
 
-export default function MapContainer({
+function MapContainer({
   selectedHex,
   onSelectHex,
   allHexes,
@@ -36,6 +36,50 @@ export default function MapContainer({
 }: MapContainerProps) {
   const [showRealMap, setShowRealMap] = useState(isRealKey);
   const [activeLayer, setActiveLayer] = useState<'h3' | 'heatmap' | 'sat'>('h3');
+
+  const bounds = useMemo(() => {
+    if (!allHexes || allHexes.length === 0) {
+      return { minLat: 12.9, maxLat: 13.05, minLng: 77.5, maxLng: 77.7 };
+    }
+    const lats = allHexes.map((h) => h.lat);
+    const lngs = allHexes.map((h) => h.lng);
+    return {
+      minLat: Math.min(...lats),
+      maxLat: Math.max(...lats),
+      minLng: Math.min(...lngs),
+      maxLng: Math.max(...lngs),
+    };
+  }, [allHexes]);
+
+  const { minLat, maxLat, minLng, maxLng } = bounds;
+  const latRange = maxLat - minLat || 0.01;
+  const lngRange = maxLng - minLng || 0.01;
+
+  const project = useCallback(
+    (lat: number, lng: number) => {
+      const x = 120 + ((lng - minLng) / lngRange) * 560;
+      const y = 500 - ((lat - minLat) / latRange) * 400;
+      return { x, y };
+    },
+    [minLat, minLng, latRange, lngRange],
+  );
+
+  const getHexPoints = useCallback((cx: number, cy: number, r: number) => {
+    const points = [];
+    for (let i = 0; i < 6; i++) {
+      const angle = (i * 60 * Math.PI) / 180;
+      points.push(`${(cx + r * Math.cos(angle)).toFixed(1)},${(cy + r * Math.sin(angle)).toFixed(1)}`);
+    }
+    return points.join(' ');
+  }, []);
+
+  const mapCenter = useMemo(
+    () => ({
+      lat: (minLat + maxLat) / 2 || 12.9716,
+      lng: (minLng + maxLng) / 2 || 77.5946,
+    }),
+    [minLat, maxLat, minLng, maxLng],
+  );
 
   if (!allHexes || allHexes.length === 0) {
     return (
@@ -48,75 +92,36 @@ export default function MapContainer({
     );
   }
 
-  // Set up projections for simulated SVG map based on coordinates of hexagons
-  const lats = allHexes.map((h) => h.lat);
-  const lngs = allHexes.map((h) => h.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-
-  const latRange = maxLat - minLat || 0.01;
-  const lngRange = maxLng - minLng || 0.01;
-
-  const project = (lat: number, lng: number) => {
-    // Map coords into SVG viewbox: X from 120 to 680, Y from 100 to 500
-    const x = 120 + ((lng - minLng) / lngRange) * 560;
-    const y = 500 - ((lat - minLat) / latRange) * 400; // Invert Y coordinate
-    return { x, y };
-  };
-
-  const getHexPoints = (cx: number, cy: number, r: number) => {
-    const points = [];
-    for (let i = 0; i < 6; i++) {
-      const angle = (i * 60 * Math.PI) / 180;
-      points.push(`${(cx + r * Math.cos(angle)).toFixed(1)},${(cy + r * Math.sin(angle)).toFixed(1)}`);
-    }
-    return points.join(' ');
-  };
-
   return (
     <div className="relative w-full h-full bg-black flex flex-col overflow-hidden">
-      {/* Top controls: simulation toggle vs real map */}
       <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2">
         <div className="flex bg-apple-card/85 backdrop-blur-md rounded-full p-1 border border-apple-border shadow-lg animate-fade-in">
-          <button
-            type="button"
-            onClick={() => setActiveLayer('h3')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-              activeLayer === 'h3' ? 'bg-brand-blue text-white' : 'text-apple-secondary hover:text-white'
-            }`}
-          >
-            H3 Grid
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveLayer('heatmap')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-              activeLayer === 'heatmap' ? 'bg-brand-blue text-white' : 'text-apple-secondary hover:text-white'
-            }`}
-          >
-            Plume Overlay
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveLayer('sat')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-              activeLayer === 'sat' ? 'bg-brand-blue text-white' : 'text-apple-secondary hover:text-white'
-            }`}
-          >
-            Sensor Hotspots
-          </button>
+          {(['h3', 'heatmap', 'sat'] as const).map((layer) => (
+            <button
+              key={layer}
+              type="button"
+              onClick={() => setActiveLayer(layer)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
+                activeLayer === layer
+                  ? 'bg-brand-blue text-white'
+                  : 'text-apple-secondary hover:text-white'
+              }`}
+            >
+              {layer === 'h3' ? 'H3 Grid' : layer === 'heatmap' ? 'Plume Overlay' : 'Sensor Hotspots'}
+            </button>
+          ))}
         </div>
 
-        {/* API Key Status Toggle Pill */}
         <div className="bg-apple-card/85 backdrop-blur-md rounded-full px-3 py-1.5 border border-apple-border flex items-center gap-2 shadow-lg">
-          <div className={`w-1.5 h-1.5 rounded-full ${isRealKey ? 'bg-brand-green' : 'bg-brand-orange animate-pulse'}`} />
+          <div
+            className={`w-1.5 h-1.5 rounded-full ${isRealKey ? 'bg-brand-green' : 'bg-brand-orange animate-pulse'}`}
+          />
           <span className="text-[10px] font-mono uppercase text-apple-secondary">
             {isRealKey ? 'Google Maps Live' : 'High-Fidelity Simulation'}
           </span>
           {!isRealKey && (
             <button
+              type="button"
               onClick={() => setShowRealMap(!showRealMap)}
               className="text-[10px] text-brand-blue underline hover:text-blue-300 ml-1 flex items-center gap-1"
             >
@@ -126,12 +131,11 @@ export default function MapContainer({
         </div>
       </div>
 
-      {/* Actual Map Render Selection */}
       {showRealMap && isRealKey ? (
         <APIProvider apiKey={API_KEY} version="weekly">
           <div className="w-full h-full">
             <Map
-              defaultCenter={{ lat: (minLat + maxLat) / 2 || 12.9716, lng: (minLng + maxLng) / 2 || 77.5946 }}
+              defaultCenter={mapCenter}
               defaultZoom={12}
               mapId="DEMO_MAP_ID"
               gestureHandling="cooperative"
@@ -142,19 +146,23 @@ export default function MapContainer({
                   styles: darkMapStyles,
                   disableDefaultUI: true,
                   zoomControl: true,
-                }
+                },
               } as any)}
             >
               {allHexes.map((hex) => {
                 const pm = hex.pm25;
-                const color = viewMode === 'aqi'
-                  ? pm <= 50 ? '#34C759'
-                    : pm <= 100 ? '#FFCC00'
-                    : pm <= 250 ? '#FF9F0A'
-                    : '#ff453a'
-                  : hex.priorityScore > 90 ? '#ff453a'
-                    : hex.priorityScore > 70 ? '#FF9F0A'
-                    : '#0A84FF';
+                const color =
+                  viewMode === 'aqi'
+                    ? pm <= 50
+                      ? '#34C759'
+                      : pm <= 100
+                        ? '#FFCC00'
+                        : pm <= 250
+                          ? '#FF9F0A'
+                          : '#ff453a'
+                    : actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
+                const label = formatLocationName(hex);
+                const isSelected = selectedHex?.id === hex.id;
                 return (
                   <AdvancedMarker
                     key={hex.id}
@@ -163,11 +171,16 @@ export default function MapContainer({
                   >
                     <div
                       className="cursor-pointer p-2 rounded-lg bg-black/80 border text-[10px] font-mono text-white shadow-lg transition-transform hover:scale-105"
-                      style={{ borderColor: color }}
+                      style={{
+                        borderColor: color,
+                        boxShadow: isSelected ? `0 0 0 2px ${color}` : undefined,
+                      }}
                     >
-                      <span className="font-bold">{hex.name}</span>
+                      <span className="font-bold font-sans">{label}</span>
                       <div className="text-right font-bold mt-0.5" style={{ color }}>
-                        {hex.pm25} µg/m³
+                        {viewMode === 'enforcement'
+                          ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
+                          : `${hex.pm25} µg/m³`}
                       </div>
                     </div>
                   </AdvancedMarker>
@@ -177,21 +190,29 @@ export default function MapContainer({
           </div>
         </APIProvider>
       ) : (
-        /* fall back to custom premium simulation map */
         <div className="relative w-full h-full overflow-hidden bg-gradient-to-br from-apple-bg via-[#0c0c0e] to-apple-bg">
-          {/* Tactical map background grids */}
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#1c1c1e_1px,transparent_1px),linear-gradient(to_bottom,#1c1c1e_1px,transparent_1px)] bg-[size:40px_40px] opacity-40" />
 
-          {/* Simulated H3 Grid representation */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 800 600" preserveAspectRatio="none">
-            {/* Hexagon overlays for simulation */}
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox="0 0 800 600"
+            preserveAspectRatio="none"
+          >
             {allHexes.map((hex) => {
               const { x, y } = project(hex.lat, hex.lng);
               const pm = hex.pm25;
-              const color = (viewMode === 'aqi')
-              ? (pm <= 50 ? '#34C759' : pm <= 100 ? '#FFCC00' : pm <= 250 ? '#FF9F0A' : '#ff453a')
-              : (hex.priorityScore > 90 ? '#ff453a' : hex.priorityScore > 70 ? '#FF9F0A' : '#0A84FF');
+              const color =
+                viewMode === 'aqi'
+                  ? pm <= 50
+                    ? '#34C759'
+                    : pm <= 100
+                      ? '#FFCC00'
+                      : pm <= 250
+                        ? '#FF9F0A'
+                        : '#ff453a'
+                  : actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
               const isSelected = selectedHex?.id === hex.id;
+              const label = formatLocationName(hex);
               return (
                 <g
                   key={hex.id}
@@ -210,11 +231,11 @@ export default function MapContainer({
                     y={y - 4}
                     fill="#fff"
                     fontSize="9"
-                    fontFamily="monospace"
+                    fontFamily="Inter, sans-serif"
                     textAnchor="middle"
                     className="font-bold pointer-events-none select-none opacity-90"
                   >
-                    {hex.name}
+                    {label.length > 14 ? `${label.slice(0, 12)}…` : label}
                   </text>
                   <text
                     x={x}
@@ -225,54 +246,40 @@ export default function MapContainer({
                     textAnchor="middle"
                     className="pointer-events-none select-none font-semibold"
                   >
-                    {hex.pm25} µg/m³
+                    {viewMode === 'enforcement'
+                      ? `${hex.score10?.toFixed?.(1) ?? '—'} / ${hex.pm25 || '—'}µg`
+                      : `${hex.pm25} µg/m³`}
                   </text>
                 </g>
               );
             })}
           </svg>
 
-          {/* Compass / wind flow vector animations in background */}
           <div className="absolute bottom-6 right-6 p-4 rounded-2xl bg-apple-card/80 border border-apple-border backdrop-blur-md text-right max-w-[180px]">
             <span className="text-[9px] font-mono uppercase text-apple-secondary block tracking-wider">
-              Anemometer Vector
+              Grid targets
             </span>
-            <div className="text-xs font-semibold mt-1 text-white flex items-center justify-end gap-1.5">
-              <Compass size={12} className="text-brand-orange animate-spin" style={{ animationDuration: '8s' }} />
-              12.4 km/h ESE
-            </div>
-            <div className="text-[9px] font-mono text-apple-secondary mt-1">
-              Plume Center Dynamics
-            </div>
+            <span className="text-sm font-bold text-white font-mono">{allHexes.length}</span>
           </div>
-
-          {/* Informational warning if real map can't load */}
-          {!isRealKey && showRealMap && (
-            <div className="absolute inset-0 bg-black/90 flex items-center justify-center p-8 z-30">
-              <div className="bg-apple-card p-6 rounded-2xl border border-apple-border max-w-md shadow-2xl">
-                <div className="w-12 h-12 rounded-full bg-brand-orange/10 border border-brand-orange/30 text-brand-orange flex items-center justify-center mb-4">
-                  <Key size={20} />
-                </div>
-                <h3 className="text-md font-bold text-white mb-2">Google Maps Key Needed</h3>
-                <p className="text-xs text-apple-secondary leading-relaxed mb-4">
-                  To load live interactive vector grids, register a Google Maps API Key and save it as an environment variable.
-                </p>
-                <div className="bg-black/40 p-3 rounded-lg border border-apple-border/50 text-[10px] font-mono text-apple-secondary leading-normal space-y-1 mb-4">
-                  <div>1. Get key from Google Cloud Console</div>
-                  <div>2. Go to Settings ⚙️ (top-right corner) → Secrets</div>
-                  <div>3. Add <span className="text-brand-blue">GOOGLE_MAPS_PLATFORM_KEY</span></div>
-                </div>
-                <button
-                  onClick={() => setShowRealMap(false)}
-                  className="w-full py-2 bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs rounded-lg transition-colors uppercase tracking-wider"
-                >
-                  Return to Simulated Vector Grid
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
   );
 }
+
+function mapPropsEqual(prev: MapContainerProps, next: MapContainerProps): boolean {
+  if (prev.viewMode !== next.viewMode) return false;
+  if (prev.selectedHex?.id !== next.selectedHex?.id) return false;
+  if (prev.onSelectHex !== next.onSelectHex) return false;
+  if (prev.allHexes === next.allHexes) return true;
+  if (prev.allHexes.length !== next.allHexes.length) return false;
+  // Cheap id-sequence compare — avoids deep equality on every filter keystroke
+  for (let i = 0; i < prev.allHexes.length; i++) {
+    if (prev.allHexes[i].id !== next.allHexes[i].id) return false;
+    if (prev.allHexes[i].score10 !== next.allHexes[i].score10) return false;
+    if (prev.allHexes[i].actionTier !== next.allHexes[i].actionTier) return false;
+  }
+  return true;
+}
+
+export default memo(MapContainer, mapPropsEqual);
