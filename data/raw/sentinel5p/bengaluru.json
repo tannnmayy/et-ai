@@ -1,17 +1,17 @@
 {
   "schema_version": "1.0",
-  "retrieved_at": "2026-07-13T22:46:39.973059+00:00",
+  "retrieved_at": "2026-07-14T11:01:56.537292+00:00",
   "city": "bengaluru",
-  "source": "VIIRS_NOAA20_NRT",
+  "collection": "COPERNICUS/S5P/OFFL/L3_NO2",
   "data": {
     "hexagons": [],
     "city": "bengaluru",
-    "source": "VIIRS_NOAA20_NRT",
+    "collection": "COPERNICUS/S5P/OFFL/L3_NO2",
     "source_status": "live_provider",
     "cache_used": false,
     "freshness": "fresh",
     "age_minutes": 0.0,
     "warnings": [],
-    "retrieved_at": "2026-07-13T22:46:39.973059+00:00"
+    "retrieved_at": "2026-07-14T11:01:56.537292+00:00"
   }
 }

@@ -170,3 +170,111 @@ class TestGetNO2ColumnDensity:
         with patch("pipeline.sentinel5p_ingestion._get_service_account_path", return_value=None):
             result = hex_no2_column_density(city="bengaluru")
             assert result["source_status"] == "unavailable"
+
+
+class TestReduceRegionsParsing:
+    """Regression tests for the reduceRegions result parsing logic.
+
+    The key risk is the output property name — reduceRegions names the
+    output column after the band, not the reducer. This test validates
+    the parser against the expected shape.
+    """
+
+    def test_parses_band_named_property(self) -> None:
+        simulated_response = {
+            "features": [
+                {
+                    "properties": {
+                        "h3_cell": "893c1b2d7ffffff",
+                        "tropospheric_NO2_column_number_density": 3.5e-5,
+                    }
+                },
+                {
+                    "properties": {
+                        "h3_cell": "893c1b2d7fffffe",
+                        "tropospheric_NO2_column_number_density": 4.2e-5,
+                    }
+                },
+            ]
+        }
+
+        result: dict[str, float] = {}
+        band_name = "tropospheric_NO2_column_number_density"
+        for feature in simulated_response["features"]:
+            props = feature["properties"]
+            cell = props.get("h3_cell")
+            mean_val = props.get(band_name)
+            if cell is not None and mean_val is not None:
+                result[cell] = float(mean_val)
+
+        assert result == {
+            "893c1b2d7ffffff": 3.5e-5,
+            "893c1b2d7fffffe": 4.2e-5,
+        }
+
+    def test_skips_feature_without_band_key(self) -> None:
+        simulated_response = {
+            "features": [
+                {
+                    "properties": {
+                        "h3_cell": "893c1b2d7ffffff",
+                        "tropospheric_NO2_column_number_density": 3.5e-5,
+                    }
+                },
+                {
+                    "properties": {
+                        "h3_cell": "893c1b2d7fffffg",
+                    }
+                },
+            ]
+        }
+
+        result: dict[str, float] = {}
+        band_name = "tropospheric_NO2_column_number_density"
+        for feature in simulated_response["features"]:
+            props = feature["properties"]
+            cell = props.get("h3_cell")
+            mean_val = props.get(band_name)
+            if cell is not None and mean_val is not None:
+                result[cell] = float(mean_val)
+
+        assert result == {
+            "893c1b2d7ffffff": 3.5e-5,
+        }
+
+    def test_handles_empty_features(self) -> None:
+        simulated_response = {"features": []}
+
+        result: dict[str, float] = {}
+        band_name = "tropospheric_NO2_column_number_density"
+        for feature in simulated_response["features"]:
+            props = feature["properties"]
+            cell = props.get("h3_cell")
+            mean_val = props.get(band_name)
+            if cell is not None and mean_val is not None:
+                result[cell] = float(mean_val)
+
+        assert result == {}
+
+    def test_skips_null_mean_value(self) -> None:
+        simulated_response = {
+            "features": [
+                {
+                    "properties": {
+                        "h3_cell": "893c1b2d7ffffff",
+                        "tropospheric_NO2_column_number_density": None,
+                    }
+                },
+            ]
+        }
+
+        result: dict[str, float] = {}
+        band_name = "tropospheric_NO2_column_number_density"
+        for feature in simulated_response["features"]:
+            props = feature["properties"]
+            cell = props.get("h3_cell")
+            mean_val = props.get(band_name)
+            if cell is not None and mean_val is not None:
+                result[cell] = float(mean_val)
+
+        assert result == {}

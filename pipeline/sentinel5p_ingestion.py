@@ -38,7 +38,8 @@ import backend.app.config as _config
 logger = logging.getLogger(__name__)
 
 SENTINEL5P_CACHE_SCHEMA_VERSION = "1.0"
-SENTINEL5P_COLLECTION = "COPERNICUS/S5P/OFFL_L3_NO2"
+SENTINEL5P_COLLECTION = "COPERNICUS/S5P/OFFL/L3_NO2"
+CHUNK_SIZE = 750
 
 # Lazy-evaluated env var with one-time warning
 _GEE_KEY_WARNED = False
@@ -228,23 +229,36 @@ def _fetch_gee_no2(
         composite = image_collection.mean()
 
         result: dict[str, float] = {}
-        for cell in h3_cells:
-            boundary = h3.cell_to_boundary(cell)
-            # h3 returns (lat, lon) tuples; GEE needs (lon, lat)
-            coords = [[lon, lat] for lat, lon in boundary]
-            polygon = ee.Geometry.Polygon([coords])
-            try:
-                mean_val = composite.reduceRegion(
-                    reducer=ee.Reducer.mean(),
-                    geometry=polygon,
-                    scale=1000,
-                    bestEffort=True,
-                ).get("tropospheric_NO2_column_number_density").getInfo()
-                if mean_val is not None:
+        band_name = "tropospheric_NO2_column_number_density"
+
+        for start in range(0, len(h3_cells), CHUNK_SIZE):
+            chunk = h3_cells[start:start + CHUNK_SIZE]
+            features = []
+            for cell in chunk:
+                boundary = h3.cell_to_boundary(cell)
+                coords = [[lon, lat] for lat, lon in boundary]
+                polygon = ee.Geometry.Polygon([coords])
+                features.append(ee.Feature(polygon, {"h3_cell": cell}))
+
+            feature_collection = ee.FeatureCollection(features)
+
+            reduced = composite.reduceRegions(
+                collection=feature_collection,
+                reducer=ee.Reducer.mean(),
+                scale=1000,
+            )
+
+            reduced_info = reduced.getInfo()
+
+            if reduced_info["features"]:
+                print(reduced_info["features"][0]["properties"])
+
+            for feature in reduced_info["features"]:
+                props = feature["properties"]
+                cell = props.get("h3_cell")
+                mean_val = props.get(band_name)
+                if cell is not None and mean_val is not None:
                     result[cell] = float(mean_val)
-            except Exception as cell_err:
-                logger.debug("Failed to reduce cell %s: %s", cell, cell_err)
-                continue
 
         return result
     except Exception as e:
