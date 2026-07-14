@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Map, Shield, Landmark, Sparkles, Navigation, Heart, TreePine, AlertTriangle, Check, BookOpen, Volume2, ShieldAlert } from 'lucide-react';
-import { NeighbourhoodMatch, CitizenProfile } from '../../types/citizen';
+import type { NeighbourhoodMatch, CitizenProfile } from '../../types/citizen';
 
 interface NeighbourhoodDetailPanelProps {
   match: NeighbourhoodMatch;

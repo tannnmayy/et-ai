@@ -1,6 +1,0 @@
-{
-  "name": "Citizen Sentinel",
-  "description": "A citizen environmental and neighborhood matchmaking dashboard to find the best place to live based on health, rent, commute, and clean air.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

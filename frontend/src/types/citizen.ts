@@ -14,12 +14,13 @@ export interface NeighbourhoodFeatureVector {
   aqi: number;
   aqiIsEstimated: boolean;
   avgRentForBudgetBHK: number;
-  rentIsEstimated: boolean;   // true if sourced from an index, not a live listing
+  rentIsEstimated: boolean;
   commuteMinutesToOffice: number;
-  hospitalScore: number;      // 0-100
-  schoolScore: number;        // 0-100
-  parkScore: number;          // 0-100
-  metroDistanceKm: number;
+  hospitalScore: number;
+  schoolScore: number;
+  parkScore: number;
+  /** null when metro/transit layer is unavailable for a locality */
+  metroDistanceKm: number | null;
   noiseScore: number;
   constructionActivityScore: number;
 }
@@ -28,6 +29,6 @@ export interface NeighbourhoodMatch {
   rank: number;
   name: string;
   matchScorePercent: number;
-  reasons: string[];          // human-readable explanation bullets
+  reasons: string[];
   featureVector: NeighbourhoodFeatureVector;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, Train, Home, Heart, Compass, ArrowLeft, Info, MapPin } from 'lucide-react';
-import { NeighbourhoodMatch, CitizenProfile } from '../../types/citizen';
+import type { NeighbourhoodMatch, CitizenProfile } from '../../types/citizen';
 
 interface RankedResultsListProps {
   matches: NeighbourhoodMatch[];

@@ -373,14 +373,13 @@ This was found, confirmed precisely (including the "Okhla Phase II" Delhi-in-
 Bengaluru detail), and fully removed; `mockData.ts` is now quarantined to a
 clearly-marked dev-only path with zero production imports.
 
-### 11.4 A real structural problem: two separate frontend apps
+### 11.4 Frontend unification (resolved)
 
-`citizen mode frontend/` (Google AI Studio-generated) is a **completely separate,
-standalone Vite project** — its own `package.json`, build, and navigation — sitting
-alongside the main `frontend/` app, with a **space in its directory name**. It has
-no shared navigation, routing, or design-token connection to the main City
-Admin/Map/Enforcement/Copilot app. This needs to be merged into the main frontend
-before final submission; treated as a known, deferred task, not yet fixed.
+Citizen Mode was originally a **separate Vite app** (`citizen mode frontend/`).
+It has been **merged into `frontend/`**: one HashRouter SPA, shared TopNav with a
+working **City Admin / Citizen** toggle (`#/` vs `#/citizen`), shared design tokens,
+and a single Vite proxy to the FastAPI backend. The standalone citizen directory
+has been removed.
 
 ---
 
@@ -404,24 +403,20 @@ relying on live scraping of commercial portals as an ongoing production pipeline
 consistent with this project's preference for defensible, citable data sources
 over fragile or ToS-risky ones for anything demo-critical.
 
-### 12.3 Frontend built, contract locked
+### 12.3 Frontend — merged into main SPA
 
-A real, working React app (separate from the main frontend, see 11.4) with its
-exact TypeScript contract already implemented: `CitizenProfile` in,
-`NeighbourhoodMatch[]` out via `POST /citizen/matches`, including the
-`aqiIsEstimated`/`rentIsEstimated` honesty flags built directly into the type
-system, and a properly-quarantined mock-data file that never silently substitutes
-for a real API failure.
+Citizen Mode lives at `#/citizen` inside `frontend/`, reached via the TopNav
+**City Admin / Citizen** toggle. TypeScript contract: `CitizenProfile` in,
+`NeighbourhoodMatch[]` out via `POST /api/citizen/matches`, with
+`aqiIsEstimated`/`rentIsEstimated` honesty flags and a quarantined mock-data path
+that never silently substitutes for a real API failure.
 
-### 12.4 Backend — architecture decided, implementation in progress
+### 12.4 Backend — offline build + fast online matching (shipped)
 
-An offline-build + fast-online-matching architecture: locality canonicalization
-(1,497 raw locality strings collapse to ~25-40 well-supported canonical
-localities), per-locality environmental aggregation reusing the real, already-
-verified attribution/fusion/OSM data (explicitly avoiding a new Google Places API
-dependency where OSM data already covers the need), rent aggregation from the real
-dataset with honest per-BHK confidence thresholds, and a transparent weighted
-matching engine whose scoring logic is documented, not hidden.
+Offline locality registry / rent / environment / metro feature vectors under
+`pipeline/reference/`; live matching in `citizen_matching_service.py` with
+optional live AQI overlay and hybrid Google Routes commute refinement for the
+top shortlist. Endpoint: `POST /citizen/matches`.
 
 ---
 
@@ -473,15 +468,14 @@ already there, currently hardcoded to `'en'` on the frontend).
     actually taken for unsupported queries.
 
 **Structural, deferred:**
-14. Two separate frontend applications need merging into one.
-15. No database — not a cause of any diagnosed bug, but a real scalability gap.
+14. No database — not a cause of any diagnosed bug, but a real scalability gap.
+    (Frontend merge into a single SPA is done — see 11.4 / 12.3.)
 
 **Planned, not yet built:**
-16. Citizen Mode backend (architecture decided, implementation prompt issued).
-17. Twilio WhatsApp integration.
-18. Web copilot multi-language translation layer.
-19. 72-hour forecast horizon.
-20. Multi-city dashboard (deliberately out of scope).
+15. Twilio WhatsApp integration.
+16. Web copilot multi-language translation layer.
+17. 72-hour forecast horizon.
+18. Multi-city dashboard (deliberately out of scope).
 
 ---
 
@@ -495,7 +489,7 @@ already there, currently hardcoded to `'en'` on the frontend).
 | Satellite imagery | ✅ FIRMS and Sentinel-5P both genuinely integrated and fixed |
 | Citizen health advisories | ✅ Exist in English; ❌ regional-language delivery not yet built |
 | Multi-Agent AI Systems | ✅ Genuinely agentic (LangGraph), correctly scoped as opt-in |
-| Working prototype | ✅ Built, real pages, consistent design system; ⚠️ split across two apps |
+| Working prototype | ✅ Built, real pages, consistent design system; single unified SPA |
 | Multi-city dashboard | Deliberately out of scope (illustrative-only per the problem statement) |
 
 ---
@@ -516,10 +510,9 @@ et-ai/
 │   └── station_registry.py, station_capability computation
 ├── ml/                     LightGBM training, evaluation, diagnostics
 ├── data/                   Raw and processed data artifacts
-├── frontend/               Main React app (Map, Enforcement, Copilot,
-│                           Neighbourhoods)
-├── citizen mode frontend/  SEPARATE standalone React app (Citizen Mode) —
-│                           needs merging into frontend/ before submission
+├── frontend/               Unified React SPA (City Admin: Map, Enforcement,
+│                           Copilot, Neighbourhoods; Citizen: #/citizen matching)
+├── pipeline/reference/     Offline citizen locality feature-vector caches
 ├── rent_dataset_generator/ Real MagicBricks rental scrape + output data
 ├── knowledge_base/         Curated policy/health documents (WHO, CPCB, Karnataka)
 └── tests/                  Full backend test suite

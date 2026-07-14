@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Minus, MapPin, Search } from 'lucide-react';
-import { CitizenProfile, HealthCondition, CitizenPriority } from '../../types/citizen';
+import { Plus, Minus, MapPin } from 'lucide-react';
+import type { CitizenProfile, HealthCondition, CitizenPriority } from '../../types/citizen';
 
 interface ProfileBuilderFormProps {
   onSubmit: (profile: CitizenProfile) => void;
@@ -31,9 +31,9 @@ export default function ProfileBuilderForm({ onSubmit, isSubmitting = false }: P
     if (condition === 'none') {
       setHealthConditions(['none']);
     } else {
-      let updated = healthConditions.filter(c => c !== 'none');
+      let updated: HealthCondition[] = healthConditions.filter((c) => c !== 'none');
       if (updated.includes(condition)) {
-        updated = updated.filter(c => c !== condition);
+        updated = updated.filter((c) => c !== condition);
         if (updated.length === 0) {
           updated = ['none'];
         }
