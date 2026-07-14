@@ -1,0 +1,3068 @@
+{
+  "schema_version": 1,
+  "min_count_for_direct_estimate": 5,
+  "bhk_buckets": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5+"
+  ],
+  "citywide": {
+    "by_bhk": {
+      "0": {
+        "median_rent": 18000,
+        "count": 59
+      },
+      "1": {
+        "median_rent": 17500,
+        "count": 937
+      },
+      "2": {
+        "median_rent": 35000,
+        "count": 2888
+      },
+      "3": {
+        "median_rent": 65000,
+        "count": 3304
+      },
+      "4": {
+        "median_rent": 120000,
+        "count": 1240
+      },
+      "5+": {
+        "median_rent": 160000,
+        "count": 301
+      }
+    },
+    "overall_median_rent": 52000,
+    "overall_count": 8729
+  },
+  "localities": {
+    "Arekere": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 15250,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 33500,
+          "count": 26,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 52500,
+          "count": 24,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 38000,
+      "overall_count": 64
+    },
+    "BTM Layout": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 42,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 27500,
+          "count": 47,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 60000,
+          "count": 37,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 75000,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 210000,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 30000,
+      "overall_count": 147
+    },
+    "Banashankari": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 24000,
+          "count": 24,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 29500,
+          "count": 61,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 47000,
+          "count": 59,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 84000,
+          "count": 25,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 175000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 37000,
+      "overall_count": 178
+    },
+    "Banaswadi": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 15000,
+          "count": 15,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 25000,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 49000,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 25000,
+      "overall_count": 53
+    },
+    "Bannerghatta Road": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 38000,
+          "count": 25,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 55000,
+          "count": 61,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 90000,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 87000,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 54000,
+      "overall_count": 103
+    },
+    "Basavanagudi": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 38500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 60000,
+          "count": 21,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 87500,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 50000,
+      "overall_count": 50
+    },
+    "Begur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 9500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 35000,
+          "count": 38,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 44000,
+          "count": 20,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 35000,
+      "overall_count": 76
+    },
+    "Bellandur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 23500,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 48000,
+          "count": 62,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 75500,
+          "count": 120,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 165000,
+          "count": 31,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 190000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 73000,
+      "overall_count": 230
+    },
+    "Bommanahalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17250,
+          "count": 14,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 28000,
+          "count": 40,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 40,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 35000,
+      "overall_count": 97
+    },
+    "Brookefield": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 29000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 49000,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 72500,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 90000,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 65000,
+      "overall_count": 44
+    },
+    "Budigere Cross": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 20000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 27500,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 50500,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 65000,
+          "count": 37,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 60000,
+      "overall_count": 69
+    },
+    "CV Raman Nagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 40000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 40000,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65500,
+          "count": 25,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 130000,
+          "count": 14,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 55000,
+      "overall_count": 66
+    },
+    "Chandapura": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 7100,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 18500,
+          "count": 68,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 28500,
+          "count": 30,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 62500,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 20500,
+      "overall_count": 116
+    },
+    "Choodasandra": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 16000,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 35000,
+          "count": 15,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 57500,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 40000,
+      "overall_count": 43
+    },
+    "Devanahalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 16500,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 27500,
+          "count": 62,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 35000,
+          "count": 88,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 160000,
+          "count": 59,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 250000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 38000,
+      "overall_count": 229
+    },
+    "Doddanekundi": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 20000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 40000,
+          "count": 20,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 76000,
+          "count": 30,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 60000,
+      "overall_count": 67
+    },
+    "Domlur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 25500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 40000,
+          "count": 21,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 80000,
+          "count": 19,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 130000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 55000,
+      "overall_count": 64
+    },
+    "EPIP Zone": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 35000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "3": {
+          "median_rent": 160000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 270000,
+          "count": 17,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 200000,
+      "overall_count": 33
+    },
+    "Ejipura": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 13000,
+          "count": 13,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 28000,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 20000,
+      "overall_count": 33
+    },
+    "Electronic City": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 20000,
+          "count": 34,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 28000,
+          "count": 112,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 45000,
+          "count": 61,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 85000,
+          "count": 24,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 100000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 35000,
+      "overall_count": 242
+    },
+    "Frazer Town": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 35000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 100000,
+          "count": 15,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 157500,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 85000,
+      "overall_count": 33
+    },
+    "Gottigere": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 9750,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 21000,
+          "count": 24,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 55000,
+          "count": 24,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 58000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 25000,
+      "overall_count": 63
+    },
+    "HSR Layout": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "1": {
+          "median_rent": 25000,
+          "count": 52,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 45000,
+          "count": 98,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 72000,
+          "count": 103,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 125000,
+          "count": 23,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 260000,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 50000,
+      "overall_count": 297
+    },
+    "Haralur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 50000,
+          "count": 53,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 70000,
+          "count": 70,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 110000,
+          "count": 15,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 62000,
+      "overall_count": 145
+    },
+    "Hebbal": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 40000,
+          "count": 17,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 50000,
+          "count": 55,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 83500,
+          "count": 148,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 177500,
+          "count": 74,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 164995,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 85000,
+      "overall_count": 313
+    },
+    "Hennur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 16000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 34000,
+          "count": 42,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 55000,
+          "count": 48,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 115000,
+          "count": 28,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 120000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 52000,
+      "overall_count": 128
+    },
+    "Hoodi": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 18000,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 52000,
+          "count": 54,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 70000,
+          "count": 35,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 240000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 55000,
+      "overall_count": 115
+    },
+    "Horamavu": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 14250,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 25000,
+          "count": 54,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 66500,
+          "count": 48,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 144500,
+          "count": 26,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 40000,
+      "overall_count": 142
+    },
+    "Hosa Road": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 11250,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 32000,
+          "count": 37,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 60000,
+          "count": 46,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 75000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 45000,
+      "overall_count": 99
+    },
+    "Hulimavu": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 19000,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 36000,
+          "count": 28,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 54500,
+          "count": 36,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 45000,
+      "overall_count": 79
+    },
+    "Indiranagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 23500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 56000,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 135000,
+          "count": 44,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 282500,
+          "count": 34,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 250000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 135000,
+      "overall_count": 128
+    },
+    "JP Nagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 15000,
+          "count": 33,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 29500,
+          "count": 112,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 57000,
+          "count": 120,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 90000,
+          "count": 39,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 195000,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 41000,
+      "overall_count": 318
+    },
+    "Jakkur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 37500,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 80000,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 107500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 77500,
+      "overall_count": 54
+    },
+    "Jayanagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 20000,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 40000,
+          "count": 44,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 80000,
+          "count": 55,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 100000,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 150000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 61000,
+      "overall_count": 148
+    },
+    "Jigani": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 7500,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 20000,
+          "count": 49,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 25000,
+          "count": 19,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 20000,
+      "overall_count": 83
+    },
+    "KR Puram": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 12500,
+          "count": 21,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 28500,
+          "count": 78,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 55000,
+          "count": 69,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 86000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 100000,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 36000,
+      "overall_count": 181
+    },
+    "Kadubeesanahalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 23750,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 60000,
+          "count": 29,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 80000,
+          "count": 32,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 70000,
+      "overall_count": 73
+    },
+    "Kadugodi": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 14000,
+          "count": 25,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 27500,
+          "count": 50,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 42500,
+          "count": 34,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 30000,
+      "overall_count": 113
+    },
+    "Kammanahalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 9000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 26500,
+          "count": 28,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 19,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 33000,
+      "overall_count": 57
+    },
+    "Kanakapura Road": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 22000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 39000,
+          "count": 24,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 60000,
+          "count": 47,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 98500,
+          "count": 18,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 55000,
+      "overall_count": 98
+    },
+    "Kasavanahalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 22000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 40000,
+          "count": 35,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 59,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 110000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 54500,
+      "overall_count": 116
+    },
+    "Kengeri": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 10000,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 20000,
+          "count": 46,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 28000,
+          "count": 31,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 22000,
+      "overall_count": 87
+    },
+    "Koramangala": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 28500,
+          "count": 46,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 50000,
+          "count": 87,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 100000,
+          "count": 115,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 165000,
+          "count": 32,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 200000,
+          "count": 19,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 80000,
+      "overall_count": 303
+    },
+    "Kumaraswamy Layout": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 10000,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 20000,
+          "count": 29,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 32000,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 16500,
+      "overall_count": 57
+    },
+    "Kundalahalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 30000,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 50000,
+          "count": 30,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 42,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 81000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 60000,
+      "overall_count": 90
+    },
+    "Mahadevapura": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 20000,
+          "count": 17,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 42000,
+          "count": 40,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 74000,
+          "count": 52,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 96500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 62000,
+      "overall_count": 129
+    },
+    "Malleshwaram": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 20000,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 35000,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 95000,
+          "count": 41,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 65000,
+      "overall_count": 73
+    },
+    "Manyata Tech Park": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 35000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 42500,
+          "count": 14,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 70000,
+          "count": 30,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 54000,
+      "overall_count": 56
+    },
+    "Marathahalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 15750,
+          "count": 26,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 45000,
+          "count": 106,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 70000,
+          "count": 100,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 130000,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 175000,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 60000,
+      "overall_count": 261
+    },
+    "Mysore Road": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 15000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 26000,
+          "count": 32,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 46000,
+          "count": 21,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 30000,
+      "overall_count": 62
+    },
+    "Nagarbhavi": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 8000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 17500,
+          "count": 21,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 35000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 20000,
+      "overall_count": 45
+    },
+    "Neeladri Nagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 12000,
+          "count": 11,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 24000,
+          "count": 13,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 21250,
+      "overall_count": 31
+    },
+    "Old Madras Road": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 36900,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 80000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 99500,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 65000,
+      "overall_count": 31
+    },
+    "Panathur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 35000,
+          "count": 18,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 48000,
+          "count": 69,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 75500,
+          "count": 58,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 53000,
+      "overall_count": 145
+    },
+    "RR Nagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 12250,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 27500,
+          "count": 30,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 38000,
+          "count": 23,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 80000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 32000,
+      "overall_count": 74
+    },
+    "RT Nagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 14500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 23000,
+          "count": 26,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 80000,
+          "count": 14,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 165000,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 30000,
+      "overall_count": 67
+    },
+    "Rajajinagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 13500,
+          "count": 25,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 37500,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 137500,
+          "count": 90,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 215000,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 100000,
+      "overall_count": 164
+    },
+    "Ramamurthy Nagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 12000,
+          "count": 17,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 23000,
+          "count": 50,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 31000,
+          "count": 20,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 23000,
+      "overall_count": 92
+    },
+    "Richmond Town": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 65500,
+          "count": 20,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 120000,
+          "count": 55,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 252500,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 115000,
+      "overall_count": 93
+    },
+    "Sahakar Nagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 32500,
+          "count": 22,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 35,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 85000,
+          "count": 13,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 56000,
+      "overall_count": 77
+    },
+    "Sarjapur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 27000,
+          "count": 23,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 45000,
+          "count": 29,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 77500,
+          "count": 42,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 80000,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 55000,
+      "overall_count": 103
+    },
+    "Sarjapur Road": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 30000,
+          "count": 24,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 42000,
+          "count": 70,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 65000,
+          "count": 128,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 110000,
+          "count": 91,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 150000,
+          "count": 14,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 65000,
+      "overall_count": 327
+    },
+    "Seegehalli": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 15000,
+          "count": 10,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 22000,
+          "count": 18,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 42000,
+          "count": 17,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 30000,
+      "overall_count": 50
+    },
+    "Singasandra": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17000,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 26500,
+          "count": 38,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 45000,
+          "count": 21,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 30500,
+      "overall_count": 70
+    },
+    "Thanisandra": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 25000,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 39000,
+          "count": 107,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 60000,
+          "count": 102,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 87500,
+          "count": 20,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 46000,
+      "overall_count": 245
+    },
+    "Tumkur Road": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "2": {
+          "median_rent": 36500,
+          "count": 18,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 60000,
+          "count": 9,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 70000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 40000,
+      "overall_count": 35
+    },
+    "Ulsoor": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 16000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 35000,
+          "count": 18,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 135000,
+          "count": 36,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 220000,
+          "count": 19,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 125000,
+      "overall_count": 81
+    },
+    "Varthur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 26500,
+          "count": 8,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "1": {
+          "median_rent": 15000,
+          "count": 32,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 45000,
+          "count": 106,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 62000,
+          "count": 94,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 115000,
+          "count": 14,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 49500,
+      "overall_count": 256
+    },
+    "Vijayanagar": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 17500,
+          "count": 7,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 22000,
+          "count": 18,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 43000,
+          "count": 21,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 4,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 35000,
+      "overall_count": 50
+    },
+    "Whitefield": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 2,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 19500,
+          "count": 20,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 48000,
+          "count": 95,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 80000,
+          "count": 168,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 134500,
+          "count": 174,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 225000,
+          "count": 32,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 85000,
+      "overall_count": 491
+    },
+    "Yelahanka": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 0,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 10750,
+          "count": 12,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 30000,
+          "count": 61,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 49000,
+          "count": 105,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 250000,
+          "count": 70,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "5+": {
+          "median_rent": 375000,
+          "count": 17,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        }
+      },
+      "overall_median_rent": 55000,
+      "overall_count": 265
+    },
+    "Yemalur": {
+      "by_bhk": {
+        "0": {
+          "median_rent": 18000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "1": {
+          "median_rent": 23000,
+          "count": 6,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "2": {
+          "median_rent": 30000,
+          "count": 5,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "3": {
+          "median_rent": 87500,
+          "count": 16,
+          "is_estimated": false,
+          "source": "locality_bhk_median"
+        },
+        "4": {
+          "median_rent": 120000,
+          "count": 3,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        },
+        "5+": {
+          "median_rent": 160000,
+          "count": 1,
+          "is_estimated": true,
+          "source": "citywide_bhk_median"
+        }
+      },
+      "overall_median_rent": 78000,
+      "overall_count": 32
+    }
+  }
+}

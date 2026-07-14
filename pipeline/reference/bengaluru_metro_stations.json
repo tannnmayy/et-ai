@@ -1,0 +1,1062 @@
+{
+  "schema_version": 1,
+  "city": "bengaluru",
+  "source": "OpenStreetMap via OSMnx",
+  "station_count": 131,
+  "notes": [
+    "Required fields per station: name, lat, lon.",
+    "Optional: line (e.g. Purple/Green), osm_id, source.",
+    "Used by build_locality_environment_cache for nearest-station distance.",
+    "Filtered to exclude pure Indian Railways (IR) stations; keep BMRCL/subway/under-construction metro."
+  ],
+  "stations": [
+    {
+      "name": "Agara Lake (u/c)",
+      "lat": 12.920126,
+      "lon": 77.643416,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/775696792",
+      "source": "osm"
+    },
+    {
+      "name": "Attiguppe",
+      "lat": 12.961893,
+      "lon": 77.533579,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857563",
+      "source": "osm"
+    },
+    {
+      "name": "Bagalur Cross (u/c)",
+      "lat": 13.119427,
+      "lon": 77.609797,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919741628",
+      "source": "osm"
+    },
+    {
+      "name": "Bagmane DRDO Sports Complex (u/c)",
+      "lat": 12.985918,
+      "lon": 77.690758,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955253",
+      "source": "osm"
+    },
+    {
+      "name": "Baiyappanahalli",
+      "lat": 12.990759,
+      "lon": 77.652361,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857549",
+      "source": "osm"
+    },
+    {
+      "name": "Banashankari",
+      "lat": 12.915221,
+      "lon": 77.573598,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710294",
+      "source": "osm"
+    },
+    {
+      "name": "Bellandur (u/c)",
+      "lat": 12.927626,
+      "lon": 77.67995,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955259",
+      "source": "osm"
+    },
+    {
+      "name": "Benniganahalli",
+      "lat": 12.996496,
+      "lon": 77.668479,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/4548694596",
+      "source": "osm"
+    },
+    {
+      "name": "Beratena Agrahara",
+      "lat": 12.863867,
+      "lon": 77.657862,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198153",
+      "source": "osm"
+    },
+    {
+      "name": "Bommanahalli",
+      "lat": 12.910616,
+      "lon": 77.626478,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198202",
+      "source": "osm"
+    },
+    {
+      "name": "BTM Layout",
+      "lat": 12.916588,
+      "lon": 77.608118,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198226",
+      "source": "osm"
+    },
+    {
+      "name": "Cantonment (u/c)",
+      "lat": 12.991793,
+      "lon": 77.60622,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/13800769520",
+      "source": "osm"
+    },
+    {
+      "name": "Central Silk Board",
+      "lat": 12.916582,
+      "lon": 77.620567,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198212",
+      "source": "osm"
+    },
+    {
+      "name": "Central Silk Board (u/c)",
+      "lat": 12.917401,
+      "lon": 77.623468,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9953937121",
+      "source": "osm"
+    },
+    {
+      "name": "Challaghatta",
+      "lat": 12.897354,
+      "lon": 77.461288,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919570131",
+      "source": "osm"
+    },
+    {
+      "name": "Chickpete",
+      "lat": 12.966897,
+      "lon": 77.574557,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710301",
+      "source": "osm"
+    },
+    {
+      "name": "Chikkabidarakallu",
+      "lat": 13.052362,
+      "lon": 77.487915,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1576973954",
+      "source": "osm"
+    },
+    {
+      "name": "Cubbon Park",
+      "lat": 12.980958,
+      "lon": 77.597576,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857555",
+      "source": "osm"
+    },
+    {
+      "name": "Dairy Circle (u/c)",
+      "lat": 12.941223,
+      "lon": 77.602429,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/4969383807",
+      "source": "osm"
+    },
+    {
+      "name": "Dasarahalli",
+      "lat": 13.043261,
+      "lon": 77.512553,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5960788724",
+      "source": "osm"
+    },
+    {
+      "name": "Deepanjali Nagar",
+      "lat": 12.952058,
+      "lon": 77.537012,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857564",
+      "source": "osm"
+    },
+    {
+      "name": "Doddakallasandra",
+      "lat": 12.884643,
+      "lon": 77.552755,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651776",
+      "source": "osm"
+    },
+    {
+      "name": "Doddanakundi (u/c)",
+      "lat": 12.975887,
+      "lon": 77.69701,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955254",
+      "source": "osm"
+    },
+    {
+      "name": "Dr. B. R. Ambedkar Station, Vidhana Soudha",
+      "lat": 12.978742,
+      "lon": 77.591639,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857556",
+      "source": "osm"
+    },
+    {
+      "name": "Electronic City",
+      "lat": 12.856505,
+      "lon": 77.663523,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198145",
+      "source": "osm"
+    },
+    {
+      "name": "Embassy Tech Village Kadubeesanahalli (u/c)",
+      "lat": 12.932481,
+      "lon": 77.68788,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955258",
+      "source": "osm"
+    },
+    {
+      "name": "Garudacharpalya",
+      "lat": 12.99345,
+      "lon": 77.703677,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197762",
+      "source": "osm"
+    },
+    {
+      "name": "Goraguntepalya",
+      "lat": 13.02833,
+      "lon": 77.540981,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/1353733806",
+      "source": "osm"
+    },
+    {
+      "name": "Halasuru",
+      "lat": 12.976499,
+      "lon": 77.626686,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857552",
+      "source": "osm"
+    },
+    {
+      "name": "HBR Layout (u/c)",
+      "lat": 13.032959,
+      "lon": 77.629571,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651245",
+      "source": "osm"
+    },
+    {
+      "name": "Hebbal (u/c)",
+      "lat": 13.043963,
+      "lon": 77.592777,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651220",
+      "source": "osm"
+    },
+    {
+      "name": "Hongasandra",
+      "lat": 12.901695,
+      "lon": 77.631986,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198198",
+      "source": "osm"
+    },
+    {
+      "name": "Hoodi",
+      "lat": 12.988803,
+      "lon": 77.711326,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197761",
+      "source": "osm"
+    },
+    {
+      "name": "Horamavu (u/c)",
+      "lat": 13.017268,
+      "lon": 77.659825,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651248",
+      "source": "osm"
+    },
+    {
+      "name": "Hosa Road",
+      "lat": 12.870749,
+      "lon": 77.652447,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198162",
+      "source": "osm"
+    },
+    {
+      "name": "HRBR Layout (u/c)",
+      "lat": 13.022708,
+      "lon": 77.647247,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651247",
+      "source": "osm"
+    },
+    {
+      "name": "HSR Layout (u/c)",
+      "lat": 12.916292,
+      "lon": 77.632498,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/775696791",
+      "source": "osm"
+    },
+    {
+      "name": "Hulimavu (u/c)",
+      "lat": 12.880838,
+      "lon": 77.595847,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9906325549",
+      "source": "osm"
+    },
+    {
+      "name": "Ibbaluru (u/c)",
+      "lat": 12.920822,
+      "lon": 77.662746,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955260",
+      "source": "osm"
+    },
+    {
+      "name": "IIMB (u/c)",
+      "lat": 12.895819,
+      "lon": 77.599623,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9906325550",
+      "source": "osm"
+    },
+    {
+      "name": "Indiranagar",
+      "lat": 12.978333,
+      "lon": 77.638661,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857551",
+      "source": "osm"
+    },
+    {
+      "name": "ISRO (u/c)",
+      "lat": 12.968104,
+      "lon": 77.701618,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955255",
+      "source": "osm"
+    },
+    {
+      "name": "Jakkur Cross (u/c)",
+      "lat": 13.073209,
+      "lon": 77.592832,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/11023074908",
+      "source": "osm"
+    },
+    {
+      "name": "Jalahalli",
+      "lat": 13.03941,
+      "lon": 77.519735,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5960788725",
+      "source": "osm"
+    },
+    {
+      "name": "Jaya Prakash Nagar",
+      "lat": 12.907475,
+      "lon": 77.573128,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710293",
+      "source": "osm"
+    },
+    {
+      "name": "Jayadeva Hospital",
+      "lat": 12.916731,
+      "lon": 77.599966,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/3302642058",
+      "source": "osm"
+    },
+    {
+      "name": "Jayanagar",
+      "lat": 12.929507,
+      "lon": 77.580144,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710296",
+      "source": "osm"
+    },
+    {
+      "name": "Jnanabharathi",
+      "lat": 12.935436,
+      "lon": 77.512406,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9049846515",
+      "source": "osm"
+    },
+    {
+      "name": "JP Nagar 4th Phase (u/c)",
+      "lat": 12.909848,
+      "lon": 77.600091,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9906325547",
+      "source": "osm"
+    },
+    {
+      "name": "Kadugodi Tree Park",
+      "lat": 12.98565,
+      "lon": 77.747012,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/11941186870",
+      "source": "osm"
+    },
+    {
+      "name": "Kadugundanahalli (u/c)",
+      "lat": 13.029958,
+      "lon": 77.620727,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1579059710",
+      "source": "osm"
+    },
+    {
+      "name": "Kalena Agrahara (u/c)",
+      "lat": 12.871478,
+      "lon": 77.593678,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9906325548",
+      "source": "osm"
+    },
+    {
+      "name": "Kalyan Nagar (u/c)",
+      "lat": 13.026241,
+      "lon": 77.637806,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651246",
+      "source": "osm"
+    },
+    {
+      "name": "Kasturinagara (u/c)",
+      "lat": 13.007563,
+      "lon": 77.662717,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651249",
+      "source": "osm"
+    },
+    {
+      "name": "Kempapura (u/c)",
+      "lat": 13.043703,
+      "lon": 77.605156,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651242",
+      "source": "osm"
+    },
+    {
+      "name": "Kengeri",
+      "lat": 12.907928,
+      "lon": 77.476575,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/7784456820",
+      "source": "osm"
+    },
+    {
+      "name": "Kengeri Bus Terminal",
+      "lat": 12.914689,
+      "lon": 77.487856,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9051395755",
+      "source": "osm"
+    },
+    {
+      "name": "Kodibisanahalli (u/c)",
+      "lat": 12.944198,
+      "lon": 77.697796,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955257",
+      "source": "osm"
+    },
+    {
+      "name": "Kodigehalli (u/c)",
+      "lat": 13.056869,
+      "lon": 77.593767,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919741631",
+      "source": "osm"
+    },
+    {
+      "name": "Konanakunte Cross",
+      "lat": 12.888967,
+      "lon": 77.562667,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651777",
+      "source": "osm"
+    },
+    {
+      "name": "Krishna Rajendra Market",
+      "lat": 12.960879,
+      "lon": 77.574658,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710300",
+      "source": "osm"
+    },
+    {
+      "name": "Krishnarajapura",
+      "lat": 12.999902,
+      "lon": 77.67767,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197765",
+      "source": "osm"
+    },
+    {
+      "name": "Kudlu Gate",
+      "lat": 12.889926,
+      "lon": 77.639216,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198187",
+      "source": "osm"
+    },
+    {
+      "name": "Kundalahalli",
+      "lat": 12.977594,
+      "lon": 77.715559,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197755",
+      "source": "osm"
+    },
+    {
+      "name": "Lakkasandra (u/c)",
+      "lat": 12.949486,
+      "lon": 77.603035,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1578382496",
+      "source": "osm"
+    },
+    {
+      "name": "Lalbagh",
+      "lat": 12.946526,
+      "lon": 77.580016,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710298",
+      "source": "osm"
+    },
+    {
+      "name": "Langford Town (u/c)",
+      "lat": 12.956231,
+      "lon": 77.605864,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/4969391953",
+      "source": "osm"
+    },
+    {
+      "name": "Madavara",
+      "lat": 13.057421,
+      "lon": 77.472806,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1576973953",
+      "source": "osm"
+    },
+    {
+      "name": "Magadi Road",
+      "lat": 12.975632,
+      "lon": 77.555352,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857560",
+      "source": "osm"
+    },
+    {
+      "name": "Mahakavi Kuvempu Road",
+      "lat": 12.99853,
+      "lon": 77.556899,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6410706689",
+      "source": "osm"
+    },
+    {
+      "name": "Mahalakshmi",
+      "lat": 13.008047,
+      "lon": 77.548807,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6410706691",
+      "source": "osm"
+    },
+    {
+      "name": "Mahatma Gandhi Road",
+      "lat": 12.975526,
+      "lon": 77.60679,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857554",
+      "source": "osm"
+    },
+    {
+      "name": "Manjunathanagara",
+      "lat": 13.05009,
+      "lon": 77.494446,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1576973980",
+      "source": "osm"
+    },
+    {
+      "name": "Mantri Square Sampige Road",
+      "lat": 12.990463,
+      "lon": 77.570729,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6410706688",
+      "source": "osm"
+    },
+    {
+      "name": "Marathahalli (u/c)",
+      "lat": 12.957394,
+      "lon": 77.701201,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955256",
+      "source": "osm"
+    },
+    {
+      "name": "Mysore Road",
+      "lat": 12.946718,
+      "lon": 77.530159,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857565",
+      "source": "osm"
+    },
+    {
+      "name": "Nadaprabhu Kempegowda Station, Majestic",
+      "lat": 12.975708,
+      "lon": 77.572876,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857558",
+      "source": "osm"
+    },
+    {
+      "name": "Nagasandra",
+      "lat": 13.047954,
+      "lon": 77.500142,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/11941173068",
+      "source": "osm"
+    },
+    {
+      "name": "Nagawara (Proposed)",
+      "lat": 13.042279,
+      "lon": 77.624858,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1578382524",
+      "source": "osm"
+    },
+    {
+      "name": "Nallurahalli",
+      "lat": 12.976641,
+      "lon": 77.724885,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197754",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 1",
+      "lat": 12.982926,
+      "lon": 77.640618,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/133876199",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 1A",
+      "lat": 12.997899,
+      "lon": 77.689492,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/144106294",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 1B",
+      "lat": 12.994305,
+      "lon": 77.659084,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/408874877",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 2",
+      "lat": 12.973939,
+      "lon": 77.550946,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/170931978",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 2A",
+      "lat": 12.944778,
+      "lon": 77.527324,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/260442664",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 2B",
+      "lat": 12.900649,
+      "lon": 77.466305,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/977931841",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 3",
+      "lat": 13.020172,
+      "lon": 77.552758,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/44830638",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 3A",
+      "lat": 13.025218,
+      "lon": 77.546496,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/135267124",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 3B",
+      "lat": 13.046161,
+      "lon": 77.505146,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/144116298",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 3C",
+      "lat": 13.054472,
+      "lon": 77.482148,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/359201105",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 4",
+      "lat": 12.901175,
+      "lon": 77.573354,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/172930536",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Reach 4B",
+      "lat": 12.873435,
+      "lon": 77.540106,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/549256469",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Underground UG1",
+      "lat": 12.980983,
+      "lon": 77.59376,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/44829220",
+      "source": "osm"
+    },
+    {
+      "name": "Namma Metro - Underground UG2",
+      "lat": 12.987536,
+      "lon": 77.571991,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/142484399",
+      "source": "osm"
+    },
+    {
+      "name": "National College",
+      "lat": 12.950527,
+      "lon": 77.57369,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710299",
+      "source": "osm"
+    },
+    {
+      "name": "Pantharapalya - Nayandahalli",
+      "lat": 12.941671,
+      "lon": 77.525117,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9050797592",
+      "source": "osm"
+    },
+    {
+      "name": "Pattanagere",
+      "lat": 12.92425,
+      "lon": 77.498351,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9051417969",
+      "source": "osm"
+    },
+    {
+      "name": "Pattandur Agrahara",
+      "lat": 12.987639,
+      "lon": 77.737772,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197749",
+      "source": "osm"
+    },
+    {
+      "name": "Peenya",
+      "lat": 13.033019,
+      "lon": 77.533201,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6410706695",
+      "source": "osm"
+    },
+    {
+      "name": "Peenya Industry",
+      "lat": 13.036318,
+      "lon": 77.525492,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6410706696",
+      "source": "osm"
+    },
+    {
+      "name": "Peenya Namma Metro Test track",
+      "lat": 13.044012,
+      "lon": 77.532053,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "way/202662176",
+      "source": "osm"
+    },
+    {
+      "name": "Pottery Town (u/c)",
+      "lat": 13.000652,
+      "lon": 77.609432,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/13800769513",
+      "source": "osm"
+    },
+    {
+      "name": "Ragigudda",
+      "lat": 12.917081,
+      "lon": 77.588302,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198239",
+      "source": "osm"
+    },
+    {
+      "name": "Rajajinagar",
+      "lat": 13.000525,
+      "lon": 77.549657,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6410706690",
+      "source": "osm"
+    },
+    {
+      "name": "Rajarajeshwari Nagar",
+      "lat": 12.9366,
+      "lon": 77.519679,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9051410519",
+      "source": "osm"
+    },
+    {
+      "name": "Rashtreeya Vidyalaya Road",
+      "lat": 12.921581,
+      "lon": 77.580202,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710295",
+      "source": "osm"
+    },
+    {
+      "name": "Rashtriya Military School Metro Station (u/c)",
+      "lat": 12.965276,
+      "lon": 77.606948,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1578382785",
+      "source": "osm"
+    },
+    {
+      "name": "Sandal Soap Factory",
+      "lat": 13.014654,
+      "lon": 77.553984,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6410706692",
+      "source": "osm"
+    },
+    {
+      "name": "Saraswathi Nagar (u/c)",
+      "lat": 12.993632,
+      "lon": 77.685717,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9918955252",
+      "source": "osm"
+    },
+    {
+      "name": "Seetharampalya",
+      "lat": 12.980856,
+      "lon": 77.708785,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197757",
+      "source": "osm"
+    },
+    {
+      "name": "Shivajinagar (u/c)",
+      "lat": 12.983849,
+      "lon": 77.602035,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1579059716",
+      "source": "osm"
+    },
+    {
+      "name": "Silk Institute",
+      "lat": 12.86173,
+      "lon": 77.529955,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651773",
+      "source": "osm"
+    },
+    {
+      "name": "Singasandra",
+      "lat": 12.880818,
+      "lon": 77.644846,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760198182",
+      "source": "osm"
+    },
+    {
+      "name": "Singayyanapalya",
+      "lat": 12.996545,
+      "lon": 77.692718,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197764",
+      "source": "osm"
+    },
+    {
+      "name": "Sir M. Visvesvaraya Stn., Central College",
+      "lat": 12.97452,
+      "lon": 77.58422,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857557",
+      "source": "osm"
+    },
+    {
+      "name": "South End Circle",
+      "lat": 12.938257,
+      "lon": 77.580056,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710297",
+      "source": "osm"
+    },
+    {
+      "name": "Sri Balagangadharanatha Swamiji Station, Hosahalli",
+      "lat": 12.974293,
+      "lon": 77.545621,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857561",
+      "source": "osm"
+    },
+    {
+      "name": "Sri Sathya Sai Hospital",
+      "lat": 12.981195,
+      "lon": 77.727536,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5760197751",
+      "source": "osm"
+    },
+    {
+      "name": "Srirampura",
+      "lat": 12.996525,
+      "lon": 77.563196,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/5960788726",
+      "source": "osm"
+    },
+    {
+      "name": "Swami Vivekananda Road",
+      "lat": 12.985931,
+      "lon": 77.644897,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857550",
+      "source": "osm"
+    },
+    {
+      "name": "Tannery Road (u/c)",
+      "lat": 13.00959,
+      "lon": 77.613949,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1578382143",
+      "source": "osm"
+    },
+    {
+      "name": "Tavarekere (u/c)",
+      "lat": 12.929505,
+      "lon": 77.600499,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9906325542",
+      "source": "osm"
+    },
+    {
+      "name": "Thalaghattapura",
+      "lat": 12.87141,
+      "lon": 77.538396,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651774",
+      "source": "osm"
+    },
+    {
+      "name": "Trinity",
+      "lat": 12.973022,
+      "lon": 77.61702,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857553",
+      "source": "osm"
+    },
+    {
+      "name": "Vajarahalli",
+      "lat": 12.877437,
+      "lon": 77.544741,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651775",
+      "source": "osm"
+    },
+    {
+      "name": "Veerannapalya (u/c)",
+      "lat": 13.040996,
+      "lon": 77.618046,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919651243",
+      "source": "osm"
+    },
+    {
+      "name": "Venkateshapura (u/c)",
+      "lat": 13.017306,
+      "lon": 77.618018,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/1579059713",
+      "source": "osm"
+    },
+    {
+      "name": "Vijayanagar",
+      "lat": 12.970956,
+      "lon": 77.537404,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6400857562",
+      "source": "osm"
+    },
+    {
+      "name": "Yelachenahalli",
+      "lat": 12.89605,
+      "lon": 77.570119,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/6432710292",
+      "source": "osm"
+    },
+    {
+      "name": "Yelahanka (u/c)",
+      "lat": 13.103093,
+      "lon": 77.600438,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/9919741629",
+      "source": "osm"
+    },
+    {
+      "name": "Yeshwantpur",
+      "lat": 13.023268,
+      "lon": 77.549875,
+      "line": "Bangalore Metro Rail Corporation Limited",
+      "osm_id": "node/11941186869",
+      "source": "osm"
+    }
+  ]
+}

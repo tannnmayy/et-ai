@@ -1,0 +1,434 @@
+[
+  {
+    "name": "Whitefield",
+    "centroid_lat": 12.968048,
+    "centroid_lon": 77.739097,
+    "listing_count": 492
+  },
+  {
+    "name": "Sarjapur Road",
+    "centroid_lat": 12.91235,
+    "centroid_lon": 77.680996,
+    "listing_count": 328
+  },
+  {
+    "name": "JP Nagar",
+    "centroid_lat": 12.90369,
+    "centroid_lon": 77.585749,
+    "listing_count": 319
+  },
+  {
+    "name": "Hebbal",
+    "centroid_lat": 13.034996,
+    "centroid_lon": 77.598173,
+    "listing_count": 313
+  },
+  {
+    "name": "Koramangala",
+    "centroid_lat": 12.928728,
+    "centroid_lon": 77.626569,
+    "listing_count": 305
+  },
+  {
+    "name": "HSR Layout",
+    "centroid_lat": 12.911431,
+    "centroid_lon": 77.644576,
+    "listing_count": 297
+  },
+  {
+    "name": "Yelahanka",
+    "centroid_lat": 13.121739,
+    "centroid_lon": 77.596839,
+    "listing_count": 266
+  },
+  {
+    "name": "Marathahalli",
+    "centroid_lat": 12.957972,
+    "centroid_lon": 77.691475,
+    "listing_count": 262
+  },
+  {
+    "name": "Varthur",
+    "centroid_lat": 12.941626,
+    "centroid_lon": 77.742517,
+    "listing_count": 256
+  },
+  {
+    "name": "Thanisandra",
+    "centroid_lat": 13.058203,
+    "centroid_lon": 77.621025,
+    "listing_count": 245
+  },
+  {
+    "name": "Electronic City",
+    "centroid_lat": 12.842519,
+    "centroid_lon": 77.660355,
+    "listing_count": 243
+  },
+  {
+    "name": "Bellandur",
+    "centroid_lat": 12.93146,
+    "centroid_lon": 77.674401,
+    "listing_count": 230
+  },
+  {
+    "name": "Devanahalli",
+    "centroid_lat": 13.240328,
+    "centroid_lon": 77.715061,
+    "listing_count": 229
+  },
+  {
+    "name": "KR Puram",
+    "centroid_lat": 13.006432,
+    "centroid_lon": 77.726011,
+    "listing_count": 181
+  },
+  {
+    "name": "Banashankari",
+    "centroid_lat": 12.925471,
+    "centroid_lon": 77.546769,
+    "listing_count": 178
+  },
+  {
+    "name": "Rajajinagar",
+    "centroid_lat": 12.99488,
+    "centroid_lon": 77.556237,
+    "listing_count": 164
+  },
+  {
+    "name": "BTM Layout",
+    "centroid_lat": 12.916478,
+    "centroid_lon": 77.610079,
+    "listing_count": 148
+  },
+  {
+    "name": "Jayanagar",
+    "centroid_lat": 12.931471,
+    "centroid_lon": 77.58711,
+    "listing_count": 148
+  },
+  {
+    "name": "Haralur",
+    "centroid_lat": 12.903305,
+    "centroid_lon": 77.661647,
+    "listing_count": 145
+  },
+  {
+    "name": "Panathur",
+    "centroid_lat": 12.935554,
+    "centroid_lon": 77.705952,
+    "listing_count": 145
+  },
+  {
+    "name": "Horamavu",
+    "centroid_lat": 13.03171,
+    "centroid_lon": 77.660888,
+    "listing_count": 143
+  },
+  {
+    "name": "Mahadevapura",
+    "centroid_lat": 12.991307,
+    "centroid_lon": 77.687586,
+    "listing_count": 129
+  },
+  {
+    "name": "Hennur",
+    "centroid_lat": 13.035331,
+    "centroid_lon": 77.647682,
+    "listing_count": 128
+  },
+  {
+    "name": "Indiranagar",
+    "centroid_lat": 12.973608,
+    "centroid_lon": 77.641146,
+    "listing_count": 128
+  },
+  {
+    "name": "Chandapura",
+    "centroid_lat": 12.798481,
+    "centroid_lon": 77.713809,
+    "listing_count": 116
+  },
+  {
+    "name": "Kasavanahalli",
+    "centroid_lat": 12.9062,
+    "centroid_lon": 77.675425,
+    "listing_count": 116
+  },
+  {
+    "name": "Hoodi",
+    "centroid_lat": 12.989401,
+    "centroid_lon": 77.712707,
+    "listing_count": 115
+  },
+  {
+    "name": "Kadugodi",
+    "centroid_lat": 12.992592,
+    "centroid_lon": 77.762443,
+    "listing_count": 113
+  },
+  {
+    "name": "Bannerghatta Road",
+    "centroid_lat": 12.870527,
+    "centroid_lon": 77.593325,
+    "listing_count": 103
+  },
+  {
+    "name": "Sarjapur",
+    "centroid_lat": 12.853962,
+    "centroid_lon": 77.788975,
+    "listing_count": 103
+  },
+  {
+    "name": "Hosa Road",
+    "centroid_lat": 12.892487,
+    "centroid_lon": 77.67369,
+    "listing_count": 99
+  },
+  {
+    "name": "Kanakapura Road",
+    "centroid_lat": 12.848198,
+    "centroid_lon": 77.521575,
+    "listing_count": 98
+  },
+  {
+    "name": "Bommanahalli",
+    "centroid_lat": 12.904082,
+    "centroid_lon": 77.624326,
+    "listing_count": 97
+  },
+  {
+    "name": "Richmond Town",
+    "centroid_lat": 12.962554,
+    "centroid_lon": 77.604187,
+    "listing_count": 93
+  },
+  {
+    "name": "Ramamurthy Nagar",
+    "centroid_lat": 13.015932,
+    "centroid_lon": 77.678488,
+    "listing_count": 92
+  },
+  {
+    "name": "Kundalahalli",
+    "centroid_lat": 12.967807,
+    "centroid_lon": 77.721423,
+    "listing_count": 90
+  },
+  {
+    "name": "Kengeri",
+    "centroid_lat": 12.902663,
+    "centroid_lon": 77.48123,
+    "listing_count": 87
+  },
+  {
+    "name": "Jigani",
+    "centroid_lat": 12.779525,
+    "centroid_lon": 77.643279,
+    "listing_count": 83
+  },
+  {
+    "name": "Ulsoor",
+    "centroid_lat": 12.981167,
+    "centroid_lon": 77.623892,
+    "listing_count": 81
+  },
+  {
+    "name": "Hulimavu",
+    "centroid_lat": 12.875934,
+    "centroid_lon": 77.602842,
+    "listing_count": 79
+  },
+  {
+    "name": "Sahakar Nagar",
+    "centroid_lat": 13.06522,
+    "centroid_lon": 77.586502,
+    "listing_count": 77
+  },
+  {
+    "name": "Begur",
+    "centroid_lat": 12.877316,
+    "centroid_lon": 77.638104,
+    "listing_count": 76
+  },
+  {
+    "name": "RR Nagar",
+    "centroid_lat": 12.915409,
+    "centroid_lon": 77.515634,
+    "listing_count": 74
+  },
+  {
+    "name": "Kadubeesanahalli",
+    "centroid_lat": 12.939827,
+    "centroid_lon": 77.695181,
+    "listing_count": 73
+  },
+  {
+    "name": "Malleshwaram",
+    "centroid_lat": 13.007273,
+    "centroid_lon": 77.569155,
+    "listing_count": 73
+  },
+  {
+    "name": "Singasandra",
+    "centroid_lat": 12.880317,
+    "centroid_lon": 77.647895,
+    "listing_count": 70
+  },
+  {
+    "name": "Budigere Cross",
+    "centroid_lat": 13.063881,
+    "centroid_lon": 77.745557,
+    "listing_count": 69
+  },
+  {
+    "name": "Doddanekundi",
+    "centroid_lat": 12.974345,
+    "centroid_lon": 77.695452,
+    "listing_count": 67
+  },
+  {
+    "name": "RT Nagar",
+    "centroid_lat": 13.020897,
+    "centroid_lon": 77.596131,
+    "listing_count": 67
+  },
+  {
+    "name": "CV Raman Nagar",
+    "centroid_lat": 12.982827,
+    "centroid_lon": 77.658453,
+    "listing_count": 66
+  },
+  {
+    "name": "Arekere",
+    "centroid_lat": 12.887474,
+    "centroid_lon": 77.599152,
+    "listing_count": 64
+  },
+  {
+    "name": "Domlur",
+    "centroid_lat": 12.961008,
+    "centroid_lon": 77.638899,
+    "listing_count": 64
+  },
+  {
+    "name": "Gottigere",
+    "centroid_lat": 12.856366,
+    "centroid_lon": 77.58799,
+    "listing_count": 63
+  },
+  {
+    "name": "Mysore Road",
+    "centroid_lat": 12.909173,
+    "centroid_lon": 77.478856,
+    "listing_count": 62
+  },
+  {
+    "name": "Kammanahalli",
+    "centroid_lat": 13.017169,
+    "centroid_lon": 77.637873,
+    "listing_count": 57
+  },
+  {
+    "name": "Kumaraswamy Layout",
+    "centroid_lat": 12.903094,
+    "centroid_lon": 77.563089,
+    "listing_count": 57
+  },
+  {
+    "name": "Manyata Tech Park",
+    "centroid_lat": 13.047446,
+    "centroid_lon": 77.623547,
+    "listing_count": 56
+  },
+  {
+    "name": "Jakkur",
+    "centroid_lat": 13.064104,
+    "centroid_lon": 77.620581,
+    "listing_count": 54
+  },
+  {
+    "name": "Banaswadi",
+    "centroid_lat": 13.009689,
+    "centroid_lon": 77.645977,
+    "listing_count": 53
+  },
+  {
+    "name": "Vijayanagar",
+    "centroid_lat": 12.972456,
+    "centroid_lon": 77.532021,
+    "listing_count": 51
+  },
+  {
+    "name": "Basavanagudi",
+    "centroid_lat": 12.94046,
+    "centroid_lon": 77.572929,
+    "listing_count": 50
+  },
+  {
+    "name": "Seegehalli",
+    "centroid_lat": 13.011795,
+    "centroid_lon": 77.764376,
+    "listing_count": 50
+  },
+  {
+    "name": "Nagarbhavi",
+    "centroid_lat": 12.970896,
+    "centroid_lon": 77.512556,
+    "listing_count": 45
+  },
+  {
+    "name": "Brookefield",
+    "centroid_lat": 12.966947,
+    "centroid_lon": 77.719771,
+    "listing_count": 44
+  },
+  {
+    "name": "Choodasandra",
+    "centroid_lat": 12.8871,
+    "centroid_lon": 77.6792,
+    "listing_count": 43
+  },
+  {
+    "name": "Tumkur Road",
+    "centroid_lat": 13.074907,
+    "centroid_lon": 77.436714,
+    "listing_count": 35
+  },
+  {
+    "name": "EPIP Zone",
+    "centroid_lat": 12.975161,
+    "centroid_lon": 77.71809,
+    "listing_count": 33
+  },
+  {
+    "name": "Ejipura",
+    "centroid_lat": 12.943677,
+    "centroid_lon": 77.627899,
+    "listing_count": 33
+  },
+  {
+    "name": "Frazer Town",
+    "centroid_lat": 12.99715,
+    "centroid_lon": 77.614256,
+    "listing_count": 33
+  },
+  {
+    "name": "Yemalur",
+    "centroid_lat": 12.944912,
+    "centroid_lon": 77.684519,
+    "listing_count": 32
+  },
+  {
+    "name": "Neeladri Nagar",
+    "centroid_lat": 12.839116,
+    "centroid_lon": 77.647412,
+    "listing_count": 31
+  },
+  {
+    "name": "Old Madras Road",
+    "centroid_lat": 12.986912,
+    "centroid_lon": 77.647967,
+    "listing_count": 31
+  }
+]
