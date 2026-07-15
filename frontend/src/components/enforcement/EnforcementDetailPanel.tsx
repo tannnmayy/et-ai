@@ -150,8 +150,8 @@ export default function EnforcementDetailPanel({
           </div>
         </div>
 
-        {/* Corridor badge */}
-        {hex.isMajorRoadCorridor && (
+        {/* Corridor badge — visible whenever product flag or major-road flag is set */}
+        {(hex.isTrafficCorridor || hex.isMajorRoadCorridor) && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-brand-blue/10 border border-brand-blue/25 text-brand-blue text-[11px] font-semibold">
             <Car size={14} />
             Major Traffic Corridor
@@ -163,11 +163,17 @@ export default function EnforcementDetailPanel({
           </div>
         )}
 
-        {/* Attribution chart */}
+        {/* Attribution chart — full 4-source mix always shown */}
         <div className="bg-apple-card/60 border border-apple-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-apple-secondary">
               Source Attribution
+            </span>
+            <span className="text-[9px] font-mono text-apple-secondary/70">
+              T {(hex.sourceAttribution.traffic * 100).toFixed(0)}% · C{' '}
+              {(hex.sourceAttribution.construction * 100).toFixed(0)}% · I{' '}
+              {(hex.sourceAttribution.industrial * 100).toFixed(0)}% · B{' '}
+              {(hex.sourceAttribution.burning * 100).toFixed(0)}%
             </span>
           </div>
           <Suspense
@@ -177,7 +183,10 @@ export default function EnforcementDetailPanel({
               </div>
             }
           >
-            <AttributionChart hex={hex} />
+            <AttributionChart
+              hex={hex}
+              highlightTraffic={Boolean(hex.isTrafficCorridor || hex.isMajorRoadCorridor)}
+            />
           </Suspense>
         </div>
 

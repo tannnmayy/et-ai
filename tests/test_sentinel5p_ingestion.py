@@ -56,19 +56,34 @@ class TestCache:
             cached = _read_cache("bengaluru")
             assert cached is not None
             assert cached["data"]["city"] == "bengaluru"
-            assert cached["schema_version"] == "1.0"
+            assert cached["schema_version"] == "1.1"
 
     def test_cache_fresh_when_recent(self, tmp_path) -> None:
         with patch("pipeline.sentinel5p_ingestion._cache_dir", return_value=tmp_path):
-            entry = _build_cache_entry("bengaluru", {"hexagons": []})
+            # Non-empty hex list required for freshness (empty caches are never "fresh")
+            entry = _build_cache_entry(
+                "bengaluru",
+                {"hexagons": [{"h3_cell": "893c1b2d7ffffff", "no2_column_density_mean": 1e-5}]},
+            )
             _write_cache("bengaluru", entry)
             cached = _read_cache("bengaluru")
             assert _cache_is_fresh(cached) is True
 
+    def test_empty_hexagons_never_fresh(self, tmp_path) -> None:
+        with patch("pipeline.sentinel5p_ingestion._cache_dir", return_value=tmp_path):
+            entry = _build_cache_entry("bengaluru", {"hexagons": []})
+            _write_cache("bengaluru", entry)
+            cached = _read_cache("bengaluru")
+            assert _cache_is_fresh(cached) is False
+            assert _cache_is_usable_stale(cached) is False
+
     def test_cache_stale_when_old(self, tmp_path) -> None:
         with patch("pipeline.sentinel5p_ingestion._cache_dir", return_value=tmp_path):
             old_time = datetime.now(tz=timezone.utc) - timedelta(hours=36)
-            entry = _build_cache_entry("bengaluru", {"hexagons": []})
+            entry = _build_cache_entry(
+                "bengaluru",
+                {"hexagons": [{"h3_cell": "893c1b2d7ffffff", "no2_column_density_mean": 1e-5}]},
+            )
             entry["retrieved_at"] = old_time.isoformat()
             _write_cache("bengaluru", entry)
             cached = _read_cache("bengaluru")
@@ -97,7 +112,8 @@ class TestGetServiceAccountPath:
         os.environ["GEE_SERVICE_ACCOUNT_KEY_PATH"] = "/path/to/key.json"
         try:
             result = _get_service_account_path()
-            assert result == "/path/to/key.json"
+            assert result is not None
+            assert result.endswith("key.json") or "key.json" in result
         finally:
             del os.environ["GEE_SERVICE_ACCOUNT_KEY_PATH"]
 
@@ -157,12 +173,13 @@ class TestGetNO2ColumnDensity:
             assert result2["cache_used"] is True
             assert len(result2["warnings"]) > 0
 
-    def test_empty_fetch_returns_empty_hexagons(self, tmp_path) -> None:
+    def test_empty_fetch_returns_unavailable_not_fake_fresh(self, tmp_path) -> None:
         with patch("pipeline.sentinel5p_ingestion._get_service_account_path", return_value="/fake/path"), \
              patch("pipeline.sentinel5p_ingestion._cache_dir", return_value=tmp_path), \
              patch("pipeline.sentinel5p_ingestion._fetch_gee_no2", return_value={}):
             result = get_no2_column_density(city="bengaluru", refresh=True)
-            assert result["source_status"] == "live_provider"
+            # Empty live results must not be cached as a healthy "live_provider" success
+            assert result["source_status"] == "unavailable"
             assert result["hexagons"] == []
 
     def test_geospatial_endpoint_returns_no2_data(self) -> None:

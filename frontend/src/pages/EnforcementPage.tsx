@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useEnforcementPriorities } from '../api/client';
 import type { ActionTier, ExposureLevel, PriorityHex, SourceKey } from '../types';
 import MapContainer from '../components/MapContainer';
@@ -31,7 +32,7 @@ const EnforcementDetailPanel = lazy(
 );
 
 const TOP_OPTIONS = [
-  { label: 'Top 10', value: 10 },
+  { label: 'Top 15', value: 15 },
   { label: 'Top 20', value: 20 },
   { label: 'Top 50', value: 50 },
   { label: 'All (100)', value: 100 },
@@ -56,8 +57,9 @@ const TIER_FILTERS: ActionTier[] = ['IMMEDIATE', 'HIGH', 'MONITOR', 'ROUTINE'];
 const EXPOSURE_FILTERS: ExposureLevel[] = ['Low', 'Medium', 'High', 'Critical'];
 
 export default function EnforcementPage() {
-  // Display window (client-side slice of a cached top-100 fetch)
-  const [topK, setTopK] = useState(20);
+  const navigate = useNavigate();
+  // Default top 15 for fast first paint (prefetched on landing). Larger Top-N hits the API.
+  const [topK, setTopK] = useState(15);
   // Immediate UI value for Simulate; debounced before it hits React Query
   const [simHourUi, setSimHourUi] = useState<number | null>(null);
   const simulatedHour = useDebouncedValue(simHourUi, 250);
@@ -70,6 +72,8 @@ export default function EnforcementPage() {
   const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
   const [tierFilter, setTierFilter] = useState<Set<ActionTier>>(new Set());
   const [exposureFilter, setExposureFilter] = useState<Set<ExposureLevel>>(new Set());
+  /** When true, only show major traffic corridor hexes */
+  const [trafficCorridorOnly, setTrafficCorridorOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -79,9 +83,9 @@ export default function EnforcementPage() {
     isLoading,
     isFetching,
     isPlaceholderData,
-  } = useEnforcementPriorities(simulatedHour);
+  } = useEnforcementPriorities(simulatedHour, topK);
 
-  // Top-N is free after the first fetch (no network)
+  // Server already returns topK rows; keep slice as safety
   const priorities = useMemo(
     () => allPriorities.slice(0, topK),
     [allPriorities, topK],
@@ -107,6 +111,9 @@ export default function EnforcementPage() {
     if (exposureFilter.size > 0) {
       list = list.filter((h) => exposureFilter.has(h.exposure));
     }
+    if (trafficCorridorOnly) {
+      list = list.filter((h) => h.isTrafficCorridor || h.isMajorRoadCorridor);
+    }
     return sortHexes(list, sortKey, sortDir);
   }, [
     priorities,
@@ -114,6 +121,7 @@ export default function EnforcementPage() {
     sourceFilter,
     tierFilter,
     exposureFilter,
+    trafficCorridorOnly,
     sortKey,
     sortDir,
   ]);
@@ -166,13 +174,18 @@ export default function EnforcementPage() {
       setDispatchedUnits((prev) => ({ ...prev, [hexId]: true }));
       const hex = allPriorities.find((h) => h.id === hexId);
       const loc = hex ? formatLocationName(hex) : hexId;
-      window.setTimeout(() => {
-        alert(
-          `Dispatch ordered for ${loc}.\nCode: ENF-${hexId.slice(-4).toUpperCase()}\nPrimary: ${hex?.primarySource ?? '—'}\nTier: ${hex ? actionTierLabel(hex.actionTier) : '—'}`,
-        );
-      }, 120);
+      const qs = new URLSearchParams({
+        target: loc,
+        hex: hexId,
+        source: String(hex?.primarySource ?? hex?.primarySourceKey ?? 'mixed'),
+        score: String(hex?.priorityScore ?? hex?.score10 ?? '—'),
+        action:
+          hex?.explanation?.text ||
+          'Inspect site for dust control compliance and document evidence.',
+      });
+      navigate(`/dispatch?${qs.toString()}`);
     },
-    [allPriorities],
+    [allPriorities, navigate],
   );
 
   const handleDispatchActive = useCallback(() => {
@@ -320,6 +333,18 @@ export default function EnforcementPage() {
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setTrafficCorridorOnly((v) => !v)}
+              className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                trafficCorridorOnly
+                  ? 'bg-brand-blue text-white border-brand-blue shadow-sm shadow-brand-blue/20'
+                  : 'bg-apple-card border-apple-border text-apple-secondary hover:text-white'
+              }`}
+              title="Show only major traffic corridor hexes"
+            >
+              Traffic Corridors
+            </button>
             <span className="w-px h-5 bg-apple-border self-center mx-0.5" />
             {TIER_FILTERS.map((t) => {
               const on = tierFilter.has(t);

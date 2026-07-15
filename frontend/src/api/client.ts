@@ -9,6 +9,12 @@ export {
   useAttributionGrid,
   useCityExtremes,
   ENFORCEMENT_FETCH_TOP_K,
+  ENFORCEMENT_DEFAULT_TOP_K,
+  ENFORCEMENT_MAX_TOP_K,
+  fetchEnforcementPriorities,
+  fetchCityExtremes,
+  fetchStations,
 } from '../services/geospatialService';
 export { useDashboardData } from '../services/analyticsService';
 export { useSendMessage } from '../services/copilotService';
+export { warmAppFromLanding, prefetchMapAndEnforcementData } from '../services/prefetchService';

@@ -34,6 +34,92 @@ body {
   box-shadow: 0 0 15px rgba(10, 132, 255, 0.4);
 }
 
+/* Apple-inspired glass surfaces */
+.glass-panel {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(0, 0, 0, 0.25) 100%
+  );
+  backdrop-filter: blur(40px) saturate(160%);
+  -webkit-backdrop-filter: blur(40px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-strong {
+  background: linear-gradient(
+    160deg,
+    rgba(28, 28, 30, 0.75) 0%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  backdrop-filter: blur(48px) saturate(180%);
+  -webkit-backdrop-filter: blur(48px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(10, 132, 255, 0.05);
+}
+
+.glass-card-hover {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease,
+    border-color 0.35s ease,
+    background 0.35s ease;
+}
+.glass-card-hover:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(10, 132, 255, 0.35);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(10, 132, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.glass-card-hover:active {
+  transform: translateY(-1px) scale(1.005);
+}
+
+/* Ambient mesh background for landing */
+.landing-mesh {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(10, 132, 255, 0.28), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(52, 199, 89, 0.12), transparent 50%),
+    radial-gradient(ellipse 50% 50% at 50% 100%, rgba(255, 159, 10, 0.08), transparent 55%),
+    #000000;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-fade-up-delay-1 { animation-delay: 0.08s; }
+.animate-fade-up-delay-2 { animation-delay: 0.16s; }
+.animate-fade-up-delay-3 { animation-delay: 0.24s; }
+.animate-fade-up-delay-4 { animation-delay: 0.32s; }
+
+@keyframes soft-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.ambient-orb {
+  animation: soft-pulse 6s ease-in-out infinite;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

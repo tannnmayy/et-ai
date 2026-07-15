@@ -16,12 +16,58 @@ from backend.app.config import (
     get_project_root,
 )
 from backend.app.services.artifact_adapter import get_latest_station_reading
-from backend.app.services.causal_explanation_service import generate_enforcement_action_guidance
 from backend.app.services.fusion_estimation_service import estimate_fused_pm25
 from backend.app.services.weather_forecast_service import get_weather_forecast
 from pipeline.station_registry import get_registry_stations
 
 logger = logging.getLogger(__name__)
+
+# Deterministic action text for list endpoints (no LLM — keeps top_k=100 fast).
+_ACTION_TEMPLATES: dict[str, str] = {
+    "traffic": (
+        "Coordinate with traffic police for congestion management and vehicle "
+        "emissions checks during peak hours in this zone."
+    ),
+    "industrial": (
+        "Inspect nearby industrial facilities for emissions compliance and verify "
+        "stack emission controls are operational."
+    ),
+    "construction": (
+        "Dispatch an inspector to verify dust suppression compliance "
+        "(water spraying, covers, barriers) at active construction sites in this zone."
+    ),
+    "burning": (
+        "Patrol for open waste burning and biomass combustion; document and enforce "
+        "applicable air-quality rules."
+    ),
+}
+
+
+def _template_enforcement_guidance(
+    source_attr: dict[str, float],
+    fused_pm25: float | None,
+) -> dict[str, Any]:
+    """Instant template guidance — used for bulk priority lists."""
+    if not source_attr:
+        return {
+            "text": "No source attribution available for this hexagon.",
+            "generated_by": "unavailable",
+        }
+    top_name = max(source_attr, key=lambda k: float(source_attr.get(k) or 0.0))
+    top_pct = float(source_attr.get(top_name) or 0.0)
+    template = _ACTION_TEMPLATES.get(
+        top_name,
+        f"Inspect the dominant source category '{top_name}' and verify regulatory compliance.",
+    )
+    label = top_name.capitalize()
+    pm = f" Estimated PM2.5: {fused_pm25:.0f} µg/m³." if fused_pm25 is not None else ""
+    return {
+        "text": (
+            f"Priority source: {label} ({top_pct * 100:.0f}% of attributed mix). "
+            f"{template}{pm}"
+        ),
+        "generated_by": "template",
+    }
 
 # ---------------------------------------------------------------------------
 # Actionability weights per source category
@@ -39,16 +85,38 @@ logger = logging.getLogger(__name__)
 #   burning (1.0) — Illegal burning can be directly enforced against
 #       when located. High actionability.
 #
-#   traffic (0.2) — Diffuse, area-wide source attributable to a fleet
-#       of vehicles rather than a single inspectable entity. Low
-#       actionability — enforcement relies on systemic measures
-#       (e.g. vehicle emissions standards, fuel policy) rather than
-#       site-level action.
+#   traffic (0.28 baseline) — Still lower than site-level sources, but
+#       raised above the historical 0.2 so that on major corridors
+#       (idling checks, PUC drives, congestion management) traffic can
+#       surface in rankings without drowning low-traffic residential
+#       cells. Corridor hexes get an extra actionability bonus (below).
 # ---------------------------------------------------------------------------
 ACTIONABILITY_INDUSTRIAL: float = 1.0
 ACTIONABILITY_CONSTRUCTION: float = 1.0
 ACTIONABILITY_BURNING: float = 1.0
-ACTIONABILITY_TRAFFIC: float = 0.2
+ACTIONABILITY_TRAFFIC: float = 0.28
+
+# Extra actionability for traffic on high corridor-score hexes (additive).
+# At corridor_score=1.0 → traffic actionability ≈ 0.28 + 0.17 = 0.45
+# (still well below construction/industrial at 1.0).
+ACTIONABILITY_TRAFFIC_CORRIDOR_BONUS: float = 0.17
+
+# Extra raw-signal boost for traffic when corridor score is high.
+# traffic_raw *= (1 + CORRIDOR_TRAFFIC_SIGNAL_BOOST * corridor_score)
+# At corridor_score=1.0 → ≈ 2.4× traffic raw before renormalisation.
+CORRIDOR_TRAFFIC_SIGNAL_BOOST: float = 1.4
+
+# Include a corridor-scaled share of traffic in magnitude so high-traffic
+# corridors can rank without treating all traffic as fully "site-enforceable".
+# magnitude uses: enforceable + traffic_frac * corridor_score * TRAFFIC_MAGNITUDE_WEIGHT
+TRAFFIC_MAGNITUDE_WEIGHT: float = 0.75
+
+# Soft ranking lift: priority *= (1 + CORRIDOR_RANK_LIFT * corridor * traffic_frac)
+# At corridor=1 and traffic_frac=0.5 → score × 1.2. Construction hotspots still win.
+CORRIDOR_RANK_LIFT: float = 0.40
+
+# Flag threshold for is_traffic_corridor (0–1 corridor score).
+TRAFFIC_CORRIDOR_FLAG_THRESHOLD: float = 0.4
 
 _ACTIONABILITY_MAP: dict[str, float] = {
     "industrial": ACTIONABILITY_INDUSTRIAL,
@@ -172,10 +240,15 @@ def _compute_attribution_vectors(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Return source fractions (rows sum to 1.0) + traffic enhancement metadata.
 
-    When ``traffic_corridor_score`` is present, blends major-road corridor
-    density into the traffic raw signal (same 0.6/0.4 mix as attribution_service).
-    When time-of-day traffic is enabled, multiplies traffic raw by the
-    Bengaluru peak-hour multiplier before renormalisation.
+    Traffic re-balance (Bengaluru realism)
+    --------------------------------------
+    1. Base blend: road_density × corridor score (same 0.6/0.4 as attribution_service).
+    2. Extra corridor multiplier: ``traffic_raw *= (1 + BOOST * corridor_score)``
+       so major corridors (Outer Ring Road, NH arteries) raise traffic *share*
+       relative to construction/industrial when those sites are sparse.
+    3. Time-of-day peak multiplier (morning/evening) still applies when enabled.
+    4. If corridor score is missing/zero → falls back to road-density-only traffic
+       (previous behaviour for non-corridor hexes).
     """
     from backend.app.services.attribution_service import (
         CORRIDOR_ROAD_DENSITY_WEIGHT,
@@ -186,9 +259,13 @@ def _compute_attribution_vectors(
     from backend.app.services.traffic_service import traffic_time_metadata
 
     road_density = df["road_density_m_per_sq_m"].fillna(0.0)
+    corridor = (
+        df["traffic_corridor_score"].fillna(0.0)
+        if "traffic_corridor_score" in df.columns
+        else pd.Series(0.0, index=df.index)
+    )
     corridor_applied = False
     if USE_TRAFFIC_CORRIDOR_SCORE and "traffic_corridor_score" in df.columns:
-        corridor = df["traffic_corridor_score"].fillna(0.0)
         traffic_density = (
             CORRIDOR_ROAD_DENSITY_WEIGHT * road_density
             + CORRIDOR_SCORE_WEIGHT * corridor
@@ -198,12 +275,23 @@ def _compute_attribution_vectors(
         traffic_density = road_density
 
     traffic_raw = traffic_density * 0.7 + 0.3
+
+    # Stronger corridor lift on the traffic *channel* before renormalisation.
+    # Missing/zero corridor_score → multiplier 1.0 (no change).
+    if corridor_applied:
+        traffic_raw = traffic_raw * (1.0 + CORRIDOR_TRAFFIC_SIGNAL_BOOST * corridor)
+
+    # Soft-scale facility/site counts with log1p so raw integer counts
+    # (construction sites can hit 40+) cannot erase corridor traffic fractions
+    # that live on a 0–0.1 road-density scale.
     industrial_raw = (
         df["industrial_fraction"].fillna(0.0) * 0.8
-        + df["industrial_facility_count"].fillna(0.0) * 0.2
+        + np.log1p(df["industrial_facility_count"].fillna(0.0)) * 0.35
         + 0.1
     )
-    construction_raw = df["construction_feature_count"].fillna(0.0) + 0.1
+    construction_raw = (
+        np.log1p(df["construction_feature_count"].fillna(0.0)) * 0.55 + 0.12
+    )
     # No FIRMS data in this fast path; use a small constant so the category
     # is never zero (avoids division edge cases) but contributes minimally.
     burning_raw = pd.Series(0.01, index=df.index)
@@ -308,14 +396,33 @@ def compute_enforcement_priorities(
         hex_df, simulated_hour=simulated_hour
     )
 
+    corridor_score = (
+        hex_df["traffic_corridor_score"].fillna(0.0).to_numpy()
+        if "traffic_corridor_score" in hex_df.columns
+        else np.zeros(len(hex_df))
+    )
+    is_corridor_flag = (
+        hex_df["is_major_road_corridor"].fillna(False).to_numpy()
+        if "is_major_road_corridor" in hex_df.columns
+        else np.zeros(len(hex_df), dtype=bool)
+    )
+    # Product flag: corridor score above threshold (for UI filters / badges).
+    # Also OR with existing is_major_road_corridor when present.
+    is_traffic_corridor = (corridor_score > TRAFFIC_CORRIDOR_FLAG_THRESHOLD) | is_corridor_flag.astype(bool)
+
     # -----------------------------------------------------------------------
-    # 2. Actionability weight (weighted average of per-source weights)
+    # 2. Actionability weight (per-source weights; traffic boosted on corridors)
+    #
+    # Construction/industrial/burning stay at 1.0. Traffic baseline is modest
+    # (PUC / idling / congestion ops) and rises with corridor_score so arterial
+    # hexes can enter the top list without dominating quiet neighbourhoods.
     # -----------------------------------------------------------------------
+    traffic_act = ACTIONABILITY_TRAFFIC + ACTIONABILITY_TRAFFIC_CORRIDOR_BONUS * corridor_score
     actionability = (
-        attr_df["traffic"] * ACTIONABILITY_TRAFFIC
-        + attr_df["industrial"] * ACTIONABILITY_INDUSTRIAL
-        + attr_df["construction"] * ACTIONABILITY_CONSTRUCTION
-        + attr_df["burning"] * ACTIONABILITY_BURNING
+        attr_df["traffic"].to_numpy() * traffic_act
+        + attr_df["industrial"].to_numpy() * ACTIONABILITY_INDUSTRIAL
+        + attr_df["construction"].to_numpy() * ACTIONABILITY_CONSTRUCTION
+        + attr_df["burning"].to_numpy() * ACTIONABILITY_BURNING
     )
 
     # -----------------------------------------------------------------------
@@ -340,35 +447,39 @@ def compute_enforcement_priorities(
 
     # -----------------------------------------------------------------------
     # 5. Attributable magnitude
+    #
+    # Site-enforceable sources (construction / industrial / burning) always
+    # count fully. Traffic only contributes magnitude scaled by corridor_score
+    # so major roads can rank for vehicle-enforcement ops without treating
+    # diffuse residential traffic as fully actionable.
     # -----------------------------------------------------------------------
     enforceable_frac = (
         attr_df["industrial"] + attr_df["construction"] + attr_df["burning"]
+    ).to_numpy()
+    traffic_mag_frac = (
+        attr_df["traffic"].to_numpy() * corridor_score * TRAFFIC_MAGNITUDE_WEIGHT
     )
+    magnitude_frac = np.clip(enforceable_frac + traffic_mag_frac, 0.0, 1.5)
     magnitude_raw = np.where(
         np.isnan(fused_pm25_arr),
         0.0,
-        fused_pm25_arr * enforceable_frac.to_numpy(),
+        fused_pm25_arr * magnitude_frac,
     )
     attributable_magnitude = np.clip(magnitude_raw / MAGNITUDE_SATURATION_PM25, 0.0, 1.0)
 
     # -----------------------------------------------------------------------
     # 6. Priority score and ranking
+    #    exposure × magnitude × actionability  (construction still wins on
+    #    dense worksites; corridors gain via traffic share + magnitude + act)
+    #    Soft corridor×traffic lift helps arterial hexes enter top-N.
     # -----------------------------------------------------------------------
     priority_score = (
         exposure_weight_s.to_numpy()
         * attributable_magnitude
-        * actionability.to_numpy()
+        * actionability
     )
-
-    corridor_score = (
-        hex_df["traffic_corridor_score"].fillna(0.0).to_numpy()
-        if "traffic_corridor_score" in hex_df.columns
-        else np.zeros(len(hex_df))
-    )
-    is_corridor = (
-        hex_df["is_major_road_corridor"].fillna(False).to_numpy()
-        if "is_major_road_corridor" in hex_df.columns
-        else np.zeros(len(hex_df), dtype=bool)
+    priority_score = priority_score * (
+        1.0 + CORRIDOR_RANK_LIFT * corridor_score * attr_df["traffic"].to_numpy()
     )
 
     result_df = pd.DataFrame(
@@ -379,14 +490,15 @@ def compute_enforcement_priorities(
             "priority_score": np.round(priority_score, 4),
             "exposure_weight": np.round(exposure_weight_s.to_numpy(), 4),
             "attributable_magnitude": np.round(attributable_magnitude, 4),
-            "actionability_weight": np.round(actionability.to_numpy(), 4),
+            "actionability_weight": np.round(actionability, 4),
             "fused_pm25": np.where(np.isnan(fused_pm25_arr), None, np.round(fused_pm25_arr, 2)),
             "traffic": np.round(attr_df["traffic"].to_numpy(), 4),
             "industrial": np.round(attr_df["industrial"].to_numpy(), 4),
             "construction": np.round(attr_df["construction"].to_numpy(), 4),
             "burning": np.round(attr_df["burning"].to_numpy(), 4),
             "traffic_corridor_score": np.round(corridor_score, 4),
-            "is_major_road_corridor": is_corridor,
+            "is_major_road_corridor": is_corridor_flag,
+            "is_traffic_corridor": is_traffic_corridor,
         }
     )
 
@@ -398,41 +510,38 @@ def compute_enforcement_priorities(
     top = result_df.head(top_k)
 
     ranked_hexagons = []
-    # NOTE: Sequential Google reverse-geocode for every top_k row made the
-    # priority endpoint multi-second and blocked Simulate / Top-N UI. Names
-    # are resolved on the frontend via locality bounding boxes (and optional
-    # reverse-geocode later for a single detail view). Leaving name=None is
-    # intentional for list performance.
+    # NOTE: Do NOT call LLM guidance for every ranked hex — that was making
+    # /priority?top_k=100 hang for minutes (100× Gemini/OpenRouter calls).
+    # Use deterministic templates for the list. Names resolved on the frontend.
 
     for _, row in top.iterrows():
         source_attr = {
-            "traffic": row["traffic"],
-            "industrial": row["industrial"],
-            "construction": row["construction"],
-            "burning": row["burning"],
+            "traffic": float(row["traffic"]),
+            "industrial": float(row["industrial"]),
+            "construction": float(row["construction"]),
+            "burning": float(row["burning"]),
         }
         scoring = {
-            "exposure_weight": row["exposure_weight"],
-            "attributable_magnitude": row["attributable_magnitude"],
-            "actionability_weight": row["actionability_weight"],
+            "exposure_weight": float(row["exposure_weight"]),
+            "attributable_magnitude": float(row["attributable_magnitude"]),
+            "actionability_weight": float(row["actionability_weight"]),
         }
-        explanation = generate_enforcement_action_guidance(
-            scoring_breakdown=scoring,
-            source_attribution=source_attr,
-            fused_pm25=None if row["fused_pm25"] is None else float(row["fused_pm25"]),
-        )
+        fused = None if row["fused_pm25"] is None else float(row["fused_pm25"])
+        explanation = _template_enforcement_guidance(source_attr, fused)
         ranked_hexagons.append({
             "h3_cell": row["h3_cell"],
             "priority_score": row["priority_score"],
             "rank": int(row["rank"]),
             "scoring_breakdown": scoring,
-            "fused_pm25": None if row["fused_pm25"] is None else float(row["fused_pm25"]),
+            "fused_pm25": fused,
             "source_attribution": source_attr,
             "method": "vectorised_feature_proxy",
             "explanation": explanation,
             "name": None,
             "traffic_corridor_score": float(row["traffic_corridor_score"]),
             "is_major_road_corridor": bool(row["is_major_road_corridor"]),
+            # Explicit product flag for UI filters / badges (score > 0.4 or major-road flag)
+            "is_traffic_corridor": bool(row["is_traffic_corridor"]),
             "traffic_time_multiplier": traffic_meta.get("traffic_time_multiplier"),
             "is_peak_hour": traffic_meta.get("is_peak_hour"),
             "traffic_hour_local": traffic_meta.get("traffic_hour_local"),

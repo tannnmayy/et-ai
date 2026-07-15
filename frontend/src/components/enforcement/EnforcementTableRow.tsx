@@ -50,8 +50,11 @@ function EnforcementTableRow({ item, isSelected, onSelect }: Props) {
           <div className="text-xs font-bold text-white truncate" title={item.name}>
             {loc}
           </div>
-          {item.isMajorRoadCorridor && (
-            <div className="text-[9px] text-brand-blue truncate">Corridor</div>
+          {(item.isTrafficCorridor || item.isMajorRoadCorridor) && (
+            <div className="text-[9px] text-brand-blue font-semibold truncate flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-brand-blue shrink-0" />
+              Major Traffic Corridor
+            </div>
           )}
         </div>
       </div>
@@ -98,6 +101,7 @@ function propsEqual(prev: Props, next: Props): boolean {
     prev.item.exposure === next.item.exposure &&
     prev.item.magnitude === next.item.magnitude &&
     prev.item.isMajorRoadCorridor === next.item.isMajorRoadCorridor &&
+    prev.item.isTrafficCorridor === next.item.isTrafficCorridor &&
     prev.onSelect === next.onSelect
   );
 }

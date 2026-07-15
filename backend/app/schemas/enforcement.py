@@ -29,6 +29,10 @@ class RankedHexagon(BaseModel):
     # Optional traffic enhancement metadata (backward compatible)
     traffic_corridor_score: float | None = Field(default=None, description="0–1 major-road corridor density score")
     is_major_road_corridor: bool | None = Field(default=None, description="Hex overlaps significant major roads")
+    is_traffic_corridor: bool | None = Field(
+        default=None,
+        description="True when traffic_corridor_score > 0.4 or major-road corridor flag is set",
+    )
     traffic_time_multiplier: float | None = Field(default=None, description="Peak-hour traffic multiplier applied")
     is_peak_hour: bool | None = Field(default=None)
     traffic_hour_local: int | None = Field(default=None)

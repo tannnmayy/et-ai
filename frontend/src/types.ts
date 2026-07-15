@@ -47,6 +47,8 @@ export interface PriorityHex {
   // Optional traffic enhancements from backend
   trafficCorridorScore?: number;
   isMajorRoadCorridor?: boolean;
+  /** Product flag: corridor_score > 0.4 or major-road corridor */
+  isTrafficCorridor?: boolean;
   trafficTimeMultiplier?: number;
   isPeakHour?: boolean;
   trafficHourLocal?: number | null;

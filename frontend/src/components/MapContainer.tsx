@@ -1,6 +1,6 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
-import { APIProvider, Map, AdvancedMarker } from '@vis.gl/react-google-maps';
-import { Key } from 'lucide-react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
+import { Key, AlertTriangle } from 'lucide-react';
 import { PriorityHex } from '../types';
 import { actionTierStyles, formatLocationName } from '../services/enforcementUtils';
 
@@ -11,12 +11,19 @@ interface MapContainerProps {
   viewMode: 'aqi' | 'enforcement';
 }
 
-const API_KEY =
+const API_KEY = String(
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  '';
+    (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+    '',
+).trim();
 
-const isRealKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY' && !API_KEY.includes('MY_GEMINI');
+const MAP_ID = String((import.meta as any).env?.VITE_GOOGLE_MAPS_MAP_ID || '').trim();
+
+const isRealKey =
+  Boolean(API_KEY) &&
+  API_KEY !== 'YOUR_API_KEY' &&
+  !API_KEY.includes('MY_GEMINI') &&
+  API_KEY.length >= 20;
 
 const darkMapStyles = [
   { elementType: 'geometry', stylers: [{ color: '#000000' }] },
@@ -28,6 +35,34 @@ const darkMapStyles = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0c0c0e' }] },
 ];
 
+/** Apply classic JSON styles when not using a Cloud Map ID. */
+function MapStyleController({ enabled }: { enabled: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !enabled) return;
+    map.setOptions({
+      styles: darkMapStyles,
+      disableDefaultUI: true,
+      zoomControl: true,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+    });
+  }, [map, enabled]);
+  return null;
+}
+
+function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement'): string {
+  if (viewMode === 'enforcement') {
+    return actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
+  }
+  const pm = hex.pm25;
+  if (pm <= 50) return '#34C759';
+  if (pm <= 100) return '#FFCC00';
+  if (pm <= 250) return '#FF9F0A';
+  return '#ff453a';
+}
+
 function MapContainer({
   selectedHex,
   onSelectHex,
@@ -36,6 +71,16 @@ function MapContainer({
 }: MapContainerProps) {
   const [showRealMap, setShowRealMap] = useState(isRealKey);
   const [activeLayer, setActiveLayer] = useState<'h3' | 'heatmap' | 'sat'>('h3');
+  const [mapsError, setMapsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isRealKey && import.meta.env.DEV) {
+      console.warn(
+        '[MapContainer] No Google Maps API key in import.meta.env.VITE_GOOGLE_MAPS_API_KEY. ' +
+          'Showing simulation grid. Fix frontend/.env or root GOOGLE_MAPS_BROWSER_API_KEY (UTF-8 no BOM), then restart Vite.',
+      );
+    }
+  }, []);
 
   const bounds = useMemo(() => {
     if (!allHexes || allHexes.length === 0) {
@@ -92,8 +137,11 @@ function MapContainer({
     );
   }
 
+  // AdvancedMarker requires a mapId; DEMO_MAP_ID works for demos when Vector maps are allowed.
+  const effectiveMapId = MAP_ID || 'DEMO_MAP_ID';
+
   return (
-    <div className="relative w-full h-full bg-black flex flex-col overflow-hidden">
+    <div className="relative w-full h-full min-h-[320px] bg-black flex flex-col overflow-hidden">
       <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2">
         <div className="flex bg-apple-card/85 backdrop-blur-md rounded-full p-1 border border-apple-border shadow-lg animate-fade-in">
           {(['h3', 'heatmap', 'sat'] as const).map((layer) => (
@@ -114,15 +162,28 @@ function MapContainer({
 
         <div className="bg-apple-card/85 backdrop-blur-md rounded-full px-3 py-1.5 border border-apple-border flex items-center gap-2 shadow-lg">
           <div
-            className={`w-1.5 h-1.5 rounded-full ${isRealKey ? 'bg-brand-green' : 'bg-brand-orange animate-pulse'}`}
+            className={`w-1.5 h-1.5 rounded-full ${isRealKey && showRealMap ? 'bg-brand-green' : 'bg-brand-orange animate-pulse'}`}
           />
           <span className="text-[10px] font-mono uppercase text-apple-secondary">
-            {isRealKey ? 'Google Maps Live' : 'High-Fidelity Simulation'}
+            {isRealKey && showRealMap ? 'Google Maps Live' : 'High-Fidelity Simulation'}
           </span>
+          {isRealKey && (
+            <button
+              type="button"
+              onClick={() => setShowRealMap((v) => !v)}
+              className="text-[10px] text-brand-blue underline hover:text-blue-300 ml-1"
+            >
+              {showRealMap ? 'Sim' : 'Live map'}
+            </button>
+          )}
           {!isRealKey && (
             <button
               type="button"
-              onClick={() => setShowRealMap(!showRealMap)}
+              onClick={() =>
+                setMapsError(
+                  'No VITE_GOOGLE_MAPS_API_KEY loaded. Check frontend/.env and restart Vite (root .env must be UTF-8 without BOM).',
+                )
+              }
               className="text-[10px] text-brand-blue underline hover:text-blue-300 ml-1 flex items-center gap-1"
             >
               <Key size={10} /> Details
@@ -131,36 +192,39 @@ function MapContainer({
         </div>
       </div>
 
+      {mapsError && (
+        <div className="absolute top-16 left-4 right-4 z-20 max-w-md rounded-2xl bg-brand-orange/15 border border-brand-orange/30 px-4 py-3 text-[11px] text-brand-orange flex gap-2">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <span>{mapsError}</span>
+        </div>
+      )}
+
       {showRealMap && isRealKey ? (
-        <APIProvider apiKey={API_KEY} version="weekly">
-          <div className="w-full h-full">
+        <APIProvider
+          apiKey={API_KEY}
+          version="weekly"
+          onLoad={() => setMapsError(null)}
+          onError={() => {
+            console.error('[MapContainer] Google Maps load error');
+            setMapsError(
+              'Google Maps failed to load. Enable Maps JavaScript API + billing, and allow this origin on the browser key.',
+            );
+          }}
+        >
+          <div className="w-full h-full min-h-[320px]">
             <Map
               defaultCenter={mapCenter}
               defaultZoom={12}
-              mapId="DEMO_MAP_ID"
               gestureHandling="cooperative"
-              internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+              disableDefaultUI
+              zoomControl
+              mapId={effectiveMapId}
               style={{ width: '100%', height: '100%' }}
-              {...({
-                options: {
-                  styles: darkMapStyles,
-                  disableDefaultUI: true,
-                  zoomControl: true,
-                },
-              } as any)}
+              colorScheme="DARK"
             >
+              {!MAP_ID && <MapStyleController enabled />}
               {allHexes.map((hex) => {
-                const pm = hex.pm25;
-                const color =
-                  viewMode === 'aqi'
-                    ? pm <= 50
-                      ? '#34C759'
-                      : pm <= 100
-                        ? '#FFCC00'
-                        : pm <= 250
-                          ? '#FF9F0A'
-                          : '#ff453a'
-                    : actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
+                const color = hexColor(hex, viewMode);
                 const label = formatLocationName(hex);
                 const isSelected = selectedHex?.id === hex.id;
                 return (
@@ -200,17 +264,7 @@ function MapContainer({
           >
             {allHexes.map((hex) => {
               const { x, y } = project(hex.lat, hex.lng);
-              const pm = hex.pm25;
-              const color =
-                viewMode === 'aqi'
-                  ? pm <= 50
-                    ? '#34C759'
-                    : pm <= 100
-                      ? '#FFCC00'
-                      : pm <= 250
-                        ? '#FF9F0A'
-                        : '#ff453a'
-                  : actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
+              const color = hexColor(hex, viewMode);
               const isSelected = selectedHex?.id === hex.id;
               const label = formatLocationName(hex);
               return (
@@ -255,11 +309,12 @@ function MapContainer({
             })}
           </svg>
 
-          <div className="absolute bottom-6 right-6 p-4 rounded-2xl bg-apple-card/80 border border-apple-border backdrop-blur-md text-right max-w-[180px]">
+          <div className="absolute bottom-6 right-6 p-4 rounded-2xl bg-apple-card/80 border border-apple-border backdrop-blur-md text-right max-w-[200px]">
             <span className="text-[9px] font-mono uppercase text-apple-secondary block tracking-wider">
-              Grid targets
+              {isRealKey ? 'Simulation mode' : 'No Maps API key'}
             </span>
             <span className="text-sm font-bold text-white font-mono">{allHexes.length}</span>
+            <span className="text-[9px] text-apple-secondary block mt-1">grid targets</span>
           </div>
         </div>
       )}
@@ -267,19 +322,4 @@ function MapContainer({
   );
 }
 
-function mapPropsEqual(prev: MapContainerProps, next: MapContainerProps): boolean {
-  if (prev.viewMode !== next.viewMode) return false;
-  if (prev.selectedHex?.id !== next.selectedHex?.id) return false;
-  if (prev.onSelectHex !== next.onSelectHex) return false;
-  if (prev.allHexes === next.allHexes) return true;
-  if (prev.allHexes.length !== next.allHexes.length) return false;
-  // Cheap id-sequence compare — avoids deep equality on every filter keystroke
-  for (let i = 0; i < prev.allHexes.length; i++) {
-    if (prev.allHexes[i].id !== next.allHexes[i].id) return false;
-    if (prev.allHexes[i].score10 !== next.allHexes[i].score10) return false;
-    if (prev.allHexes[i].actionTier !== next.allHexes[i].actionTier) return false;
-  }
-  return true;
-}
-
-export default memo(MapContainer, mapPropsEqual);
+export default memo(MapContainer);

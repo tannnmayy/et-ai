@@ -1,24 +1,25 @@
 """
 Sentinel-5P TROPOMI NO2 column density ingestion for AQI Sentinel.
 
-Fetches NO2 column density (mol/m²) from the Copernicus Sentinel-5P
-TROPOMI sensor via Google Earth Engine, caches to disk with
-stale-fallback, and reduces the raster to per-H3-cell mean values.
+Fetches tropospheric NO2 column density (mol/m²) from Copernicus Sentinel-5P
+via Google Earth Engine, caches to disk with stale-fallback, and maps values
+onto H3 resolution-9 cells for Bengaluru.
 
-Collection choice:
-  COPERNICUS/S5P/OFFL_L3_NO2  (offline-reprocessed)
-  vs. COPERNICUS/S5P/NRTI/L3_NO2  (near-real-time)
+Collection
+----------
+COPERNICUS/S5P/OFFL/L3_NO2  (offline-reprocessed; preferred over NRTI)
 
-  OFFL is preferred because it has undergone offline reprocessing with
-  better calibration, fewer artefacts, and more reliable quality
-  assurance. NRTI is noisier and primarily intended for same-day
-  applications. Since Bengaluru's NO2 column is used for contextual
-  fusion (not real-time alerts), the OFFL product's ~1-2 day latency
-  is acceptable and its higher reliability outweighs the freshness
-  advantage of NRTI.
+Why OFFL: better calibration / QA. ~1–2 day latency is fine for attribution
+context (not same-day alerts).
 
-Requires GEE_SERVICE_ACCOUNT_KEY_PATH environment variable pointing
-to a GEE service account JSON key file.
+Pixel scale
+-----------
+TROPOMI NO2 is ~3.5 × 5.5 km at nadir. Sampling H3 res-9 polygons (~174 m)
+with ``scale=1000`` yields almost no pixel centers inside each hex → empty
+results. We therefore sample the composite at **cell centroids** with
+``scale≈3500`` so every hex gets the overlying satellite pixel value.
+
+Requires GEE_SERVICE_ACCOUNT_KEY_PATH (and preferably GEE_PROJECT_ID).
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -37,29 +38,48 @@ import backend.app.config as _config
 
 logger = logging.getLogger(__name__)
 
-SENTINEL5P_CACHE_SCHEMA_VERSION = "1.0"
+SENTINEL5P_CACHE_SCHEMA_VERSION = "1.1"
 SENTINEL5P_COLLECTION = "COPERNICUS/S5P/OFFL/L3_NO2"
-CHUNK_SIZE = 750
+NO2_BAND = "tropospheric_NO2_column_number_density"
+# Native-ish TROPOMI ground sampling distance (metres)
+TROPOMI_SCALE_M = 3500
+# Offline product: look back far enough to guarantee coverage
+LOOKBACK_DAYS = 30
+# Chunk size for GEE sampleRegions (points are cheap; keep batches modest)
+CHUNK_SIZE = 1500
 
-# Lazy-evaluated env var with one-time warning
 _GEE_KEY_WARNED = False
 
 
 def _get_service_account_path() -> str | None:
+    """Return absolute path to GEE service-account JSON, or None."""
     global _GEE_KEY_WARNED
-    path = os.environ.get("GEE_SERVICE_ACCOUNT_KEY_PATH", "").strip()
+    path = (os.environ.get("GEE_SERVICE_ACCOUNT_KEY_PATH") or "").strip()
     if not path and not _GEE_KEY_WARNED:
         logger.warning(
-            "GEE_SERVICE_ACCOUNT_KEY_PATH environment variable not set. "
-            "Sentinel-5P NO2 data will be unavailable. "
-            "Set GEE_SERVICE_ACCOUNT_KEY_PATH in your .env file or environment."
+            "GEE_SERVICE_ACCOUNT_KEY_PATH not set. "
+            "Sentinel-5P NO2 data will be unavailable."
         )
         _GEE_KEY_WARNED = True
-    return path or None
+        return None
+
+    p = Path(path)
+    if not p.is_absolute():
+        p = _config.get_project_root() / p
+    resolved = str(p.resolve())
+    if not p.exists():
+        logger.warning("GEE service account file not found: %s", resolved)
+        # Still return the configured path so callers can surface a clear auth error
+        return path if Path(path).is_absolute() else resolved
+    return resolved
+
+
+def _get_gee_project() -> str | None:
+    return (os.environ.get("GEE_PROJECT_ID") or "").strip() or None
 
 
 # ---------------------------------------------------------------------------
-# Cache helpers (same pattern as firms_ingestion.py / weather_forecast_service.py)
+# Cache helpers
 # ---------------------------------------------------------------------------
 
 
@@ -99,9 +119,7 @@ def _write_cache(city: str, data: dict[str, Any]) -> None:
         logger.warning("Failed to write Sentinel-5P cache for %s: %s", city, e)
 
 
-def _build_cache_entry(
-    city: str, data: dict[str, Any]
-) -> dict[str, Any]:
+def _build_cache_entry(city: str, data: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": SENTINEL5P_CACHE_SCHEMA_VERSION,
         "retrieved_at": datetime.now(tz=timezone.utc).isoformat(),
@@ -119,6 +137,10 @@ def _cache_is_fresh(entry: dict[str, Any]) -> bool:
         retrieved = datetime.fromisoformat(retrieved_str)
     except (ValueError, TypeError):
         return False
+    # Never treat empty successful caches as fresh — force re-fetch
+    data = entry.get("data") or {}
+    if not data.get("hexagons"):
+        return False
     age = datetime.now(tz=timezone.utc) - retrieved
     return age.total_seconds() < _config.SENTINEL5P_CACHE_TTL_HOURS * 3600
 
@@ -130,6 +152,9 @@ def _cache_is_usable_stale(entry: dict[str, Any]) -> bool:
     try:
         retrieved = datetime.fromisoformat(retrieved_str)
     except (ValueError, TypeError):
+        return False
+    data = entry.get("data") or {}
+    if not data.get("hexagons"):
         return False
     age = datetime.now(tz=timezone.utc) - retrieved
     return age.total_seconds() < _config.SENTINEL5P_STALE_CACHE_MAX_HOURS * 3600
@@ -148,19 +173,16 @@ def _age_minutes(entry: dict[str, Any]) -> float:
 
 
 # ---------------------------------------------------------------------------
-# GEE data fetching (thin, separately-testable layer)
+# H3 grid over Bengaluru bbox
 # ---------------------------------------------------------------------------
 
 
-def _get_h3_cells_in_bbox(
-    bbox: dict[str, float], resolution: int
-) -> list[str]:
-    """Return all H3 cells at given resolution whose centroids lie within the bounding box."""
+def _get_h3_cells_in_bbox(bbox: dict[str, float], resolution: int) -> list[str]:
+    """All H3 cells at ``resolution`` whose centroids lie within the bbox."""
     from h3 import latlng_to_cell
 
     cells: set[str] = set()
-    # Sample grid within bounding box at ~1/4 of cell edge length steps
-    # res 9 edge ~174m, so step lat/lon by ~0.002 (~220m) for overlap
+    # res-9 edge ~174 m → step ~0.002° (~220 m) for full coverage
     lat_step = 0.002
     lon_step = 0.002
     lat = bbox["south"]
@@ -173,34 +195,52 @@ def _get_h3_cells_in_bbox(
     return sorted(cells)
 
 
+def _extract_no2_value(props: dict[str, Any]) -> float | None:
+    """Parse mean NO2 from reduceRegions / sampleRegions property bags."""
+    for key in (
+        NO2_BAND,
+        f"{NO2_BAND}_mean",
+        "mean",
+        "tropospheric_NO2_column_number_density_mean",
+    ):
+        val = props.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+# ---------------------------------------------------------------------------
+# GEE fetch
+# ---------------------------------------------------------------------------
+
+
 def _fetch_gee_no2(
     service_account_path: str,
     bbox: dict[str, float],
     h3_cells: list[str],
     collection: str = SENTINEL5P_COLLECTION,
 ) -> dict[str, float]:
-    """Query GEE for mean NO2 column density per H3 cell.
+    """Query GEE for mean NO2 column density per H3 cell (centroid sample).
 
-    This function is intentionally thin so it can be easily mocked in tests.
-    Returns dict mapping h3_cell -> mean_no2_value (mol/m²).
-
-    Only cells with valid data are included in the result.
-
-    Raises RuntimeError on failure.
+    Returns dict mapping h3_cell -> mean_no2 (mol/m²). Raises RuntimeError on failure.
     """
     try:
         import ee
-    except ImportError:
+    except ImportError as e:
         raise RuntimeError(
-            "earthengine-api package is not installed. "
-            "Run: pip install earthengine-api"
-        )
+            "earthengine-api package is not installed. Run: pip install earthengine-api"
+        ) from e
 
     try:
-        credentials = ee.ServiceAccountCredentials(
-            None, service_account_path
-        )
-        ee.Initialize(credentials)
+        credentials = ee.ServiceAccountCredentials(None, service_account_path)
+        project = _get_gee_project()
+        if project:
+            ee.Initialize(credentials, project=project)
+        else:
+            ee.Initialize(credentials)
     except Exception as e:
         raise RuntimeError(f"GEE authentication failed: {e}") from e
 
@@ -208,9 +248,8 @@ def _fetch_gee_no2(
         region = ee.Geometry.Rectangle(
             [bbox["west"], bbox["south"], bbox["east"], bbox["north"]]
         )
-        # Filter to recent imagery (last 14 days for OFFL)
         end = datetime.now(tz=timezone.utc)
-        start = end - __import__("datetime").timedelta(days=14)
+        start = end - timedelta(days=LOOKBACK_DAYS)
         start_str = start.strftime("%Y-%m-%d")
         end_str = end.strftime("%Y-%m-%d")
 
@@ -218,48 +257,78 @@ def _fetch_gee_no2(
             ee.ImageCollection(collection)
             .filterBounds(region)
             .filterDate(start_str, end_str)
-            .select("tropospheric_NO2_column_number_density")
+            .select(NO2_BAND)
         )
 
-        if image_collection.size().getInfo() == 0:
-            logger.warning("No Sentinel-5P images found for the period %s to %s", start_str, end_str)
+        n_images = int(image_collection.size().getInfo() or 0)
+        if n_images == 0:
+            logger.warning(
+                "No Sentinel-5P images for %s → %s over Bengaluru", start_str, end_str
+            )
             return {}
 
-        # Composite: mean of available images
+        logger.info(
+            "Sentinel-5P: %d OFFL scenes %s→%s; sampling %d H3 cells",
+            n_images,
+            start_str,
+            end_str,
+            len(h3_cells),
+        )
+
+        # Mean composite of available offline scenes
         composite = image_collection.mean()
 
-        result: dict[str, float] = {}
-        band_name = "tropospheric_NO2_column_number_density"
+        # Sanity: region-level mean must be non-null
+        region_stats = composite.reduceRegion(
+            reducer=ee.Reducer.mean(),
+            geometry=region,
+            scale=TROPOMI_SCALE_M,
+            maxPixels=1e9,
+            bestEffort=True,
+        ).getInfo()
+        region_mean = _extract_no2_value(region_stats or {})
+        if region_mean is None:
+            logger.warning(
+                "Sentinel-5P region composite has no valid NO2 pixels "
+                "(stats=%s). Check QA / date window.",
+                region_stats,
+            )
+            return {}
 
-        for start in range(0, len(h3_cells), CHUNK_SIZE):
-            chunk = h3_cells[start:start + CHUNK_SIZE]
+        result: dict[str, float] = {}
+
+        for i in range(0, len(h3_cells), CHUNK_SIZE):
+            chunk = h3_cells[i : i + CHUNK_SIZE]
             features = []
             for cell in chunk:
-                boundary = h3.cell_to_boundary(cell)
-                coords = [[lon, lat] for lat, lon in boundary]
-                polygon = ee.Geometry.Polygon([coords])
-                features.append(ee.Feature(polygon, {"h3_cell": cell}))
+                lat, lon = h3.cell_to_latlng(cell)
+                point = ee.Geometry.Point([lon, lat])
+                features.append(ee.Feature(point, {"h3_cell": cell}))
 
             feature_collection = ee.FeatureCollection(features)
 
-            reduced = composite.reduceRegions(
+            # Centroid sampling at TROPOMI scale — polygons at res-9 under-sample
+            sampled = composite.sampleRegions(
                 collection=feature_collection,
-                reducer=ee.Reducer.mean(),
-                scale=1000,
+                scale=TROPOMI_SCALE_M,
+                geometries=False,
             )
+            sampled_info = sampled.getInfo() or {}
+            features_out = sampled_info.get("features") or []
 
-            reduced_info = reduced.getInfo()
-
-            if reduced_info["features"]:
-                print(reduced_info["features"][0]["properties"])
-
-            for feature in reduced_info["features"]:
-                props = feature["properties"]
+            for feature in features_out:
+                props = feature.get("properties") or {}
                 cell = props.get("h3_cell")
-                mean_val = props.get(band_name)
+                mean_val = _extract_no2_value(props)
                 if cell is not None and mean_val is not None:
-                    result[cell] = float(mean_val)
+                    result[str(cell)] = mean_val
 
+        logger.info(
+            "Sentinel-5P: filled %d / %d H3 cells (region mean=%.3e mol/m²)",
+            len(result),
+            len(h3_cells),
+            region_mean,
+        )
         return result
     except Exception as e:
         raise RuntimeError(f"GEE query failed: {e}") from e
@@ -276,23 +345,13 @@ def get_no2_column_density(
 ) -> dict[str, Any]:
     """Get Sentinel-5P NO2 column density aggregated per H3 cell.
 
-    Follows the same cache/stale-fallback pattern as FIRMS and weather services.
-
-    Parameters
-    ----------
-    city : str       City key (default 'bengaluru').
-    refresh : bool   Force a live fetch even if cache is fresh.
-
-    Returns
-    -------
-    dict with keys: hexagons, city, collection, source_status, freshness,
-    age_minutes, warnings, retrieved_at.
+    Same cache / stale-fallback pattern as FIRMS and weather services.
     """
     service_account_path = _get_service_account_path()
     if not service_account_path:
         return _unavailable_response(
             city,
-            "GEE_SERVICE_ACCOUNT_KEY_PATH not configured. "
+            "GEE_SERVICE_ACCOUNT_KEY_PATH not configured or file missing. "
             "Sentinel-5P NO2 data unavailable.",
         )
 
@@ -302,18 +361,36 @@ def get_no2_column_density(
     if not refresh:
         entry = _read_cache(city_key)
         if entry and _cache_is_fresh(entry):
-            data = entry["data"]
+            data = dict(entry["data"])
             data["source_status"] = "live_provider"
             data["cache_used"] = True
             data["freshness"] = "fresh"
             data["age_minutes"] = _age_minutes(entry)
-            return dict(data)
+            return data
 
     try:
         h3_cells = _get_h3_cells_in_bbox(_config.BENGALURU_BOUNDING_BOX, resolution)
         no2_data = _fetch_gee_no2(
             service_account_path, _config.BENGALURU_BOUNDING_BOX, h3_cells
         )
+        if not no2_data:
+            # Do not cache empty as fresh success
+            entry = _read_cache(city_key)
+            if entry and _cache_is_usable_stale(entry) and (entry.get("data") or {}).get("hexagons"):
+                data = dict(entry["data"])
+                data["source_status"] = "stale_cache_fallback"
+                data["cache_used"] = True
+                data["freshness"] = "stale"
+                data["age_minutes"] = _age_minutes(entry)
+                data.setdefault("warnings", []).append(
+                    "Live Sentinel-5P fetch returned no hex values; using stale cache."
+                )
+                return data
+            return _unavailable_response(
+                city,
+                "Live Sentinel-5P fetch returned no valid NO2 pixels for Bengaluru.",
+            )
+
         hexagons = [
             {
                 "h3_cell": cell,
@@ -331,6 +408,9 @@ def get_no2_column_density(
             "age_minutes": 0.0,
             "warnings": [],
             "retrieved_at": datetime.now(tz=timezone.utc).isoformat(),
+            "hexagon_count": len(hexagons),
+            "lookback_days": LOOKBACK_DAYS,
+            "sample_scale_m": TROPOMI_SCALE_M,
         }
         cache_entry = _build_cache_entry(city_key, result)
         _write_cache(city_key, cache_entry)
@@ -339,7 +419,7 @@ def get_no2_column_density(
         logger.warning("Sentinel-5P provider unavailable: %s", e)
         entry = _read_cache(city_key)
         if entry and _cache_is_usable_stale(entry):
-            data = entry["data"]
+            data = dict(entry["data"])
             data["source_status"] = "stale_cache_fallback"
             data["cache_used"] = True
             data["freshness"] = "stale"
@@ -349,10 +429,8 @@ def get_no2_column_density(
                 f"Showing cached data from {_age_minutes(entry):.0f} minutes ago."
             )
             data.setdefault("warnings", []).append(warning)
-            return dict(data)
-        return _unavailable_response(
-            city, f"NO2 column density data unavailable: {e}"
-        )
+            return data
+        return _unavailable_response(city, f"NO2 column density data unavailable: {e}")
 
 
 def _unavailable_response(city: str, reason: str) -> dict[str, Any]:
@@ -367,3 +445,34 @@ def _unavailable_response(city: str, reason: str) -> dict[str, Any]:
         "retrieved_at": "",
         "warnings": [reason],
     }
+
+
+def main() -> None:
+    """CLI: python -m pipeline.sentinel5p_ingestion [--refresh]"""
+    import argparse
+    import sys
+
+    from dotenv import load_dotenv
+
+    load_dotenv(_config.get_project_root() / ".env")
+    parser = argparse.ArgumentParser(description="Fetch Sentinel-5P NO2 for Bengaluru")
+    parser.add_argument("--refresh", action="store_true", help="Force live GEE fetch")
+    parser.add_argument("--city", default="bengaluru")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    result = get_no2_column_density(city=args.city, refresh=args.refresh)
+    n = len(result.get("hexagons") or [])
+    print(
+        f"status={result.get('source_status')} hexagons={n} "
+        f"freshness={result.get('freshness')} warnings={result.get('warnings')}"
+    )
+    if n:
+        vals = [h["no2_column_density_mean"] for h in result["hexagons"]]
+        print(f"NO2 mol/m² min={min(vals):.3e} max={max(vals):.3e} mean={sum(vals)/len(vals):.3e}")
+        sys.exit(0)
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

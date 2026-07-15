@@ -77,10 +77,14 @@ def hex_fire_detections(city: str = "bengaluru") -> FireDetectionResponse:
     summary="Per-hexagon NO2 column density from Sentinel-5P TROPOMI",
     description="Returns mean tropospheric NO2 column density (mol/m²) per H3 "
     "resolution-9 cell from the Copernicus Sentinel-5P TROPOMI sensor "
-    "(COPERNICUS/S5P/OFFL_L3_NO2). Data source: Google Earth Engine. "
-    "Credentials: GEE_SERVICE_ACCOUNT_KEY_PATH environment variable.",
+    "(COPERNICUS/S5P/OFFL/L3_NO2). Data source: Google Earth Engine. "
+    "Credentials: GEE_SERVICE_ACCOUNT_KEY_PATH (+ optional GEE_PROJECT_ID). "
+    "Pass refresh=true to force a live GEE re-fetch.",
 )
-def hex_no2_column_density(city: str = "bengaluru") -> NO2ColumnResponse:
+def hex_no2_column_density(
+    city: str = "bengaluru",
+    refresh: bool = Query(default=False, description="Force live GEE re-fetch"),
+) -> NO2ColumnResponse:
     """Get Sentinel-5P NO2 column density per H3 hexagon.
 
     Design note: Fire and NO2 are kept as separate endpoint responses
@@ -90,7 +94,7 @@ def hex_no2_column_density(city: str = "bengaluru") -> NO2ColumnResponse:
     """
     from pipeline.sentinel5p_ingestion import get_no2_column_density
 
-    return get_no2_column_density(city=city)
+    return get_no2_column_density(city=city, refresh=refresh)
 
 
 @router.get(

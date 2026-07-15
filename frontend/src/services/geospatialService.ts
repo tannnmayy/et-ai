@@ -153,6 +153,11 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
     lng,
     trafficCorridorScore: hex.traffic_corridor_score ?? undefined,
     isMajorRoadCorridor: hex.is_major_road_corridor ?? undefined,
+    isTrafficCorridor: Boolean(
+      hex.is_traffic_corridor ??
+        hex.is_major_road_corridor ??
+        ((hex.traffic_corridor_score ?? 0) > 0.4),
+    ),
     trafficTimeMultiplier: hex.traffic_time_multiplier ?? undefined,
     isPeakHour: hex.is_peak_hour ?? undefined,
     trafficHourLocal: hex.traffic_hour_local ?? null,
@@ -230,82 +235,94 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
   };
 }
 
+export async function fetchStations() {
+  const { data } = await apiClient.get('/stations?city=bengaluru');
+  if (data && data.stations && data.stations.length > 0) {
+    return data.stations.map(mapRealStation);
+  }
+  throw new Error('No stations returned from API');
+}
+
 export function useStations() {
   return useQuery<{ id: string; name: string; lat: number; lng: number; aqi: number; status: 'Good' | 'Moderate' | 'Poor' | 'Severe' }[]>({
     queryKey: ['stations'],
-    queryFn: async () => {
-      const { data } = await apiClient.get('/stations?city=bengaluru');
-      if (data && data.stations && data.stations.length > 0) {
-        return data.stations.map(mapRealStation);
-      }
-      throw new Error('No stations returned from API');
-    },
+    queryFn: fetchStations,
     refetchInterval: 10000,
+    staleTime: 30_000,
   });
 }
 
 /**
  * Enforcement priority list.
  *
- * Performance notes:
- * - Fetches a fixed max window (100) so Top-N dropdown can slice client-side
- *   without another network round-trip.
- * - `simulatedHour` is part of the queryKey so React Query caches each
- *   simulation independently (switch back to a prior hour = instant).
- * - staleTime / gcTime keep results warm during demos.
- * - placeholderData keeps the previous list visible while a new hour loads.
+ * Default fetch is top 15 for fast first paint. Larger Top-N values trigger a
+ * new request (cached by React Query). Landing page prefetches the default.
  */
-export const ENFORCEMENT_FETCH_TOP_K = 100;
+export const ENFORCEMENT_DEFAULT_TOP_K = 15;
+/** @deprecated use ENFORCEMENT_DEFAULT_TOP_K — kept for older imports */
+export const ENFORCEMENT_FETCH_TOP_K = ENFORCEMENT_DEFAULT_TOP_K;
+export const ENFORCEMENT_MAX_TOP_K = 100;
 
-export function usePriorities(
-  _topK: number = 20,
+export function enforcementPrioritiesQueryKey(
+  topK: number = ENFORCEMENT_DEFAULT_TOP_K,
   simulatedHour: number | null = null,
 ) {
-  // `_topK` kept for call-site compatibility (MapPage). Enforcement always
-  // fetches ENFORCEMENT_FETCH_TOP_K and slices client-side for Top-N UI.
+  return ['enforcement-priorities', 'bengaluru', simulatedHour, topK] as const;
+}
+
+export async function fetchEnforcementPriorities(
+  topK: number = ENFORCEMENT_DEFAULT_TOP_K,
+  simulatedHour: number | null = null,
+): Promise<PriorityHex[]> {
+  const k = Math.min(ENFORCEMENT_MAX_TOP_K, Math.max(1, topK));
+  const params = new URLSearchParams({ top_k: String(k) });
+  if (simulatedHour != null) {
+    params.set('simulated_hour', String(simulatedHour));
+  }
+  const { data } = await apiClient.get(
+    `/enforcement/priority/bengaluru?${params.toString()}`,
+  );
+  if (data && data.ranked_hexagons && data.ranked_hexagons.length > 0) {
+    return data.ranked_hexagons
+      .map((hex: any, idx: number) => {
+        const mapped = mapRealHex(
+          {
+            ...hex,
+            traffic_time_multiplier:
+              hex.traffic_time_multiplier ?? data.traffic_time_multiplier,
+            is_peak_hour: hex.is_peak_hour ?? data.is_peak_hour,
+            traffic_hour_local: hex.traffic_hour_local ?? data.traffic_hour_local,
+            traffic_corridor_applied:
+              hex.traffic_corridor_applied ?? data.traffic_corridor_applied,
+          },
+          idx,
+        );
+        return mapped;
+      })
+      .filter((h: PriorityHex | null): h is PriorityHex => h !== null);
+  }
+  throw new Error('No ranked hexagons returned from API');
+}
+
+export function usePriorities(
+  topK: number = ENFORCEMENT_DEFAULT_TOP_K,
+  simulatedHour: number | null = null,
+) {
   return useQuery<PriorityHex[]>({
-    queryKey: ['enforcement-priorities', 'bengaluru', simulatedHour, ENFORCEMENT_FETCH_TOP_K],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        top_k: String(ENFORCEMENT_FETCH_TOP_K),
-      });
-      if (simulatedHour != null) {
-        params.set('simulated_hour', String(simulatedHour));
-      }
-      const { data } = await apiClient.get(
-        `/enforcement/priority/bengaluru?${params.toString()}`,
-      );
-      if (data && data.ranked_hexagons && data.ranked_hexagons.length > 0) {
-        return data.ranked_hexagons
-          .map((hex: any, idx: number) => {
-            const mapped = mapRealHex(
-              {
-                ...hex,
-                traffic_time_multiplier:
-                  hex.traffic_time_multiplier ?? data.traffic_time_multiplier,
-                is_peak_hour: hex.is_peak_hour ?? data.is_peak_hour,
-                traffic_hour_local: hex.traffic_hour_local ?? data.traffic_hour_local,
-                traffic_corridor_applied:
-                  hex.traffic_corridor_applied ?? data.traffic_corridor_applied,
-              },
-              idx,
-            );
-            return mapped;
-          })
-          .filter((h: PriorityHex | null): h is PriorityHex => h !== null);
-      }
-      throw new Error('No ranked hexagons returned from API');
-    },
+    queryKey: enforcementPrioritiesQueryKey(topK, simulatedHour),
+    queryFn: () => fetchEnforcementPriorities(topK, simulatedHour),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
-    // Keep previous hour's list on screen while the next simulation loads
     placeholderData: (previousData) => previousData,
   });
 }
 
-/** Alias with clearer name for Enforcement page. */
-export function useEnforcementPriorities(simulatedHour: number | null = null) {
-  return usePriorities(ENFORCEMENT_FETCH_TOP_K, simulatedHour);
+/** Enforcement page — topK is request size (default 15). */
+export function useEnforcementPriorities(
+  simulatedHour: number | null = null,
+  topK: number = ENFORCEMENT_DEFAULT_TOP_K,
+) {
+  return usePriorities(topK, simulatedHour);
 }
 
 export function useAttributionGrid() {
@@ -328,46 +345,54 @@ export function useAttributionGrid() {
   });
 }
 
+export async function fetchCityExtremes() {
+  const { data } = await apiClient.get('/attribution/city/bengaluru/extremes?n=15');
+  if (!data || !data.best || !data.worst) {
+    throw new Error('No extremes data returned from API');
+  }
+  const mapExtreme = (h: any): PriorityHex => {
+    const pm = Math.round(h.fused_pm25 || 0);
+    const score10 = Math.min(10, Math.round(pm / 20));
+    return {
+      id: h.h3_cell,
+      name: h.name || _resolveName(h.h3_cell, h.center_lat, h.center_lon),
+      score10,
+      priorityScore: score10 / 10,
+      rank: 0,
+      changeVal: 0,
+      exposure: 'Medium',
+      magnitude: 0,
+      confidence: 0,
+      actionability: 'MONITOR',
+      actionTier: 'MONITOR',
+      pm25: pm,
+      primarySource: '',
+      primarySourceKey: 'traffic',
+      sourceType: 'Heavy Ind.',
+      sourceAttribution: {
+        traffic: h.source_attribution?.traffic ?? 0,
+        industrial: h.source_attribution?.industrial ?? 0,
+        construction: h.source_attribution?.construction ?? 0,
+        burning: h.source_attribution?.burning ?? 0,
+      },
+      lat: h.center_lat,
+      lng: h.center_lon,
+    };
+  };
+  const best = data.best.map(mapExtreme);
+  const worst = data.worst.map(mapExtreme);
+  return {
+    best,
+    worst,
+    totalWithData: data.total_hexagons_with_data,
+    totalInGrid: data.total_hexagons_in_grid,
+  };
+}
+
 export function useCityExtremes() {
   return useQuery<{ best: PriorityHex[]; worst: PriorityHex[]; totalWithData: number; totalInGrid: number }>({
     queryKey: ['city-extremes'],
-    queryFn: async () => {
-      const { data } = await apiClient.get('/attribution/city/bengaluru/extremes?n=15');
-      if (!data || !data.best || !data.worst) {
-        throw new Error('No extremes data returned from API');
-      }
-      const mapExtreme = (h: any): PriorityHex => {
-        const pm = Math.round(h.fused_pm25 || 0);
-        const score10 = Math.min(10, Math.round(pm / 20));
-        return {
-          id: h.h3_cell,
-          name: h.name || _resolveName(h.h3_cell, h.center_lat, h.center_lon),
-          score10,
-          priorityScore: score10 / 10,
-          rank: 0,
-          changeVal: 0,
-          exposure: 'Medium',
-          magnitude: 0,
-          confidence: 0,
-          actionability: 'MONITOR',
-          actionTier: 'MONITOR',
-          pm25: pm,
-          primarySource: '',
-          primarySourceKey: 'traffic',
-          sourceType: 'Heavy Ind.',
-          sourceAttribution: {
-            traffic: h.source_attribution?.traffic ?? 0,
-            industrial: h.source_attribution?.industrial ?? 0,
-            construction: h.source_attribution?.construction ?? 0,
-            burning: h.source_attribution?.burning ?? 0,
-          },
-          lat: h.center_lat,
-          lng: h.center_lon,
-        };
-      };
-      const allHexes = [...data.best.map(mapExtreme), ...data.worst.map(mapExtreme)];
-      return { best: allHexes.slice(0, 15), worst: allHexes.slice(15), totalWithData: data.total_hexagons_with_data, totalInGrid: data.total_hexagons_in_grid };
-    },
+    queryFn: fetchCityExtremes,
     staleTime: 60_000,
   });
 }

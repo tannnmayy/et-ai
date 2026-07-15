@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCityExtremes, usePriorities, useStations } from '../api/client';
 import { PriorityHex } from '../types';
 import MapContainer from '../components/MapContainer';
 import SourceIcon from '../components/SourceIcon';
-import { Shield, AlertTriangle, Compass, Wind, ArrowRight, ChevronDown, CheckCircle, MapPin, Layers } from 'lucide-react';
+import { Shield, AlertTriangle, ArrowRight, MapPin, ChevronDown, BarChart3 } from 'lucide-react';
 
 type ExtremeView = 'best' | 'worst' | 'all';
 
 export default function MapPage() {
+  const navigate = useNavigate();
   const { data: extremes, isError: extremesError, isLoading: extremesLoading } = useCityExtremes();
   const { data: priorities = [] } = usePriorities();
   const { isError: stationsError, isLoading: stationsLoading } = useStations();
@@ -49,17 +51,24 @@ export default function MapPage() {
 
   const activeHex = selectedHex || allHexes[0] || null;
 
-  const handleDispatch = (hexId: string) => {
-    setDispatchedUnits(prev => ({ ...prev, [hexId]: true }));
-    setTimeout(() => {
-      alert(`Enforcement Unit Dispatched to Hexagon ${hexId}. Unit ID: EN-449`);
-    }, 200);
+  const handleDispatch = (hex: PriorityHex) => {
+    setDispatchedUnits((prev) => ({ ...prev, [hex.id]: true }));
+    const qs = new URLSearchParams({
+      target: hex.name || hex.id,
+      hex: hex.id,
+      source: String(hex.sourceType || 'mixed'),
+      score: String(hex.priorityScore ?? hex.pm25 ?? '—'),
+      action: hex.explanation?.text || 'Inspect site for dust control compliance and document evidence.',
+    });
+    navigate(`/dispatch?${qs.toString()}`);
   };
 
+  const topFive = (priorities || []).slice(0, 5);
+
   return (
-    <div className="w-full h-full flex flex-col bg-black">
+    <div className="w-full h-full flex flex-col bg-black overflow-y-auto">
       {/* Upper Section: Map Area + Float Overlay */}
-      <div className="flex-1 relative min-h-[450px]">
+      <div className="flex-1 relative min-h-[520px] shrink-0">
         <MapContainer
           selectedHex={activeHex}
           onSelectHex={(hex) => setSelectedHex(hex)}
@@ -292,50 +301,67 @@ export default function MapPage() {
             </div>
 
             {/* Action dispatch button */}
-            <div className="p-5 border-t border-apple-border bg-apple-card/20">
+            <div className="p-5 border-t border-apple-border bg-apple-card/20 space-y-2">
               <button
                 type="button"
-                onClick={() => handleDispatch(activeHex.id)}
-                disabled={dispatchedUnits[activeHex.id]}
-                className={`w-full py-3 rounded-full text-xs font-bold uppercase tracking-wider transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg ${
-                  dispatchedUnits[activeHex.id]
-                    ? 'bg-brand-green/20 text-brand-green border border-brand-green/30 cursor-not-allowed'
-                    : 'bg-brand-blue hover:bg-blue-600 text-white shadow-brand-blue/15'
-                }`}
+                onClick={() => handleDispatch(activeHex)}
+                className="w-full min-h-[44px] py-3 rounded-full text-xs font-bold uppercase tracking-wider transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg bg-brand-blue hover:bg-blue-600 text-white shadow-brand-blue/15"
               >
                 <Shield size={14} />
-                {dispatchedUnits[activeHex.id] ? 'Dispatch Complete' : 'Dispatch Inspection Unit'}
+                {dispatchedUnits[activeHex.id] ? 'Open Dispatch Sheet' : 'Dispatch Inspection Unit'}
               </button>
             </div>
           </div>
         )}
+
+        {/* Scroll hint */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 pointer-events-none">
+          <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-white/70 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+            Scroll for hotspots
+          </span>
+          <ChevronDown size={16} className="text-white/60 animate-bounce" />
+        </div>
       </div>
 
-      {/* Lower Section: Bottom Bento Grid Queue */}
-      <section className="bg-black border-t border-apple-border p-6 sm:p-8">
-        <div className="flex justify-between items-end mb-6">
+      {/* Lower Section: Top 5 Actionable Hotspots + Insights CTA */}
+      <section className="bg-black border-t border-white/10 p-6 sm:p-8 pb-12">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mb-6">
           <div>
             <h2 className="text-md sm:text-lg font-bold text-white tracking-tight">
-              Top Enforcement Priorities
+              Top 5 Actionable Hotspots
             </h2>
             <p className="text-xs text-apple-secondary font-sans mt-0.5">
               AI-ranked targets based on current emissions and wind dispersal.
             </p>
           </div>
-          <button className="text-xs font-semibold text-brand-blue hover:underline flex items-center gap-1 uppercase tracking-wider">
-            View All Queue <ArrowRight size={12} />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/enforcement')}
+              className="min-h-[44px] text-xs font-semibold text-brand-blue hover:underline flex items-center gap-1 uppercase tracking-wider px-2"
+            >
+              View All Queue <ArrowRight size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/insights')}
+              className="min-h-[44px] inline-flex items-center gap-2 px-5 rounded-full bg-brand-blue text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 transition-colors"
+            >
+              <BarChart3 size={14} />
+              View City Insights
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
-          {priorities.map((p, idx) => {
+          {topFive.map((p, idx) => {
             const isDispatched = dispatchedUnits[p.id];
             return (
               <div
                 key={p.id}
                 onClick={() => setSelectedHex(p)}
-                className={`relative bg-apple-card border rounded-2xl p-5 flex flex-col justify-between overflow-hidden transition-all duration-300 cursor-pointer hover:bg-apple-modal/50 ${
-                  activeHex?.id === p.id ? 'border-brand-blue/50 ring-1 ring-brand-blue/30 scale-[1.02]' : 'border-apple-border'
+                className={`relative glass-panel glass-card-hover border rounded-3xl p-5 flex flex-col justify-between overflow-hidden transition-all duration-300 cursor-pointer ${
+                  activeHex?.id === p.id ? 'border-brand-blue/50 ring-1 ring-brand-blue/30 scale-[1.02]' : 'border-white/10'
                 }`}
               >
                 {/* Visual indicator bar at top based on severity */}
