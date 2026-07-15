@@ -59,15 +59,16 @@ def tool_search_policy_guidance(
     source_types: list[str] | None = None,
     top_k: int = 3,
 ) -> dict[str, Any]:
-    """Search policy KB — prefers Chroma RAG, falls back to TF-IDF index."""
+    """Search policy KB — FAISS dense RAG first, then legacy TF-IDF."""
     try:
-        from backend.app.services.knowledge_rag_service import retrieve_knowledge
+        from backend.app.services.rag_service import retrieve_relevant_context
 
-        rag = retrieve_knowledge(query, top_k=top_k)
+        rag = retrieve_relevant_context(query, top_k=top_k)
         if rag.get("used") and rag.get("chunks"):
             return {
                 "query": query,
                 "retrieval_backend": rag.get("backend"),
+                "embedding_model": rag.get("model"),
                 "results": [
                     {
                         "title": c.get("title"),

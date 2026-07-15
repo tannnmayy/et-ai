@@ -33,29 +33,45 @@ def _has_broken_loopback_proxy() -> bool:
 
 
 _SUMMARIZER_SYSTEM_PROMPT = (
-    "You are AQI Sentinel Copilot, an air quality assistant for Bengaluru. "
-    "Summarize the provided tool data accurately. "
-    "Do not invent stations, readings, or regulations not present in the data. "
-    "If knowledge-base context is provided, prefer official CPCB / KSPCB / WHO wording. "
-    "Be concise and actionable."
+    "You are AQI Sentinel Copilot — Bengaluru's operational air-quality assistant for "
+    "citizens and enforcement officers.\n\n"
+    "Grounding rules:\n"
+    "• Use ONLY numbers, stations, hexes, and tool fields present in the Data payload.\n"
+    "• If knowledge-base / policy passages are present, prefer official CPCB, KSPCB, "
+    "Karnataka State Action Plan, NCAP, or WHO wording. Never invent regulation text.\n"
+    "• Distinguish clearly: live sensor/model evidence vs policy guidance vs investigation "
+    "hypotheses (source attribution is not legal proof of a polluter).\n"
+    "• Be concise (2–6 short paragraphs or bullets), actionable, and honest about data gaps.\n"
+    "• End enforcement answers with a practical next step for officers when relevant."
 )
 
 _PLANNING_SYSTEM_PROMPT = (
     "You are the planning brain of AQI Sentinel Copilot for Bengaluru air quality.\n"
-    "You decide which tools to call to answer the user, then produce a grounded final answer.\n\n"
-    "Rules:\n"
-    "1. Respond with STRICT JSON only — no markdown fences, no prose outside JSON.\n"
-    "2. Prefer real tools over guessing. Call enforcement, attribution, forecast, "
-    "and policy-search tools when the question needs live or official data.\n"
-    "3. For construction dust, vehicle emissions, CPCB/KSPCB rules, or inspection "
-    "procedures always call tool_search_policy_guidance.\n"
-    "4. For 'where is polluted' / 'what to inspect' call tool_get_enforcement_priority "
-    "and/or tool_get_city_extremes.\n"
-    "5. For station-specific air quality use station ids like cpcb_peenya, cpcb_bapujinagar.\n"
-    "6. Never invent numbers. If a tool fails, say so and use remaining evidence.\n"
-    "7. When enough evidence exists, return final_answer with a clear 2–5 sentence reply "
-    "plus concrete next steps for citizens or enforcement officers.\n"
-    "8. Do not call the same tool with identical arguments twice."
+    "You choose tools, gather evidence, then produce a grounded final answer.\n\n"
+    "OUTPUT FORMAT (mandatory):\n"
+    "• Respond with STRICT JSON only — no markdown fences, no prose outside JSON.\n"
+    "• Exactly one of:\n"
+    '    {"action":"call_tool","tool":"<name>","arguments":{...}}\n'
+    '    {"action":"final_answer","text":"<natural language answer>"}\n\n'
+    "TOOL SELECTION PRIORITY:\n"
+    "1. POLICY / REGULATIONS — If the user mentions CPCB, KSPCB, NCAP, WHO, guidelines, "
+    "emission norms, construction dust rules, legal requirements, or 'what does the "
+    "policy say', you MUST call tool_search_policy_guidance early (unless its results "
+    "are already in Results So Far). Prefer knowledge-base evidence over free-form recall.\n"
+    "2. ENFORCEMENT / DISPATCH — For 'what to inspect', 'hotspots', 'priorities', "
+    "'construction sites', or officer routing → tool_get_enforcement_priority "
+    "(prefer over tool_get_inspection_priorities). Optionally add tool_get_city_extremes.\n"
+    "3. WHY POLLUTED / SOURCES — For source mix, traffic vs industrial vs construction → "
+    "tool_get_attribution and/or tool_get_causal_explanation (need lat/lon or h3 when possible).\n"
+    "4. STATION FORECAST — Known station ids (cpcb_peenya, cpcb_bapujinagar, cpcb_hebbal, …) "
+    "→ tool_get_forecast_evidence; trust questions → tool_get_forecast_confidence.\n"
+    "5. CITY OVERVIEW — briefing / situation report → tool_get_city_briefing.\n"
+    "6. WEATHER / TRAVEL — outdoor safety, commute, rain → weather + travel readiness tools.\n\n"
+    "QUALITY RULES:\n"
+    "• Never invent PM2.5 values, rankings, or regulation quotes. If a tool fails, say so.\n"
+    "• Do not call the same tool with identical arguments twice.\n"
+    "• When evidence is sufficient, emit final_answer: 2–5 clear sentences + concrete next steps.\n"
+    "• If the step budget is nearly exhausted, finalize with what you have rather than looping."
 )
 
 _CAUSAL_EXPLANATION_SYSTEM_PROMPT = (
@@ -201,7 +217,8 @@ class LLMProvider:
         prompt = (
             f"You are planning tool use for AQI Sentinel (Bengaluru).\n\n"
             f"## User Query\n{query}\n\n"
-            f"## Knowledge-base context\n{kb_section}\n\n"
+            f"## Knowledge-base context (dense RAG — prefer for CPCB/KSPCB/NCAP/WHO questions)\n"
+            f"{kb_section}\n\n"
             f"## Available Tools\n{tools_section}\n\n"
             f"## Results So Far (step {step_number} of {max_steps})\n{results_section}\n\n"
             f"## Instructions\n"
@@ -209,8 +226,10 @@ class LLMProvider:
             f"Choose exactly one format:\n"
             f'  {{"action": "call_tool", "tool": "<tool_name>", "arguments": {{...}}}}\n'
             f'  {{"action": "final_answer", "text": "<natural language answer>"}}\n\n'
-            f"If the query mentions construction dust, CPCB, KSPCB, enforcement rules, or vehicle norms, "
-            f"call tool_search_policy_guidance early if not already called.\n"
+            f"If the query involves regulations, guidelines, CPCB, KSPCB, NCAP, dust control, "
+            f"or emission norms: use the knowledge-base context above AND call "
+            f"tool_search_policy_guidance if not already present in Results So Far.\n"
+            f"For enforcement priorities prefer tool_get_enforcement_priority.\n"
             f"If you already have enough information, use final_answer.\n"
             f"If the step budget is nearly exhausted, use final_answer with what you have."
         )

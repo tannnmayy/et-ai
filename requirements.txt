@@ -25,7 +25,6 @@ earthengine-api==1.5.6
 openai==2.30.0
 langgraph==0.2.74
 
-# Copilot RAG — primary path uses sklearn (already required above).
-# Optional ChromaDB (enable with AQI_SENTINEL_USE_CHROMA=1; may be unstable on some Windows stacks)
-# chromadb>=0.5.0
-# onnxruntime>=1.16.0
+# Copilot dense RAG (sentence-transformers + FAISS); falls back to sklearn/TF-IDF
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4

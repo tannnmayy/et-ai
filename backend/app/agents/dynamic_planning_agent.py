@@ -161,12 +161,12 @@ def run_dynamic_planning_agent(state: AgentState, audit: AuditTrail) -> None:
     query = state.user_query
     llm = get_llm_provider()
 
-    # Retrieve knowledge-base context before planning (Chroma → TF-IDF fallback)
+    # Dense RAG (FAISS) before planning — policy-grounded context for the planner
     knowledge_context = ""
     try:
-        from backend.app.services.knowledge_rag_service import retrieve_knowledge
+        from backend.app.services.rag_service import retrieve_relevant_context
 
-        rag = retrieve_knowledge(query, top_k=4)
+        rag = retrieve_relevant_context(query, top_k=5)
         if rag.get("used"):
             knowledge_context = rag.get("context_block") or ""
             audit.set_knowledge(
@@ -179,9 +179,16 @@ def run_dynamic_planning_agent(state: AgentState, audit: AuditTrail) -> None:
                 **(state.tool_results or {}),
                 "knowledge_base": {
                     "backend": rag.get("backend"),
+                    "model": rag.get("model"),
                     "chunks": rag.get("chunks"),
                 },
             }
+            # Nudge: if query looks regulatory, encourage policy tool still if KB thin
+            if len(rag.get("chunks") or []) < 2:
+                audit.record_reasoning(
+                    "knowledge_base",
+                    "Sparse KB hits — planner should still call tool_search_policy_guidance if policy-related",
+                )
         else:
             audit.set_knowledge(False, backend="none", chunk_count=0)
     except Exception as exc:

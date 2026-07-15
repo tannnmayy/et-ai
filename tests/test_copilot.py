@@ -216,6 +216,62 @@ class TestGuardrails:
 # =========================================================================
 
 
+class TestRagAndCache:
+    def test_retrieve_relevant_context_returns_structure(self) -> None:
+        from backend.app.services.rag_service import retrieve_relevant_context
+
+        result = retrieve_relevant_context("CPCB construction dust control", top_k=2)
+        assert "backend" in result
+        assert "chunks" in result
+        assert "used" in result
+        assert "context_block" in result
+        # May be faiss, sklearn, or tfidf depending on installed deps
+        assert result["backend"] in ("faiss", "sklearn", "tfidf", "none")
+
+    def test_suggested_questions_nonempty(self) -> None:
+        from backend.app.services.copilot_cache_service import get_suggested_questions
+
+        items = get_suggested_questions()
+        assert len(items) >= 4
+        assert all("question" in i and "category" in i for i in items)
+
+    def test_response_cache_roundtrip(self) -> None:
+        from backend.app.services.copilot_cache_service import (
+            cache_key,
+            get_cached_response,
+            set_cached_response,
+            clear_cache,
+        )
+
+        clear_cache()
+        key = cache_key("hello cache test", city="bengaluru")
+        payload = {
+            "request_id": "t1",
+            "intent": "city_briefing",
+            "selected_agent": "city_briefing_agent",
+            "answer": "cached answer",
+            "structured_data": {},
+            "warnings": [],
+            "audit_trail": {
+                "request_id": "t1",
+                "timestamp": "t",
+                "detected_intent": "city_briefing",
+                "selected_agent": "city_briefing_agent",
+                "tools_called": [],
+                "llm_mode": "deterministic",
+                "fallback_used": False,
+                "warnings": [],
+            },
+            "llm_mode": "deterministic",
+            "fallback_used": False,
+        }
+        set_cached_response(key, payload)
+        hit = get_cached_response(key)
+        assert hit is not None
+        assert hit["answer"] == "cached answer"
+        clear_cache()
+
+
 class TestLLMFallback:
     def test_no_api_key_uses_deterministic_mode(self) -> None:
         llm = LLMProvider()

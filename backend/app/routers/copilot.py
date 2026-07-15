@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from backend.app.agents.orchestrator import run_orchestrator
 from backend.app.config import ADVISORY_PROFILES, SUPPORTED_CITIES, SUPPORTED_LANGUAGES, TRAVEL_PROFILES
@@ -15,8 +15,27 @@ from backend.app.services.artifact_adapter import (
     UnsupportedCityError,
     _validate_station,
 )
+from backend.app.services.copilot_cache_service import (
+    cache_stats,
+    get_suggested_questions,
+    run_prefetch,
+)
 
 router = APIRouter(prefix="/copilot", tags=["copilot"])
+
+
+class CopilotPrefetchRequest(BaseModel):
+    city: str = Field(default="bengaluru")
+    wait: bool = Field(
+        default=False,
+        description="If true, run prefetch synchronously and return results; else fire-and-forget",
+    )
+
+
+class CopilotSuggestion(BaseModel):
+    id: str
+    category: str
+    question: str
 
 
 def _validate_city(city: str) -> None:
@@ -96,6 +115,50 @@ def copilot_query(body: CopilotQueryRequest) -> CopilotResponse:
         force_dynamic_planning=body.force_dynamic_planning,
     )
     return CopilotResponse(**result)
+
+
+@router.get(
+    "/suggestions",
+    summary="Suggested Copilot questions for the UI",
+)
+def copilot_suggestions() -> dict[str, Any]:
+    """Return curated suggested questions grouped for the frontend chips."""
+    items = get_suggested_questions()
+    categories: dict[str, list[dict[str, str]]] = {}
+    for item in items:
+        categories.setdefault(item["category"], []).append(item)
+    return {"suggestions": items, "by_category": categories}
+
+
+@router.post(
+    "/prefetch",
+    summary="Warm RAG index and cache common Copilot answers",
+)
+def copilot_prefetch(
+    background_tasks: BackgroundTasks,
+    body: CopilotPrefetchRequest | None = None,
+) -> dict[str, Any]:
+    """Prefetch common policy/enforcement queries so first UI clicks feel fast.
+
+    Default is asynchronous (returns immediately). Pass ``wait=true`` for tests.
+    """
+    payload = body or CopilotPrefetchRequest()
+    _validate_city(payload.city)
+
+    if payload.wait:
+        result = run_prefetch(city=payload.city)
+        return {"status": "completed", "cache": cache_stats(), **result}
+
+    background_tasks.add_task(run_prefetch, city=payload.city)
+    return {"status": "started", "mode": "background_tasks", "cache": cache_stats()}
+
+
+@router.get(
+    "/cache/stats",
+    summary="Copilot response-cache statistics",
+)
+def copilot_cache_stats() -> dict[str, Any]:
+    return cache_stats()
 
 
 @router.get(

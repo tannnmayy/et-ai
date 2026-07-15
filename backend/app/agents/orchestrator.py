@@ -275,6 +275,49 @@ def run_orchestrator(
     force_dynamic_planning: bool = False,
 ) -> dict[str, Any]:
 
+    # Full-response cache for repeated / suggested questions
+    ckey: str | None = None
+    try:
+        from backend.app.services.copilot_cache_service import (
+            cache_key,
+            get_cached_response,
+        )
+
+        ckey = cache_key(
+            query,
+            city=city,
+            station_id=station_id,
+            profile=profile,
+            language=language,
+            force_dynamic_planning=force_dynamic_planning,
+        )
+        cached = get_cached_response(ckey)
+        if cached is not None:
+            # Fresh request id but same grounded answer
+            cached = dict(cached)
+            cached["request_id"] = str(uuid.uuid4())
+            trail = dict(cached.get("audit_trail") or {})
+            trail["request_id"] = cached["request_id"]
+            warnings = list(trail.get("warnings") or [])
+            if "served_from_response_cache" not in warnings:
+                warnings.append("served_from_response_cache")
+            trail["warnings"] = warnings
+            # Annotate reasoning for UI
+            trace = list(trail.get("reasoning_trace") or [])
+            trace.insert(0, {
+                "type": "cache",
+                "detail": "Served from Copilot response cache (identical / similar query)",
+            })
+            trail["reasoning_trace"] = trace
+            cached["audit_trail"] = trail
+            cached["warnings"] = list(
+                dict.fromkeys(list(cached.get("warnings") or []) + ["served_from_response_cache"])
+            )
+            return cached
+    except Exception as exc:
+        logger.debug("Response cache lookup skipped: %s", exc)
+        ckey = None
+
     request_id = str(uuid.uuid4())
 
     state = AgentState(
@@ -426,15 +469,16 @@ def run_orchestrator(
     )
     if policy_like and intent != Intent.dynamic_planning and not already_has_kb:
         try:
-            from backend.app.services.knowledge_rag_service import retrieve_knowledge
+            from backend.app.services.rag_service import retrieve_relevant_context
 
-            rag = retrieve_knowledge(query, top_k=3)
+            rag = retrieve_relevant_context(query, top_k=4)
             if rag.get("used"):
                 audit.set_knowledge(True, backend=rag.get("backend"), chunk_count=len(rag.get("chunks") or []))
                 state.structured_data = {
                     **(state.structured_data or {}),
                     "knowledge_base": {
                         "backend": rag.get("backend"),
+                        "model": rag.get("model"),
                         "chunks": rag.get("chunks"),
                     },
                 }
@@ -480,7 +524,18 @@ def run_orchestrator(
     audit.set_fallback(fallback_used)
     state.fallback_used = fallback_used
 
-    return _build_response(state, audit)
+    response = _build_response(state, audit)
+
+    # Store successful answers for repeat queries (prefetch + UX speed)
+    try:
+        from backend.app.services.copilot_cache_service import set_cached_response
+
+        if ckey and response.get("answer"):
+            set_cached_response(ckey, response)
+    except Exception as exc:
+        logger.debug("Response cache store skipped: %s", exc)
+
+    return response
 
 
 def _render_confidence_summary(data):

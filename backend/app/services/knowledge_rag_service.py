@@ -1,15 +1,8 @@
-"""Persistent RAG over knowledge_base/ for Copilot.
+"""Legacy sklearn TF-IDF/SVD RAG store (fallback for dense FAISS RAG).
 
-Primary backend: sklearn TF-IDF + truncated SVD vectors stored with joblib
-(file-based, no server, no ONNX). This is reliable on Windows and coexists
-with the rest of the app stack (LangGraph, geospatial libs, etc.).
-
-Optional backend: ChromaDB when ``AQI_SENTINEL_USE_CHROMA=1`` is set. Chroma's
-native bindings can hard-crash on some Windows dependency combinations, so it
-is opt-in.
-
-Always falls back to ``policy_guidance_service`` TF-IDF if the primary index
-is unavailable — Copilot must never hard-fail on RAG.
+Prefer ``backend.app.services.rag_service.retrieve_relevant_context`` for new
+call sites. This module remains as a reliable fallback when sentence-transformers
+or FAISS are unavailable.
 """
 
 from __future__ import annotations
