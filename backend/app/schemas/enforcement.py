@@ -19,6 +19,12 @@ class Explanation(BaseModel):
 class RankedHexagon(BaseModel):
     h3_cell: str
     name: str | None = None
+    location_name: str | None = Field(
+        default=None,
+        description="Human-readable locality (preferred display label over h3_cell)",
+    )
+    center_lat: float | None = None
+    center_lon: float | None = None
     priority_score: float
     rank: int
     scoring_breakdown: ScoringBreakdown

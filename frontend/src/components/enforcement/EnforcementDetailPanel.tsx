@@ -15,6 +15,7 @@ import {
   actionTierLabel,
   actionTierStyles,
   buildRecommendations,
+  formatHexIdSubtitle,
   formatLocationName,
 } from '../../services/enforcementUtils';
 
@@ -93,8 +94,14 @@ export default function EnforcementDetailPanel({
                   {actionTierLabel(hex.actionTier)}
                 </span>
               </div>
-              <p className="text-[10px] text-apple-secondary font-mono mt-0.5 truncate">
+              <p
+                className="text-[10px] text-apple-secondary font-mono mt-0.5 truncate"
+                title={formatHexIdSubtitle(hex)}
+              >
                 Score {hex.score10}/10 · Rank #{String(hex.rank).padStart(2, '0')}
+              </p>
+              <p className="text-[9px] font-mono text-apple-secondary/50 mt-0.5 truncate" title={hex.id}>
+                H3 {hex.id.slice(0, 8)}…{hex.id.slice(-4)}
               </p>
               {hex.isPeakHour && (
                 <p className="text-[10px] text-brand-blue mt-1 flex items-center gap-1">

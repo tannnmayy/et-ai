@@ -201,12 +201,29 @@ export function buildRecommendations(hex: PriorityHex): EnforcementRecommendatio
 }
 
 export function formatLocationName(hex: PriorityHex): string {
-  if (hex.name && !hex.name.startsWith('Grid ') && hex.name !== hex.id) {
+  const raw = (hex.name || '').trim();
+  const looksRaw =
+    !raw ||
+    raw === hex.id ||
+    raw.toLowerCase().startsWith('grid ') ||
+    raw.toLowerCase().startsWith('sector ') ||
+    (raw.length >= 10 && /^[0-9a-f]+$/i.test(raw));
+
+  if (!looksRaw) {
     // Prefer short locality (first segment of reverse-geocode label)
-    const short = hex.name.split(',')[0]?.trim();
-    return short || hex.name;
+    const short = raw.split(',')[0]?.trim();
+    return short || raw;
   }
-  return hex.name || `Sector ${hex.id.slice(-5)}`;
+
+  // Backend should always send a locality; last-resort soft label (never bare H3)
+  const ns = hex.lat >= 12.97 ? 'N' : 'S';
+  const ew = hex.lng >= 77.6 ? 'E' : 'W';
+  return `Bengaluru ${ns}${ew}`;
+}
+
+/** H3 id for tooltips / debug only — never the primary table label. */
+export function formatHexIdSubtitle(hex: PriorityHex): string {
+  return hex.id;
 }
 
 export type SortKey = 'rank' | 'score' | 'magnitude' | 'exposure' | 'name' | 'source';

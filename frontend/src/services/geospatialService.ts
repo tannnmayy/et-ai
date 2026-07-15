@@ -2,50 +2,49 @@ import { cellToLatLng } from 'h3-js';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/axiosClient';
 import { PriorityHex } from '../types';
+import { BENGALURU_LOCALITIES } from '../data/bengaluruLocalities';
 
-// Bengaluru area lookup: bounding boxes for known localities
-const BENGALURU_AREAS: { name: string; minLat: number; maxLat: number; minLng: number; maxLng: number }[] = [
-  { name: 'Whitefield', minLat: 12.96, maxLat: 12.99, minLng: 77.70, maxLng: 77.78 },
-  { name: 'Indiranagar', minLat: 12.96, maxLat: 12.99, minLng: 77.62, maxLng: 77.68 },
-  { name: 'Koramangala', minLat: 12.92, maxLat: 12.94, minLng: 77.60, maxLng: 77.63 },
-  { name: 'Jayanagar', minLat: 12.91, maxLat: 12.94, minLng: 77.56, maxLng: 77.60 },
-  { name: 'Hebbal', minLat: 13.02, maxLat: 13.06, minLng: 77.58, maxLng: 77.62 },
-  { name: 'Peenya', minLat: 13.00, maxLat: 13.05, minLng: 77.50, maxLng: 77.56 },
-  { name: 'Yeshwanthpur', minLat: 12.99, maxLat: 13.03, minLng: 77.53, maxLng: 77.57 },
-  { name: 'Malleshwaram', minLat: 12.99, maxLat: 13.01, minLng: 77.55, maxLng: 77.58 },
-  { name: 'Rajajinagar', minLat: 12.97, maxLat: 13.00, minLng: 77.54, maxLng: 77.57 },
-  { name: 'Basavanagudi', minLat: 12.93, maxLat: 12.96, minLng: 77.55, maxLng: 77.58 },
-  { name: 'BTM Layout', minLat: 12.90, maxLat: 12.93, minLng: 77.59, maxLng: 77.62 },
-  { name: 'HSR Layout', minLat: 12.90, maxLat: 12.93, minLng: 77.62, maxLng: 77.65 },
-  { name: 'Electronic City', minLat: 12.82, maxLat: 12.86, minLng: 77.65, maxLng: 77.69 },
-  { name: 'MG Road', minLat: 12.97, maxLat: 12.99, minLng: 77.59, maxLng: 77.62 },
-  { name: 'Shivajinagar', minLat: 12.98, maxLat: 13.00, minLng: 77.58, maxLng: 77.60 },
-  { name: 'Vijayanagar', minLat: 12.96, maxLat: 12.98, minLng: 77.52, maxLng: 77.55 },
-  { name: 'Nagarbhavi', minLat: 12.94, maxLat: 12.97, minLng: 77.50, maxLng: 77.54 },
-  { name: 'JP Nagar', minLat: 12.90, maxLat: 12.93, minLng: 77.56, maxLng: 77.59 },
-  { name: 'Banashankari', minLat: 12.91, maxLat: 12.93, minLng: 77.54, maxLng: 77.56 },
-  { name: 'Nagasandra', minLat: 13.04, maxLat: 13.08, minLng: 77.50, maxLng: 77.54 },
-  { name: 'Yelahanka', minLat: 13.08, maxLat: 13.13, minLng: 77.57, maxLng: 77.62 },
-  { name: 'Kengeri', minLat: 12.90, maxLat: 12.95, minLng: 77.46, maxLng: 77.50 },
-  { name: 'Marathahalli', minLat: 12.94, maxLat: 12.97, minLng: 77.69, maxLng: 77.73 },
-  { name: 'Bellandur', minLat: 12.91, maxLat: 12.94, minLng: 77.65, maxLng: 77.69 },
-  { name: 'Sarjapur Road', minLat: 12.88, maxLat: 12.92, minLng: 77.67, maxLng: 77.72 },
-  { name: 'CV Raman Nagar', minLat: 12.98, maxLat: 13.01, minLng: 77.65, maxLng: 77.68 },
-];
-
-function _lookupArea(lat: number, lng: number): string | null {
-  for (const area of BENGALURU_AREAS) {
-    if (lat >= area.minLat && lat <= area.maxLat && lng >= area.minLng && lng <= area.maxLng) {
-      return area.name;
-    }
-  }
-  return null;
+/** Haversine distance in km */
+function _distKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const toR = (d: number) => (d * Math.PI) / 180;
+  const dLat = toR(lat2 - lat1);
+  const dLng = toR(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-function _resolveName(h3_cell: string, lat: number, lng: number): string {
-  const area = _lookupArea(lat, lng);
-  if (area) return area;
-  return `Grid ${h3_cell.slice(-6)}`;
+function _isRawLabel(name: string | null | undefined): boolean {
+  if (!name) return true;
+  const n = name.trim();
+  if (!n) return true;
+  const low = n.toLowerCase();
+  if (low.startsWith('grid ') || low.startsWith('sector ')) return true;
+  if (n.length >= 10 && /^[0-9a-f]+$/i.test(n)) return true;
+  return false;
+}
+
+/** Prefer API/locality name; never use raw H3 / "Grid xxxx" as primary label. */
+function _resolveName(h3_cell: string, lat: number, lng: number, preferred?: string | null): string {
+  if (preferred && !_isRawLabel(preferred)) {
+    return preferred.split(',')[0]?.trim() || preferred;
+  }
+
+  let best: { name: string; d: number } | null = null;
+  for (const loc of BENGALURU_LOCALITIES) {
+    const d = _distKm(lat, lng, loc.lat, loc.lng);
+    if (d > 4.5) continue;
+    if (!best || d < best.d) best = { name: loc.name, d };
+  }
+  if (best) {
+    return best.d <= 1.8 ? best.name : `Near ${best.name}`;
+  }
+
+  const ns = lat >= 12.97 ? 'N' : 'S';
+  const ew = lng >= 77.6 ? 'E' : 'W';
+  return `Bengaluru ${ns}${ew}`;
 }
 
 function mapRealStation(item: any): { id: string; name: string; lat: number; lng: number; aqi: number; status: 'Good' | 'Moderate' | 'Poor' | 'Severe' } {
@@ -133,7 +132,12 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
 
   return {
     id: hex.h3_cell,
-    name: hex.name || _resolveName(hex.h3_cell, lat, lng),
+    name: _resolveName(
+      hex.h3_cell,
+      lat,
+      lng,
+      hex.location_name || hex.name,
+    ),
     score10,
     priorityScore: priority01,
     rank: Number(hex.rank ?? index + 1),
@@ -210,7 +214,7 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
   const score10 = Math.min(10, Math.round(fusedPm25Num / 20));
   return {
     id: attr.h3_cell,
-    name: attr.name || _resolveName(attr.h3_cell, lat, lng),
+    name: _resolveName(attr.h3_cell, lat, lng, attr.location_name || attr.name),
     score10,
     priorityScore: score10 / 10,
     rank: 0,
@@ -345,8 +349,14 @@ export function useAttributionGrid() {
   });
 }
 
-export async function fetchCityExtremes() {
-  const { data } = await apiClient.get('/attribution/city/bengaluru/extremes?n=15');
+/** Max worst/best hexes fetched once for map filters (client-side slice). */
+export const CITY_EXTREMES_FETCH_N = 100;
+
+export async function fetchCityExtremes(n: number = CITY_EXTREMES_FETCH_N) {
+  const capped = Math.min(100, Math.max(1, n));
+  const { data } = await apiClient.get(
+    `/attribution/city/bengaluru/extremes?n=${capped}`,
+  );
   if (!data || !data.best || !data.worst) {
     throw new Error('No extremes data returned from API');
   }
@@ -355,7 +365,7 @@ export async function fetchCityExtremes() {
     const score10 = Math.min(10, Math.round(pm / 20));
     return {
       id: h.h3_cell,
-      name: h.name || _resolveName(h.h3_cell, h.center_lat, h.center_lon),
+      name: _resolveName(h.h3_cell, h.center_lat, h.center_lon, h.location_name || h.name),
       score10,
       priorityScore: score10 / 10,
       rank: 0,
@@ -386,13 +396,21 @@ export async function fetchCityExtremes() {
     worst,
     totalWithData: data.total_hexagons_with_data,
     totalInGrid: data.total_hexagons_in_grid,
+    fetchedN: capped,
   };
 }
 
 export function useCityExtremes() {
-  return useQuery<{ best: PriorityHex[]; worst: PriorityHex[]; totalWithData: number; totalInGrid: number }>({
-    queryKey: ['city-extremes'],
-    queryFn: fetchCityExtremes,
+  return useQuery<{
+    best: PriorityHex[];
+    worst: PriorityHex[];
+    totalWithData: number;
+    totalInGrid: number;
+    fetchedN: number;
+  }>({
+    // Include N so we don't reuse an older top-15 cache from earlier builds
+    queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N],
+    queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N),
     staleTime: 60_000,
   });
 }

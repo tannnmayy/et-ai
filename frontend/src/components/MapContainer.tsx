@@ -9,6 +9,8 @@ interface MapContainerProps {
   onSelectHex: (hex: PriorityHex) => void;
   allHexes: PriorityHex[];
   viewMode: 'aqi' | 'enforcement';
+  /** Smaller map labels when showing many polluted hexes (30–100). */
+  compactLabels?: boolean;
 }
 
 const API_KEY = String(
@@ -68,6 +70,7 @@ function MapContainer({
   onSelectHex,
   allHexes,
   viewMode,
+  compactLabels = false,
 }: MapContainerProps) {
   const [showRealMap, setShowRealMap] = useState(isRealKey);
   const [activeLayer, setActiveLayer] = useState<'h3' | 'heatmap' | 'sat'>('h3');
@@ -234,13 +237,18 @@ function MapContainer({
                     onClick={() => onSelectHex(hex)}
                   >
                     <div
-                      className="cursor-pointer p-2 rounded-lg bg-black/80 border text-[10px] font-mono text-white shadow-lg transition-transform hover:scale-105"
+                      className={`cursor-pointer rounded-lg bg-black/80 border font-mono text-white shadow-lg transition-transform hover:scale-105 ${
+                        compactLabels ? 'p-1.5 text-[8px] max-w-[88px]' : 'p-2 text-[10px]'
+                      }`}
                       style={{
                         borderColor: color,
                         boxShadow: isSelected ? `0 0 0 2px ${color}` : undefined,
                       }}
+                      title={`${label} · ${hex.pm25} µg/m³ · ${hex.id}`}
                     >
-                      <span className="font-bold font-sans">{label}</span>
+                      <span className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[76px]' : ''}`}>
+                        {compactLabels && label.length > 12 ? `${label.slice(0, 11)}…` : label}
+                      </span>
                       <div className="text-right font-bold mt-0.5" style={{ color }}>
                         {viewMode === 'enforcement'
                           ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
@@ -274,7 +282,7 @@ function MapContainer({
                   onClick={() => onSelectHex(hex)}
                 >
                   <polygon
-                    points={getHexPoints(x, y, 42)}
+                    points={getHexPoints(x, y, compactLabels ? 28 : 42)}
                     fill={isSelected ? `${color}40` : `${color}15`}
                     stroke={color}
                     strokeWidth={isSelected ? '2.5' : '1.2'}
@@ -284,18 +292,20 @@ function MapContainer({
                     x={x}
                     y={y - 4}
                     fill="#fff"
-                    fontSize="9"
+                    fontSize={compactLabels ? '7' : '9'}
                     fontFamily="Inter, sans-serif"
                     textAnchor="middle"
                     className="font-bold pointer-events-none select-none opacity-90"
                   >
-                    {label.length > 14 ? `${label.slice(0, 12)}…` : label}
+                    {label.length > (compactLabels ? 10 : 14)
+                      ? `${label.slice(0, compactLabels ? 9 : 12)}…`
+                      : label}
                   </text>
                   <text
                     x={x}
                     y={y + 8}
                     fill={color}
-                    fontSize="8"
+                    fontSize={compactLabels ? '6' : '8'}
                     fontFamily="monospace"
                     textAnchor="middle"
                     className="pointer-events-none select-none font-semibold"

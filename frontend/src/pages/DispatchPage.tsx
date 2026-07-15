@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -8,41 +8,162 @@ import {
   MapPin,
   FileText,
   CheckCircle,
+  History,
+  User,
+  ClipboardList,
+  AlertCircle,
 } from 'lucide-react';
 import { useSession } from '../context/SessionContext';
 
+const HISTORY_KEY = 'aqi_sentinel_dispatch_history_v1';
+const MAX_HISTORY = 12;
+
+export type DispatchRecord = {
+  id: string;
+  unitId: string;
+  target: string;
+  hexId: string;
+  source: string;
+  score: string;
+  action: string;
+  notes: string;
+  officer: string;
+  operator: string;
+  status: 'open' | 'resolved';
+  issuedAt: string;
+  signedOperator: boolean;
+  signedLead: boolean;
+};
+
+function loadHistory(): DispatchRecord[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as DispatchRecord[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(items: DispatchRecord[]) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY)));
+}
+
 /**
- * Full-screen enforcement dispatch sheet.
- * Supports browser print / PDF export and a signature field for demo use.
+ * Full-screen enforcement dispatch sheet with validation, history, and print/PDF.
  */
 export default function DispatchPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { session } = useSession();
-  const printRef = useRef<HTMLDivElement>(null);
 
-  const target = params.get('target') || params.get('hex') || 'Priority hexagon';
-  const source = params.get('source') || 'mixed urban sources';
-  const score = params.get('score') || '—';
-  const action = params.get('action') || 'Inspect site for dust control compliance and document evidence.';
+  const prefillTarget = params.get('target') || params.get('hex') || '';
+  const prefillHex = params.get('hex') || '';
+  const prefillSource = params.get('source') || 'mixed urban sources';
+  const prefillScore = params.get('score') || '—';
+  const prefillAction =
+    params.get('action') ||
+    'Inspect site for dust suppression / emissions compliance and document evidence.';
 
+  const [target, setTarget] = useState(prefillTarget);
+  const [hexId, setHexId] = useState(prefillHex);
+  const [source, setSource] = useState(prefillSource);
+  const [score, setScore] = useState(prefillScore);
+  const [action, setAction] = useState(prefillAction);
   const [notes, setNotes] = useState('');
   const [officer, setOfficer] = useState(session?.name || '');
-  const [signed, setSigned] = useState(false);
+  const [operator, setOperator] = useState(session?.name || 'AQI Sentinel Operator');
+  const [status, setStatus] = useState<'open' | 'resolved'>('open');
+  const [signedOperator, setSignedOperator] = useState(false);
+  const [signedLead, setSignedLead] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [submitted, setSubmitted] = useState<DispatchRecord | null>(null);
+  const [history, setHistory] = useState<DispatchRecord[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
   const unitId = useMemo(
     () => `EN-${Math.floor(100 + Math.random() * 900)}-${Date.now().toString().slice(-4)}`,
     [],
   );
   const issuedAt = useMemo(() => new Date().toLocaleString(), []);
 
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
+
+  useEffect(() => {
+    // Keep prefill in sync if navigated with new query params
+    setTarget(prefillTarget);
+    setHexId(prefillHex);
+    setSource(prefillSource);
+    setScore(prefillScore);
+    setAction(prefillAction);
+  }, [prefillTarget, prefillHex, prefillSource, prefillScore, prefillAction]);
+
+  const validate = (): string[] => {
+    const e: string[] = [];
+    if (!target.trim()) e.push('Target location is required.');
+    if (!officer.trim()) e.push('Lead officer name is required.');
+    if (!operator.trim()) e.push('Operator name is required.');
+    if (!action.trim()) e.push('Recommended action is required.');
+    if (!signedOperator) e.push('AQI Sentinel Operator must acknowledge.');
+    if (!signedLead) e.push('Lead Officer In-Charge must sign.');
+    return e;
+  };
+
+  const handleSubmit = () => {
+    const e = validate();
+    setErrors(e);
+    if (e.length) return;
+
+    const record: DispatchRecord = {
+      id: `dsp-${Date.now()}`,
+      unitId,
+      target: target.trim(),
+      hexId: hexId.trim(),
+      source: source.trim(),
+      score: score.trim(),
+      action: action.trim(),
+      notes: notes.trim(),
+      officer: officer.trim(),
+      operator: operator.trim(),
+      status,
+      issuedAt: new Date().toISOString(),
+      signedOperator,
+      signedLead,
+    };
+    const next = [record, ...loadHistory()].slice(0, MAX_HISTORY);
+    saveHistory(next);
+    setHistory(next);
+    setSubmitted(record);
+  };
+
   const handleExportPdf = () => {
-    // Browser print-to-PDF keeps dependencies light and works offline in demos
     window.print();
+  };
+
+  const loadFromHistory = (r: DispatchRecord) => {
+    setTarget(r.target);
+    setHexId(r.hexId);
+    setSource(r.source);
+    setScore(r.score);
+    setAction(r.action);
+    setNotes(r.notes);
+    setOfficer(r.officer);
+    setOperator(r.operator);
+    setStatus(r.status);
+    setSignedOperator(r.signedOperator);
+    setSignedLead(r.signedLead);
+    setSubmitted(null);
+    setShowHistory(false);
+    setErrors([]);
   };
 
   return (
     <div className="w-full h-full overflow-y-auto bg-black landing-mesh">
       <div className="max-w-3xl mx-auto px-5 md:px-8 py-8 pb-20">
+        {/* Toolbar — hidden when printing */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6 print:hidden">
           <button
             type="button"
@@ -52,7 +173,15 @@ export default function DispatchPage() {
             <ArrowLeft size={16} />
             Back
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="min-h-[44px] inline-flex items-center gap-2 px-4 rounded-full glass-panel text-sm font-semibold"
+            >
+              <History size={16} />
+              History ({history.length})
+            </button>
             <button
               type="button"
               onClick={handleExportPdf}
@@ -72,128 +201,351 @@ export default function DispatchPage() {
           </div>
         </div>
 
+        {/* History panel */}
+        {showHistory && (
+          <div className="glass-panel rounded-3xl p-5 mb-6 border border-white/10 print:hidden">
+            <h2 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+              <History size={16} className="text-brand-blue" />
+              Dispatch history (this browser)
+            </h2>
+            {history.length === 0 ? (
+              <p className="text-xs text-apple-secondary">No dispatches saved yet.</p>
+            ) : (
+              <ul className="space-y-2 max-h-56 overflow-y-auto">
+                {history.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      onClick={() => loadFromHistory(r)}
+                      className="w-full text-left rounded-2xl bg-white/[0.04] border border-white/10 hover:border-brand-blue/40 px-3 py-2.5 transition-colors"
+                    >
+                      <div className="flex justify-between gap-2">
+                        <span className="text-xs font-semibold text-white truncate">{r.target}</span>
+                        <span
+                          className={`text-[9px] font-bold uppercase shrink-0 ${
+                            r.status === 'resolved' ? 'text-brand-green' : 'text-brand-orange'
+                          }`}
+                        >
+                          {r.status}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-mono text-apple-secondary mt-0.5">
+                        {r.unitId} · {new Date(r.issuedAt).toLocaleString()}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Success banner */}
+        {submitted && (
+          <div className="mb-6 rounded-2xl bg-brand-green/15 border border-brand-green/30 px-4 py-3 flex flex-wrap items-center gap-3 print:hidden">
+            <CheckCircle size={18} className="text-brand-green shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-brand-green">Dispatch recorded</p>
+              <p className="text-[11px] text-apple-secondary">
+                Unit {submitted.unitId} saved to history. You can export a PDF for the field team.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowHistory(true)}
+              className="text-xs font-bold text-brand-green underline"
+            >
+              View in history
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="text-xs font-bold px-3 py-1.5 rounded-full bg-brand-green/20 text-brand-green border border-brand-green/30"
+            >
+              Export PDF
+            </button>
+          </div>
+        )}
+
+        {/* Printable form */}
         <div
-          ref={printRef}
-          className="glass-panel-strong rounded-[28px] p-6 md:p-10 border border-white/10 print:bg-white print:text-black print:shadow-none"
+          id="dispatch-print-root"
+          className="glass-panel-strong rounded-[28px] p-6 md:p-10 border border-white/10 print:bg-white print:text-black print:shadow-none print:border-gray-200"
         >
-          <div className="flex items-start justify-between gap-4 mb-8 border-b border-white/10 print:border-black/20 pb-6">
+          {/* Header / letterhead */}
+          <div className="flex items-start justify-between gap-4 mb-8 border-b border-white/10 print:border-gray-300 pb-6">
             <div>
               <div className="flex items-center gap-2 text-brand-blue print:text-black mb-2">
-                <Shield size={20} />
+                <Shield size={22} />
                 <span className="text-[10px] font-mono uppercase tracking-[0.2em]">
-                  AQI Sentinel · Enforcement Dispatch
+                  AQI Sentinel · Bengaluru Operations
                 </span>
               </div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white print:text-black">
                 Unit Dispatch Order
               </h1>
               <p className="text-sm text-apple-secondary print:text-gray-600 mt-1">
-                Evidence-backed field action sheet for Bengaluru operations
+                Evidence-backed field action sheet for pollution control operations
               </p>
             </div>
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <div className="text-[10px] font-mono uppercase text-apple-secondary print:text-gray-500">
                 Unit ID
               </div>
               <div className="text-lg font-mono font-bold text-white print:text-black">{unitId}</div>
+              <div className="text-[10px] font-mono text-apple-secondary print:text-gray-500 mt-2">
+                Issued {issuedAt}
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-4 print:bg-gray-50 print:border-gray-200">
-              <div className="text-[10px] font-mono uppercase text-apple-secondary print:text-gray-500 mb-1 flex items-center gap-1.5">
-                <MapPin size={12} /> Target
+          {errors.length > 0 && (
+            <div className="mb-5 rounded-2xl bg-brand-red/10 border border-brand-red/25 px-4 py-3 print:hidden">
+              <div className="flex items-center gap-2 text-brand-red text-xs font-bold mb-1">
+                <AlertCircle size={14} /> Validation
               </div>
-              <div className="text-sm font-semibold text-white print:text-black break-all">{target}</div>
+              <ul className="text-[11px] text-brand-red/90 space-y-0.5 list-disc pl-4">
+                {errors.map((err) => (
+                  <li key={err}>{err}</li>
+                ))}
+              </ul>
             </div>
-            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-4 print:bg-gray-50 print:border-gray-200">
-              <div className="text-[10px] font-mono uppercase text-apple-secondary print:text-gray-500 mb-1">
-                Priority score
-              </div>
-              <div className="text-sm font-mono font-bold text-white print:text-black">{score}</div>
-            </div>
-            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-4 print:bg-gray-50 print:border-gray-200">
-              <div className="text-[10px] font-mono uppercase text-apple-secondary print:text-gray-500 mb-1">
-                Dominant source signal
-              </div>
-              <div className="text-sm font-semibold text-white print:text-black capitalize">
-                {source.replace(/_/g, ' ')}
-              </div>
-            </div>
-            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-4 print:bg-gray-50 print:border-gray-200">
-              <div className="text-[10px] font-mono uppercase text-apple-secondary print:text-gray-500 mb-1">
-                Issued
-              </div>
-              <div className="text-sm font-mono text-white print:text-black">{issuedAt}</div>
-            </div>
-          </div>
+          )}
 
-          <div className="mb-6">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600 mb-2">
+          {/* Section: Dispatch details */}
+          <section className="mb-6">
+            <h2 className="text-[11px] font-mono font-bold uppercase tracking-widest text-brand-blue print:text-black mb-3 flex items-center gap-2">
+              <ClipboardList size={14} />
+              Dispatch details
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block sm:col-span-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  Status *
+                </span>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as 'open' | 'resolved')}
+                  className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+                >
+                  <option value="open" className="bg-apple-card">
+                    Open — field action pending
+                  </option>
+                  <option value="resolved" className="bg-apple-card">
+                    Issue resolved
+                  </option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          {/* Section: Target (pre-filled) */}
+          <section className="mb-6">
+            <h2 className="text-[11px] font-mono font-bold uppercase tracking-widest text-brand-blue print:text-black mb-3 flex items-center gap-2">
+              <MapPin size={14} />
+              Target information
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block sm:col-span-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  Location / target *
+                </span>
+                <input
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+                  placeholder="e.g. Yeshwanthpur"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  H3 cell (debug)
+                </span>
+                <input
+                  value={hexId}
+                  onChange={(e) => setHexId(e.target.value)}
+                  className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm font-mono text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+                  placeholder="optional"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  Priority score
+                </span>
+                <input
+                  value={score}
+                  onChange={(e) => setScore(e.target.value)}
+                  className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm font-mono text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  Dominant source / cause
+                </span>
+                <input
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                  className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300 capitalize"
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  Recommended action *
+                </span>
+                <textarea
+                  value={action}
+                  onChange={(e) => setAction(e.target.value)}
+                  rows={3}
+                  className="mt-1.5 w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+                />
+              </label>
+            </div>
+            <p className="text-[10px] text-apple-secondary print:text-gray-500 mt-2 leading-relaxed">
+              Ranking and source mix are investigation aids based on sensors, geospatial layers, and
+              satellite context — not a legal determination of fault.
+            </p>
+          </section>
+
+          {/* Section: Officer details */}
+          <section className="mb-6">
+            <h2 className="text-[11px] font-mono font-bold uppercase tracking-widest text-brand-blue print:text-black mb-3 flex items-center gap-2">
+              <User size={14} />
+              Officer details
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  AQI Sentinel operator *
+                </span>
+                <input
+                  value={operator}
+                  onChange={(e) => setOperator(e.target.value)}
+                  className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                  Lead officer in-charge *
+                </span>
+                <input
+                  value={officer}
+                  onChange={(e) => setOfficer(e.target.value)}
+                  className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+                />
+              </label>
+            </div>
+          </section>
+
+          {/* Notes */}
+          <section className="mb-8">
+            <h2 className="text-[11px] font-mono font-bold uppercase tracking-widest text-brand-blue print:text-black mb-3 flex items-center gap-2">
               <FileText size={14} />
-              Recommended action
-            </div>
-            <p className="text-sm text-white/90 print:text-black leading-relaxed bg-brand-blue/10 print:bg-blue-50 border border-brand-blue/20 print:border-blue-100 rounded-2xl p-4">
-              {action}
-            </p>
-            <p className="text-[11px] text-apple-secondary print:text-gray-500 mt-2 leading-relaxed">
-              This ranking is an investigation aid based on sensor fusion and geospatial context.
-              It is not a legal determination of fault.
-            </p>
-          </div>
-
-          <label className="block mb-6">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
-              Field notes
-            </span>
+              Status & notes
+            </h2>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={4}
-              placeholder="Observations, site conditions, evidence collected…"
-              className="mt-2 w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white placeholder:text-apple-secondary/50 focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
+              placeholder="Field observations, evidence collected, follow-ups…"
+              className="w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white placeholder:text-apple-secondary/50 focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
             />
-          </label>
+          </section>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-white/10 print:border-gray-200">
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
-                Officer name
-              </span>
-              <input
-                value={officer}
-                onChange={(e) => setOfficer(e.target.value)}
-                className="mt-2 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
-              />
-            </label>
+          {/* Signature blocks */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-white/10 print:border-gray-300">
             <div>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
-                Signature
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                AQI Sentinel Operator
               </span>
               <button
                 type="button"
-                onClick={() => setSigned(true)}
-                className={`mt-2 w-full min-h-[88px] rounded-2xl border border-dashed flex flex-col items-center justify-center gap-2 transition-colors print:border-gray-400 ${
-                  signed
+                onClick={() => setSignedOperator(true)}
+                className={`mt-2 w-full min-h-[100px] rounded-2xl border border-dashed flex flex-col items-center justify-center gap-2 transition-colors print:border-gray-400 print:min-h-[90px] ${
+                  signedOperator
                     ? 'border-brand-green/50 bg-brand-green/10 text-brand-green'
                     : 'border-white/20 bg-black/20 text-apple-secondary hover:border-white/40 print:bg-white'
                 }`}
               >
-                {signed ? (
+                {signedOperator ? (
                   <>
                     <CheckCircle size={20} />
-                    <span className="text-xs font-semibold font-mono">
-                      Signed · {officer || 'Officer'}
+                    <span className="text-xs font-semibold font-mono text-center px-2">
+                      Signed · {operator || 'Operator'}
                     </span>
                   </>
                 ) : (
-                  <span className="text-xs">Tap to acknowledge dispatch</span>
+                  <span className="text-xs text-center px-3">Tap to acknowledge dispatch</span>
                 )}
               </button>
             </div>
-          </div>
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
+                Lead Officer In-Charge
+              </span>
+              <button
+                type="button"
+                onClick={() => setSignedLead(true)}
+                className={`mt-2 w-full min-h-[100px] rounded-2xl border border-dashed flex flex-col items-center justify-center gap-2 transition-colors print:border-gray-400 print:min-h-[90px] ${
+                  signedLead
+                    ? 'border-brand-green/50 bg-brand-green/10 text-brand-green'
+                    : 'border-white/20 bg-black/20 text-apple-secondary hover:border-white/40 print:bg-white'
+                }`}
+              >
+                {signedLead ? (
+                  <>
+                    <CheckCircle size={20} />
+                    <span className="text-xs font-semibold font-mono text-center px-2">
+                      Signed · {officer || 'Lead officer'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs text-center px-3">Tap to sign as lead officer</span>
+                )}
+              </button>
+            </div>
+          </section>
+
+          <p className="mt-6 text-[9px] font-mono text-apple-secondary/70 print:text-gray-500 text-center">
+            AQI SENTINEL · CONFIDENTIAL OPERATIONAL USE · NOT A LEGAL FINDING
+          </p>
+        </div>
+
+        {/* Submit — screen only */}
+        <div className="mt-6 flex flex-wrap gap-3 justify-end print:hidden">
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="min-h-[48px] px-5 rounded-2xl glass-panel text-sm font-semibold inline-flex items-center gap-2"
+          >
+            <Printer size={16} />
+            Preview / Print PDF
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            className="min-h-[48px] px-6 rounded-2xl bg-brand-blue hover:bg-brand-blue/90 text-white text-sm font-bold shadow-lg shadow-brand-blue/20 inline-flex items-center gap-2"
+          >
+            <Shield size={16} />
+            Record dispatch
+          </button>
         </div>
       </div>
+
+      {/* Print CSS helpers */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #dispatch-print-root, #dispatch-print-root * { visibility: visible !important; }
+          #dispatch-print-root {
+            position: absolute !important;
+            left: 0; top: 0; width: 100%;
+            background: white !important;
+            color: black !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

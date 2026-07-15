@@ -4,9 +4,23 @@ import { useCityExtremes, usePriorities, useStations } from '../api/client';
 import { PriorityHex } from '../types';
 import MapContainer from '../components/MapContainer';
 import SourceIcon from '../components/SourceIcon';
+import { formatLocationName } from '../services/enforcementUtils';
 import { Shield, AlertTriangle, ArrowRight, MapPin, ChevronDown, BarChart3 } from 'lucide-react';
 
-type ExtremeView = 'best' | 'worst' | 'all';
+/** Map view mode: cleanest-only, both, or most-polluted with selectable depth. */
+type ExtremeMode = 'best' | 'both' | 'worst';
+
+/** How many most-polluted hexes to show (client-side slice of fetched top-100). */
+type PollutedDepth = 15 | 30 | 50 | 100;
+
+const POLLUTED_OPTIONS: { value: PollutedDepth; label: string }[] = [
+  { value: 15, label: 'Top 15 Most Polluted' },
+  { value: 30, label: 'Top 30 Most Polluted' },
+  { value: 50, label: 'Top 50 Most Polluted' },
+  { value: 100, label: 'Show All Polluted (top 100)' },
+];
+
+const CLEANEST_COUNT = 15;
 
 export default function MapPage() {
   const navigate = useNavigate();
@@ -15,7 +29,9 @@ export default function MapPage() {
   const { isError: stationsError, isLoading: stationsLoading } = useStations();
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
-  const [extremeView, setExtremeView] = useState<ExtremeView>('all');
+  const [extremeMode, setExtremeMode] = useState<ExtremeMode>('both');
+  /** Demo-friendly default: Top 30 most polluted when viewing polluted set */
+  const [pollutedDepth, setPollutedDepth] = useState<PollutedDepth>(30);
 
   if (extremesLoading || stationsLoading) {
     return (
@@ -45,11 +61,30 @@ export default function MapPage() {
     );
   }
 
-  const allHexes: PriorityHex[] = extremes
-    ? (extremeView === 'best' ? extremes.best : extremeView === 'worst' ? extremes.worst : [...extremes.best, ...extremes.worst])
-    : [];
+  const cleanestPool = extremes?.best ?? [];
+  const pollutedPool = extremes?.worst ?? [];
+  const pollutedAvailable = pollutedPool.length;
+  const cleanestShown = cleanestPool.slice(0, CLEANEST_COUNT);
+  const pollutedShown = pollutedPool.slice(0, Math.min(pollutedDepth, pollutedAvailable));
+
+  const allHexes: PriorityHex[] =
+    extremeMode === 'best'
+      ? cleanestShown
+      : extremeMode === 'worst'
+        ? pollutedShown
+        : [...cleanestShown, ...pollutedShown];
+
+  const compactLabels =
+    extremeMode === 'worst'
+      ? pollutedDepth > 15
+      : extremeMode === 'both'
+        ? pollutedDepth > 15
+        : false;
 
   const activeHex = selectedHex || allHexes[0] || null;
+  const pollutedLabel =
+    POLLUTED_OPTIONS.find((o) => o.value === pollutedDepth)?.label ??
+    `Top ${pollutedDepth} Most Polluted`;
 
   const handleDispatch = (hex: PriorityHex) => {
     setDispatchedUnits((prev) => ({ ...prev, [hex.id]: true }));
@@ -74,6 +109,7 @@ export default function MapPage() {
           onSelectHex={(hex) => setSelectedHex(hex)}
           allHexes={allHexes}
           viewMode="aqi"
+          compactLabels={compactLabels}
         />
 
         {/* Legend Overlay (Floating at bottom-left) */}
@@ -122,35 +158,93 @@ export default function MapPage() {
           )}
         </div>
 
-        {/* Floating toggle for Cleanest / Most Polluted view */}
-        <div className="absolute top-4 right-4 z-10 flex bg-apple-card/85 backdrop-blur-md rounded-full p-1 border border-apple-border shadow-lg">
-          <button
-            type="button"
-            onClick={() => setExtremeView('best')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-              extremeView === 'best' ? 'bg-brand-green text-white' : 'text-apple-secondary hover:text-white'
-            }`}
-          >
-            Top 15 Cleanest
-          </button>
-          <button
-            type="button"
-            onClick={() => setExtremeView('all')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-              extremeView === 'all' ? 'bg-brand-blue text-white' : 'text-apple-secondary hover:text-white'
-            }`}
-          >
-            Both
-          </button>
-          <button
-            type="button"
-            onClick={() => setExtremeView('worst')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-              extremeView === 'worst' ? 'bg-brand-red text-white' : 'text-apple-secondary hover:text-white'
-            }`}
-          >
-            Top 15 Most Polluted
-          </button>
+        {/* Map layer control: cleanest / both / polluted depth dropdown */}
+        <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2 max-w-[min(100vw-2rem,280px)]">
+          <div className="flex flex-wrap justify-end bg-apple-card/90 backdrop-blur-md rounded-full p-1 border border-apple-border shadow-lg">
+            <button
+              type="button"
+              onClick={() => setExtremeMode('best')}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all min-h-[36px] ${
+                extremeMode === 'best'
+                  ? 'bg-brand-green text-white'
+                  : 'text-apple-secondary hover:text-white'
+              }`}
+            >
+              Top {CLEANEST_COUNT} Cleanest
+            </button>
+            <button
+              type="button"
+              onClick={() => setExtremeMode('both')}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all min-h-[36px] ${
+                extremeMode === 'both'
+                  ? 'bg-brand-blue text-white'
+                  : 'text-apple-secondary hover:text-white'
+              }`}
+            >
+              Both
+            </button>
+            <button
+              type="button"
+              onClick={() => setExtremeMode('worst')}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all min-h-[36px] ${
+                extremeMode === 'worst'
+                  ? 'bg-brand-red text-white'
+                  : 'text-apple-secondary hover:text-white'
+              }`}
+            >
+              Most Polluted
+            </button>
+          </div>
+
+          {(extremeMode === 'worst' || extremeMode === 'both') && (
+            <div className="flex flex-col items-end gap-1 w-full">
+              <label className="flex items-center gap-2 rounded-full px-3 py-2 bg-apple-card/90 backdrop-blur-md border border-apple-border shadow-lg w-full max-w-[280px]">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-apple-secondary shrink-0">
+                  Depth
+                </span>
+                <select
+                  value={pollutedDepth}
+                  onChange={(e) => {
+                    setPollutedDepth(Number(e.target.value) as PollutedDepth);
+                    setExtremeMode((m) => (m === 'best' ? 'worst' : m));
+                  }}
+                  className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white outline-none cursor-pointer"
+                  aria-label="Number of most polluted hexes to show"
+                >
+                  {POLLUTED_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value} className="bg-apple-card text-white">
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="text-[9px] font-mono text-apple-secondary/80 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
+                {extremeMode === 'both' ? (
+                  <>
+                    Showing {cleanestShown.length} cleanest + {pollutedShown.length} polluted
+                    {pollutedDepth >= 100 || pollutedShown.length >= pollutedAvailable
+                      ? pollutedAvailable >= 100
+                        ? ' · polluted capped at 100'
+                        : ''
+                      : ` · of ${pollutedAvailable} loaded`}
+                  </>
+                ) : (
+                  <>
+                    Showing {pollutedShown.length}
+                    {pollutedAvailable > pollutedShown.length
+                      ? ` of ${pollutedAvailable} polluted hexes`
+                      : ' polluted hexes'}
+                    {pollutedDepth >= 100 ? ' (top 100 cap)' : ''}
+                  </>
+                )}
+              </div>
+              {extremeMode === 'worst' && (
+                <div className="text-[9px] font-bold uppercase tracking-wider text-brand-red/90 px-1">
+                  {pollutedLabel}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Floating Sidebar Detail Panel (Right side) */}
@@ -160,13 +254,16 @@ export default function MapPage() {
             <div className="p-5 border-b border-apple-border flex flex-col gap-1 bg-apple-card/30">
               <span className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest flex items-center gap-1.5">
                 <MapPin size={10} className="text-brand-blue" />
-                {activeHex.name}
+                {formatLocationName(activeHex)}
               </span>
               <h2 className="text-lg font-bold text-white tracking-tight leading-snug mt-1">
                 Local Plume Analysis
               </h2>
-              <span className="text-xs text-apple-secondary font-sans leading-none block">
-                {activeHex.name}
+              <span
+                className="text-xs text-apple-secondary font-sans leading-none block"
+                title={activeHex.id}
+              >
+                {formatLocationName(activeHex)}
               </span>
             </div>
 

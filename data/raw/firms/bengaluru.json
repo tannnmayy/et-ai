@@ -1,10 +1,25 @@
 {
   "schema_version": "1.0",
-  "retrieved_at": "2026-07-14T20:23:34.367923+00:00",
+  "retrieved_at": "2026-07-15T16:53:04.897601+00:00",
   "city": "bengaluru",
   "source": "VIIRS_NOAA20_NRT",
   "data": {
-    "hexagons": [],
+    "hexagons": [
+      {
+        "h3_cell": "896016940afffff",
+        "detection_count": 1,
+        "total_frp_mw": 0.72,
+        "max_confidence": null,
+        "window_end_utc": "2026-07-15T16:53:04.897601+00:00"
+      },
+      {
+        "h3_cell": "89601694037ffff",
+        "detection_count": 1,
+        "total_frp_mw": 0.65,
+        "max_confidence": null,
+        "window_end_utc": "2026-07-15T16:53:04.897601+00:00"
+      }
+    ],
     "city": "bengaluru",
     "source": "VIIRS_NOAA20_NRT",
     "source_status": "live_provider",
@@ -12,6 +27,6 @@
     "freshness": "fresh",
     "age_minutes": 0.0,
     "warnings": [],
-    "retrieved_at": "2026-07-14T20:23:34.367923+00:00"
+    "retrieved_at": "2026-07-15T16:53:04.897601+00:00"
   }
 }

@@ -512,7 +512,9 @@ def compute_enforcement_priorities(
     ranked_hexagons = []
     # NOTE: Do NOT call LLM guidance for every ranked hex — that was making
     # /priority?top_k=100 hang for minutes (100× Gemini/OpenRouter calls).
-    # Use deterministic templates for the list. Names resolved on the frontend.
+    # Use deterministic templates for the list. Human names via locality registry.
+
+    from backend.app.services.locality_naming import resolve_location_name
 
     for _, row in top.iterrows():
         source_attr = {
@@ -528,6 +530,11 @@ def compute_enforcement_priorities(
         }
         fused = None if row["fused_pm25"] is None else float(row["fused_pm25"])
         explanation = _template_enforcement_guidance(source_attr, fused)
+        location_name = resolve_location_name(
+            float(row["center_lat"]),
+            float(row["center_lon"]),
+            h3_cell=str(row["h3_cell"]),
+        )
         ranked_hexagons.append({
             "h3_cell": row["h3_cell"],
             "priority_score": row["priority_score"],
@@ -537,7 +544,10 @@ def compute_enforcement_priorities(
             "source_attribution": source_attr,
             "method": "vectorised_feature_proxy",
             "explanation": explanation,
-            "name": None,
+            "name": location_name,
+            "location_name": location_name,
+            "center_lat": float(row["center_lat"]),
+            "center_lon": float(row["center_lon"]),
             "traffic_corridor_score": float(row["traffic_corridor_score"]),
             "is_major_road_corridor": bool(row["is_major_road_corridor"]),
             # Explicit product flag for UI filters / badges (score > 0.4 or major-road flag)

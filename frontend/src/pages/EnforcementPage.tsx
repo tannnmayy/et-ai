@@ -178,7 +178,7 @@ export default function EnforcementPage() {
         target: loc,
         hex: hexId,
         source: String(hex?.primarySource ?? hex?.primarySourceKey ?? 'mixed'),
-        score: String(hex?.priorityScore ?? hex?.score10 ?? '—'),
+        score: String(hex?.score10 ?? hex?.priorityScore ?? '—'),
         action:
           hex?.explanation?.text ||
           'Inspect site for dust control compliance and document evidence.',

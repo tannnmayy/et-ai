@@ -3,6 +3,7 @@ import type { PriorityHex } from '../../types';
 import SourceIcon from '../SourceIcon';
 import {
   actionTierStyles,
+  formatHexIdSubtitle,
   formatLocationName,
 } from '../../services/enforcementUtils';
 
@@ -47,7 +48,10 @@ function EnforcementTableRow({ item, isSelected, onSelect }: Props) {
           style={{ backgroundColor: actionStyle.mapColor }}
         />
         <div className="min-w-0">
-          <div className="text-xs font-bold text-white truncate" title={item.name}>
+          <div
+            className="text-xs font-bold text-white truncate"
+            title={`${loc} · ${formatHexIdSubtitle(item)}`}
+          >
             {loc}
           </div>
           {(item.isTrafficCorridor || item.isMajorRoadCorridor) && (

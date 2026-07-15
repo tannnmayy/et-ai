@@ -4,6 +4,7 @@
  */
 import type { QueryClient } from '@tanstack/react-query';
 import {
+  CITY_EXTREMES_FETCH_N,
   ENFORCEMENT_DEFAULT_TOP_K,
   enforcementPrioritiesQueryKey,
   fetchCityExtremes,
@@ -63,8 +64,8 @@ export function preloadGoogleMapsScript() {
 export async function prefetchMapAndEnforcementData(queryClient: QueryClient) {
   await Promise.allSettled([
     queryClient.prefetchQuery({
-      queryKey: ['city-extremes'],
-      queryFn: fetchCityExtremes,
+      queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N],
+      queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N),
       staleTime: 60_000,
     }),
     queryClient.prefetchQuery({
