@@ -30,6 +30,18 @@ class CopilotAuditEvent(BaseModel):
     success: bool
 
 
+class CopilotReasoningStep(BaseModel):
+    type: str = Field(description="route | agent | tool | knowledge_base | llm | fallback")
+    detail: str = ""
+    tool: str | None = None
+    success: bool | None = None
+    provider: str | None = None
+    backend: str | None = None
+    chunk_count: int | None = None
+    gemini_key_index: int | None = None
+    arguments: dict[str, Any] | None = None
+
+
 class CopilotAuditTrail(BaseModel):
     request_id: str
     timestamp: str
@@ -39,6 +51,11 @@ class CopilotAuditTrail(BaseModel):
     llm_mode: str
     fallback_used: bool
     warnings: list[str]
+    reasoning_trace: list[dict[str, Any]] = Field(default_factory=list)
+    knowledge_base_used: bool = False
+    knowledge_backend: str | None = None
+    llm_provider_used: str | None = None
+    gemini_key_index: int | None = None
 
 
 class AgentErrorResponse(BaseModel):

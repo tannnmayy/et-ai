@@ -52,48 +52,74 @@ PLANNING_TOOL_REGISTRY: dict[str, Callable[..., dict[str, Any]]] = {
 
 PLANNING_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "tool_get_forecast_evidence": {
-        "description": "Get the air quality forecast evidence for a specific monitoring station, including predicted PM2.5, risk category, forecast engine used, and explanation of expected changes.",
+        "description": (
+            "PRIMARY tool for station-specific PM2.5 forecasts. Returns predicted PM2.5 (µg/m³), "
+            "risk category (Good/Satisfactory/Moderate/Poor/…), which model was used (LightGBM vs "
+            "persistence), and a short evidence narrative. Use when the user asks 'what will air "
+            "quality be', 'tomorrow's PM2.5', or 'why is the forecast changing' for a known station "
+            "(ids like cpcb_peenya, cpcb_bapujinagar, cpcb_hebbal)."
+        ),
         "parameters": {
-            "station_id": "string (required) — station identifier like 'cpcb_peenya'",
-            "city": "string (optional, default 'bengaluru') — city name",
+            "station_id": "string (required) — e.g. 'cpcb_peenya'",
+            "city": "string (optional, default 'bengaluru')",
         },
     },
     "tool_get_forecast_confidence": {
-        "description": "Get the confidence level and score for a station's air quality forecast, indicating how reliable the prediction is.",
+        "description": (
+            "Returns how trustworthy a station forecast is (confidence score + coverage status). "
+            "Use when the user asks if they can trust the prediction or whether data is incomplete."
+        ),
         "parameters": {
-            "station_id": "string (required) — station identifier",
-            "city": "string (optional, default 'bengaluru') — city name",
+            "station_id": "string (required)",
+            "city": "string (optional, default 'bengaluru')",
         },
     },
     "tool_get_inspection_priorities": {
-        "description": "List inspection priority rankings for stations in a city, sorted by urgency. Returns ranked stations with priority levels, scores, and recommended inspection focus areas.",
+        "description": (
+            "Station-level inspection ranking (older 6–12 station heuristic). Prefer "
+            "tool_get_enforcement_priority for hexagon-level Enforcement Intelligence. "
+            "Use only if the user explicitly wants station-based monitoring priorities."
+        ),
         "parameters": {
-            "city": "string (optional, default 'bengaluru') — city name",
-            "top_k": "integer (optional, default 5) — number of top results",
+            "city": "string (optional, default 'bengaluru')",
+            "top_k": "integer (optional, default 5)",
         },
     },
     "tool_get_citizen_advisory": {
-        "description": "Get health advisory guidance for a specific station, including personalized recommendations based on the user's profile and language preferences.",
+        "description": (
+            "Health-oriented outdoor activity guidance for a station and citizen profile "
+            "(general / child / elderly / respiratory). Use for 'is it safe to go outside', "
+            "'should kids play outdoors', etc."
+        ),
         "parameters": {
-            "station_id": "string (required) — station identifier",
-            "profile": "string (optional, default 'general') — user profile like 'general', 'sensitive', 'child', 'elderly'",
-            "language": "string (optional, default 'en') — response language",
-            "city": "string (optional, default 'bengaluru') — city name",
+            "station_id": "string (required)",
+            "profile": "string (optional) — 'general', 'child', 'elderly', 'respiratory', 'outdoor_worker'",
+            "language": "string (optional, default 'en')",
+            "city": "string (optional, default 'bengaluru')",
         },
     },
     "tool_get_city_briefing": {
-        "description": "Get an executive city-level air quality briefing covering overall risk, operational recommendations, data limitations, and per-station summaries.",
+        "description": (
+            "City-wide executive briefing: overall risk, operational notes, data limitations, "
+            "and multi-station snapshot. Use for 'city overview', 'situation report', 'brief me'."
+        ),
         "parameters": {
-            "city": "string (optional, default 'bengaluru') — city name",
+            "city": "string (optional, default 'bengaluru')",
         },
     },
     "tool_search_policy_guidance": {
-        "description": "Search for official air quality policy guidance documents, regulations, or standards. Supports filtering by city and source type.",
+        "description": (
+            "CRITICAL for policy/regulatory questions. Searches the official knowledge base "
+            "(CPCB guidelines, construction dust control, KSPCB/Karnataka action plans, WHO "
+            "guidance, vehicle emission norms). Always call this for questions about rules, "
+            "standards, enforcement procedures, legal dust controls, or 'what does CPCB say'. "
+            "Returns snippets with citation metadata — do not invent regulation text."
+        ),
         "parameters": {
-            "query": "string (required) — search query for policy content",
-            "city": "string (optional) — city name to narrow search",
-            "source_types": "list of strings (optional) — e.g. ['cpcb', 'who', 'moefcc']",
-            "top_k": "integer (optional, default 3) — number of results",
+            "query": "string (required) — e.g. 'construction dust control CPCB'",
+            "city": "string (optional)",
+            "source_types": "list of strings (optional) — e.g. ['cpcb', 'who']",
+            "top_k": "integer (optional, default 3)",
         },
     },
     "tool_get_weather_forecast": {
@@ -180,27 +206,41 @@ PLANNING_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         },
     },
     "tool_get_attribution": {
-        "description": "Get source attribution analysis for air pollution in a specific hexagon or the entire city grid. Use h3_cell for a known hexagon, lat+lon to convert coordinates, or no location for city-wide attribution. Returns traffic/industrial/construction/burning source fractions plus optional fusion PM2.5 estimate.",
+        "description": (
+            "Source-attribution breakdown (traffic / industrial / construction / burning) "
+            "for a hexagon, optionally with fused PM2.5. Prefer this when the user asks "
+            "'why is it polluted', 'what is the source', or 'is traffic or construction worse'. "
+            "Supports major-road corridor and peak-hour traffic weighting when available."
+        ),
         "parameters": {
-            "city": "string (optional, default 'bengaluru') — city name",
-            "h3_cell": "string (optional) — H3 cell ID for a specific hexagon",
-            "lat": "float (optional) — latitude to convert to H3 cell",
-            "lon": "float (optional) — longitude to convert to H3 cell",
-            "include_fusion": "boolean (optional, default true) — include fused PM2.5 estimate from nearby stations",
+            "city": "string (optional, default 'bengaluru')",
+            "h3_cell": "string (optional) — H3 cell ID",
+            "lat": "float (optional)",
+            "lon": "float (optional)",
+            "include_fusion": "boolean (optional, default true)",
         },
     },
     "tool_get_enforcement_priority": {
-        "description": "Compute enforcement priority rankings across hexagons in a city, combining exposure weight (vulnerable populations), attributable magnitude (enforceable pollution fraction), and actionability (how actionable each source category is).",
+        "description": (
+            "PRIMARY tool for Enforcement Intelligence. Returns ranked hexagons with "
+            "priority score, exposure, attributable magnitude, actionability, primary "
+            "source mix, and recommended actions. Use for 'what should we inspect', "
+            "'top enforcement targets', 'construction hotspots', or officer dispatch lists. "
+            "Prefer this over tool_get_inspection_priorities."
+        ),
         "parameters": {
-            "city": "string (optional, default 'bengaluru') — city name",
-            "top_k": "integer (optional, default 10) — number of top-ranked hexagons to return",
+            "city": "string (optional, default 'bengaluru')",
+            "top_k": "integer (optional, default 10)",
         },
     },
     "tool_get_city_extremes": {
-        "description": "Get the top N cleanest and top N most polluted hexagons in a city, ranked by fused PM2.5 estimate. Only hexagons with real station data coverage are included.",
+        "description": (
+            "Best/worst hexagons by fused PM2.5 for city maps or 'cleanest vs dirtiest' questions. "
+            "Only includes hexes with real station-influenced fusion coverage."
+        ),
         "parameters": {
-            "city": "string (optional, default 'bengaluru') — city name",
-            "n": "integer (optional, default 15) — number of best/worst hexagons to return",
+            "city": "string (optional, default 'bengaluru')",
+            "n": "integer (optional, default 15)",
         },
     },
     "tool_get_causal_explanation": {

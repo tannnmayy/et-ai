@@ -58,17 +58,31 @@ export interface PriorityHex {
   };
 }
 
+/** One step in the Copilot operational / deep-reasoning trace */
+export interface ReasoningStep {
+  id: string;
+  step: string;
+  completed: boolean;
+  type?: string;
+  meta?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
   sender: string;
-  reasoning?: {
-    id: string;
-    step: string;
-    completed: boolean;
-  }[];
+  reasoning?: ReasoningStep[];
+  /** Optional badges: KB used, LLM key fallback, etc. */
+  meta?: {
+    knowledgeBaseUsed?: boolean;
+    knowledgeBackend?: string | null;
+    llmProvider?: string | null;
+    geminiKeyIndex?: number | null;
+    fallbackUsed?: boolean;
+    llmMode?: string;
+  };
   attachments?: { name: string; type: string }[];
 }
 

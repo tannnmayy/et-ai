@@ -1,5 +1,14 @@
+"""LangGraph multi-step planning agent for Copilot deep-reasoning mode.
+
+Flow:
+  1. Retrieve knowledge-base context (Chroma → TF-IDF fallback)
+  2. Plan → execute tool → plan loop (max MAX_PLANNING_STEPS)
+  3. On LLM failure after multi-key retries → deterministic grounded fallback
+"""
+
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -20,35 +29,13 @@ logger = logging.getLogger(__name__)
 MAX_PLANNING_STEPS = 5
 
 
+def json_dumps_sort(obj: Any) -> str:
+    return json.dumps(obj, sort_keys=True, default=str)
+
+
 def _grounded_fallback(state: AgentState, audit: AuditTrail) -> None:
     """Keep Copilot useful when the hosted LLM is temporarily unreachable."""
     run_query_aware_fallback(state, audit, deep=True)
-    return
-
-    from backend.app.services.inspection_priority_service import get_inspection_priorities
-
-    priorities = get_inspection_priorities(state.city, top_k=max(3, state.top_k))
-    ranked = priorities.get("ranked_stations", [])
-    audit.record_tool_call("tool_get_inspection_priorities", {"city": state.city, "top_k": max(3, state.top_k)}, True)
-    state.structured_data = {"inspection_priorities": priorities}
-    if ranked:
-        highest = ranked[0]
-        others = ", ".join(
-            f"{item['station_name']} ({item['risk_category']})" for item in ranked[1:3]
-        )
-        state.response = (
-            f"The highest current monitoring priority is {highest['station_name']}. "
-            f"Its next PM2.5 estimate is {highest['predicted_pm25']:.0f} µg/m³, "
-            f"which is {highest['risk_category'].lower()} on the project’s scale. "
-            f"The recommended check is: {highest['recommended_inspection_focus']} "
-            + (f"Other areas to watch are {others}. " if others else "")
-            + "This is a monitoring-based priority, not proof of a source at a particular site."
-        )
-    else:
-        state.response = "Live station priorities are unavailable right now. Please try again shortly."
-    state.llm_status = "fallback"
-    state.fallback_used = True
-    state.warnings.append("The LLM was temporarily unavailable; this answer uses live deterministic monitoring data.")
 
 
 class PlanningGraphState(TypedDict, total=False):
@@ -62,40 +49,66 @@ class PlanningGraphState(TypedDict, total=False):
     warnings: list[str]
 
 
-def _build_planning_graph(llm: Any, audit: AuditTrail):
+def _build_planning_graph(llm: Any, audit: AuditTrail, knowledge_context: str = ""):
     """Create the LLM planner → tool executor → planner LangGraph loop."""
+
     def plan(graph_state: PlanningGraphState) -> PlanningGraphState:
         step = graph_state.get("step", 0) + 1
+        audit.record_reasoning("plan", f"Planning step {step}/{MAX_PLANNING_STEPS}")
         decision = llm.plan_next_step(
-            query=graph_state["query"], tool_schemas=PLANNING_TOOL_SCHEMAS,
-            tool_results_so_far=graph_state.get("results", {}), step_number=step,
+            query=graph_state["query"],
+            tool_schemas=PLANNING_TOOL_SCHEMAS,
+            tool_results_so_far=graph_state.get("results", {}),
+            step_number=step,
             max_steps=MAX_PLANNING_STEPS,
+            knowledge_context=knowledge_context,
+        )
+        # Capture which provider/key succeeded for the UI trace
+        audit.set_llm_meta(
+            getattr(llm, "last_provider", None),
+            getattr(llm, "last_gemini_key_index", None),
         )
         result: PlanningGraphState = {"step": step}
         if decision is None:
             result["finished"] = True
             result["answer"] = "I couldn't complete the reasoning step. Please try again."
+            audit.record_reasoning(
+                "llm_error",
+                "Planner returned no decision (provider failure or parse error)",
+            )
             return result
 
         action = decision.get("action")
         if action is None:
             result["finished"] = True
-            result["answer"] = "I couldn't parse the planning decision. Please try rephrasing your question."
+            result["answer"] = (
+                "I couldn't parse the planning decision. Please try rephrasing your question."
+            )
             result["warnings"] = ["The LLM returned a decision without an 'action' field."]
             return result
 
         if action == "final_answer" or step >= MAX_PLANNING_STEPS:
             result["finished"] = True
             result["decision"] = decision
-            result["answer"] = decision.get("text", "I gathered the available evidence but could not complete the plan.")
+            result["answer"] = decision.get(
+                "text",
+                "I gathered the available evidence but could not complete the plan.",
+            )
             if step >= MAX_PLANNING_STEPS:
-                result["warnings"] = [f"Dynamic planning step cap ({MAX_PLANNING_STEPS}) reached; response may be incomplete."]
+                result["warnings"] = [
+                    f"Dynamic planning step cap ({MAX_PLANNING_STEPS}) reached; response may be incomplete."
+                ]
+            audit.record_reasoning("final_answer", "Planner produced a final answer")
             return result
 
         if action != "call_tool":
             result["finished"] = True
-            result["answer"] = "I couldn't parse the planning decision. Please try rephrasing your question."
-            result["warnings"] = [f"The LLM returned an unrecognized planning action '{action}'."]
+            result["answer"] = (
+                "I couldn't parse the planning decision. Please try rephrasing your question."
+            )
+            result["warnings"] = [
+                f"The LLM returned an unrecognized planning action '{action}'."
+            ]
             return result
 
         result["decision"] = decision
@@ -113,14 +126,20 @@ def _build_planning_graph(llm: Any, audit: AuditTrail):
         results = dict(graph_state.get("results", {}))
         called = list(graph_state.get("called_pairs", []))
         if key in called or tool_name not in PLANNING_TOOL_REGISTRY:
-            results[f"step_{graph_state['step']}_{tool_name}"] = {"_tool_error": "Tool call was invalid or repeated."}
+            results[f"step_{graph_state['step']}_{tool_name}"] = {
+                "_tool_error": "Tool call was invalid or repeated."
+            }
             audit.record_tool_call(tool_name, arguments, False)
         else:
             try:
                 result = PLANNING_TOOL_REGISTRY[tool_name](**arguments)
             except Exception as exc:
                 result = {"_tool_error": str(exc), "_error_type": type(exc).__name__}
-            audit.record_tool_call(tool_name, arguments, "_tool_error" not in result and "error" not in result)
+            audit.record_tool_call(
+                tool_name,
+                arguments,
+                "_tool_error" not in result and "error" not in result,
+            )
             results[f"step_{graph_state['step']}_{tool_name}"] = result
             called.append(key)
         return {"results": results, "called_pairs": called}
@@ -129,7 +148,11 @@ def _build_planning_graph(llm: Any, audit: AuditTrail):
     graph.add_node("plan", plan)
     graph.add_node("execute_tool", execute_tool)
     graph.set_entry_point("plan")
-    graph.add_conditional_edges("plan", lambda s: END if s.get("finished") else "execute_tool", {END: END, "execute_tool": "execute_tool"})
+    graph.add_conditional_edges(
+        "plan",
+        lambda s: END if s.get("finished") else "execute_tool",
+        {END: END, "execute_tool": "execute_tool"},
+    )
     graph.add_edge("execute_tool", "plan")
     return graph.compile()
 
@@ -138,12 +161,49 @@ def run_dynamic_planning_agent(state: AgentState, audit: AuditTrail) -> None:
     query = state.user_query
     llm = get_llm_provider()
 
+    # Retrieve knowledge-base context before planning (Chroma → TF-IDF fallback)
+    knowledge_context = ""
+    try:
+        from backend.app.services.knowledge_rag_service import retrieve_knowledge
+
+        rag = retrieve_knowledge(query, top_k=4)
+        if rag.get("used"):
+            knowledge_context = rag.get("context_block") or ""
+            audit.set_knowledge(
+                True,
+                backend=rag.get("backend"),
+                chunk_count=len(rag.get("chunks") or []),
+            )
+            # Seed tool_results so the planner sees KB evidence without a free tool call
+            state.tool_results = {
+                **(state.tool_results or {}),
+                "knowledge_base": {
+                    "backend": rag.get("backend"),
+                    "chunks": rag.get("chunks"),
+                },
+            }
+        else:
+            audit.set_knowledge(False, backend="none", chunk_count=0)
+    except Exception as exc:
+        logger.warning("RAG retrieve failed in dynamic planner: %s", exc)
+        audit.set_knowledge(False, backend="error", chunk_count=0)
+
     if not llm.is_available:
+        audit.record_reasoning(
+            "llm_unavailable",
+            "No LLM providers configured — grounded fallback",
+        )
         _grounded_fallback(state, audit)
         return
 
-    graph = _build_planning_graph(llm, audit)
-    output = graph.invoke({"query": query, "results": {}, "called_pairs": [], "step": 0})
+    graph = _build_planning_graph(llm, audit, knowledge_context=knowledge_context)
+    initial_results = dict(state.tool_results or {})
+    output = graph.invoke({
+        "query": query,
+        "results": initial_results,
+        "called_pairs": [],
+        "step": 0,
+    })
     tool_results_so_far = output.get("results", {})
 
     # Propagate warnings from the graph (step cap, malformed decisions, etc.)
@@ -162,6 +222,10 @@ def run_dynamic_planning_agent(state: AgentState, audit: AuditTrail) -> None:
         state.structured_data = tool_results_so_far
         state.tool_results = tool_results_so_far
         state.llm_status = "hosted"
+        audit.set_llm_meta(
+            getattr(llm, "last_provider", None),
+            getattr(llm, "last_gemini_key_index", None),
+        )
         return
 
     # If the graph produced an answer alongside warnings (step cap / malformed
@@ -172,103 +236,12 @@ def run_dynamic_planning_agent(state: AgentState, audit: AuditTrail) -> None:
         state.tool_results = tool_results_so_far
         state.llm_status = "fallback"
         state.fallback_used = True
+        audit.set_fallback(True)
         return
 
     # A provider failure must never surface as a generic retry message.
-    _grounded_fallback(state, audit)
-    return
-
-    tool_results_so_far: dict[str, Any] = {}
-    called_pairs: list[tuple[str, str]] = []
-
-    for step in range(1, MAX_PLANNING_STEPS + 1):
-        decision = llm.plan_next_step(
-            query=query,
-            tool_schemas=PLANNING_TOOL_SCHEMAS,
-            tool_results_so_far=tool_results_so_far,
-            step_number=step,
-            max_steps=MAX_PLANNING_STEPS,
-        )
-
-        if decision is None:
-            if tool_results_so_far:
-                state.structured_data = tool_results_so_far
-                summary = llm.summarize(
-                    f"The user asked: '{query}'. The planning agent encountered an error. "
-                    f"Summarize the information gathered so far.",
-                    tool_results_so_far,
-                )
-                state.response = summary or (
-                    "An error occurred during dynamic planning. "
-                    "Here is what was gathered: " + str(tool_results_so_far)
-                )
-            else:
-                state.response = (
-                    "Dynamic planning was unavailable for this query. "
-                    "Please rephrase as a single specific question about air quality."
-                )
-                state.structured_data = {}
-            state.llm_status = "fallback"
-            audit.set_fallback(True)
-            state.fallback_used = True
-            return
-
-        if decision["action"] == "final_answer":
-            state.response = decision["text"]
-            state.structured_data = tool_results_so_far
-            state.llm_status = "hosted"
-            return
-
-        if decision["action"] == "call_tool":
-            tool_name = decision["tool"]
-            arguments = decision.get("arguments", {})
-
-            call_key = (tool_name, json_dumps_sort(arguments))
-            if call_key in called_pairs:
-                previous_result = tool_results_so_far.get(
-                    f"step_{called_pairs.index(call_key) + 1}_{tool_name}",
-                    "unknown",
-                )
-                tool_results_so_far[f"step_{step}_{tool_name}_repeat"] = {
-                    "_note": f"Already called with these arguments. Previous result was: {previous_result}"
-                }
-                audit.record_tool_call(tool_name, arguments, False)
-                continue
-
-            if tool_name not in PLANNING_TOOL_REGISTRY:
-                tool_results_so_far[f"step_{step}_{tool_name}"] = {
-                    "_tool_error": f"Unknown tool '{tool_name}'. Available tools: {list(PLANNING_TOOL_REGISTRY.keys())}",
-                    "_error_type": "UnknownToolError",
-                }
-                audit.record_tool_call(tool_name, arguments, False)
-                continue
-
-            tool_fn = PLANNING_TOOL_REGISTRY[tool_name]
-            try:
-                result = tool_fn(**arguments)
-            except Exception as e:
-                result = {"_tool_error": str(e), "_error_type": type(e).__name__}
-
-            is_success = "_tool_error" not in result and "error" not in result
-            audit.record_tool_call(tool_name, arguments, is_success)
-
-            tool_results_so_far[f"step_{step}_{tool_name}"] = result
-            state.tool_results = tool_results_so_far
-            called_pairs.append(call_key)
-
-    state.structured_data = tool_results_so_far
-    budget_exhausted_prompt = (
-        f"The user asked: '{query}'. The step budget of {MAX_PLANNING_STEPS} steps was reached "
-        f"without a final answer. Summarize what was gathered so far below."
+    audit.record_reasoning(
+        "fallback",
+        "Deep planning failed after multi-key LLM attempts — using deterministic grounded data",
     )
-    summary = llm.summarize(budget_exhausted_prompt, tool_results_so_far)
-    state.response = summary or "The planning step budget was reached. Here is what was gathered: " + str(tool_results_so_far)
-    state.warnings.append(f"Dynamic planning step cap ({MAX_PLANNING_STEPS}) reached; response may be incomplete.")
-    state.llm_status = "fallback"
-    audit.set_fallback(True)
-    state.fallback_used = True
-
-
-def json_dumps_sort(obj: Any) -> str:
-    import json
-    return json.dumps(obj, sort_keys=True, default=str)
+    _grounded_fallback(state, audit)

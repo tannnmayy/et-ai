@@ -31,5 +31,9 @@ ml/artifacts/multistation/*
 # Runtime caches
 backend/cache/
 
+# Copilot RAG persistent vector stores (rebuilt from knowledge_base/)
+knowledge_base/chroma/
+knowledge_base/vector_store/
+
 # secrets of the google earth services api json 
 backend/secrets/

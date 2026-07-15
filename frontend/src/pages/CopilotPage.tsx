@@ -1,7 +1,93 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSendMessage } from '../api/client';
-import { ChatMessage } from '../types';
-import { Bot, User, Send, Plus, Mic, ChevronRight, ChevronDown, CheckCircle, Factory, Shield, Map, Paperclip, AlertCircle } from 'lucide-react';
+import { ChatMessage, ReasoningStep } from '../types';
+import { Bot, Send, Mic, ChevronRight, ChevronDown, CheckCircle, XCircle, Shield, Map, Paperclip, AlertCircle, BookOpen, KeyRound, Route } from 'lucide-react';
+
+/** Build a rich reasoning list from audit_trail.reasoning_trace (+ tools fallback). */
+function buildReasoningSteps(data: any, deepMode: boolean): ReasoningStep[] {
+  const audit = data?.audit_trail ?? {};
+  const trace: any[] = Array.isArray(audit.reasoning_trace) ? audit.reasoning_trace : [];
+  const steps: ReasoningStep[] = [];
+
+  if (deepMode) {
+    steps.push({
+      id: 'mode-deep',
+      step: 'Deep Reasoning Mode enabled (LangGraph multi-step planner)',
+      completed: true,
+      type: 'mode',
+    });
+  }
+
+  if (trace.length > 0) {
+    trace.forEach((entry, index) => {
+      const type = String(entry.type || 'step');
+      let step = String(entry.detail || type);
+      if (type === 'tool' && entry.tool) {
+        const name = String(entry.tool).replace(/^tool_/, '').replace(/_/g, ' ');
+        step = entry.success
+          ? `Tool OK: ${name}`
+          : `Tool failed: ${name}`;
+      }
+      steps.push({
+        id: `trace-${index}`,
+        step,
+        completed: entry.success !== false,
+        type,
+        meta: entry.backend
+          ? `backend=${entry.backend}`
+          : entry.provider
+            ? `provider=${entry.provider}${entry.gemini_key_index ? ` key#${entry.gemini_key_index}` : ''}`
+            : undefined,
+      });
+    });
+  } else {
+    // Legacy: only tools_called present
+    (audit.tools_called ?? []).forEach((tool: any, index: number) => {
+      steps.push({
+        id: `tool-${index}`,
+        step: `${tool.success ? 'Retrieved' : 'Could not retrieve'} ${String(tool.tool || '').replace(/^tool_/, '').replace(/_/g, ' ')}`,
+        completed: Boolean(tool.success),
+        type: 'tool',
+      });
+    });
+  }
+
+  if (audit.knowledge_base_used) {
+    // Avoid duplicate if already in trace
+    if (!steps.some((s) => s.type === 'knowledge_base')) {
+      steps.push({
+        id: 'kb',
+        step: `Knowledge base used (${audit.knowledge_backend || 'rag'})`,
+        completed: true,
+        type: 'knowledge_base',
+      });
+    }
+  }
+
+  if (audit.fallback_used || data.fallback_used) {
+    if (!steps.some((s) => s.type === 'fallback')) {
+      steps.push({
+        id: 'fallback',
+        step: 'Fell back to deterministic / grounded agents',
+        completed: true,
+        type: 'fallback',
+      });
+    }
+  }
+
+  return steps;
+}
+
+function stepIcon(type?: string, completed?: boolean) {
+  if (type === 'knowledge_base') return <BookOpen size={12} className="text-emerald-400 shrink-0 mt-0.5" />;
+  if (type === 'llm' || type === 'plan') return <KeyRound size={12} className="text-amber-400 shrink-0 mt-0.5" />;
+  if (type === 'route' || type === 'agent') return <Route size={12} className="text-sky-400 shrink-0 mt-0.5" />;
+  if (type === 'fallback' || type === 'llm_error' || type === 'llm_unavailable') {
+    return <AlertCircle size={12} className="text-orange-400 shrink-0 mt-0.5" />;
+  }
+  if (completed === false) return <XCircle size={12} className="text-brand-red shrink-0 mt-0.5" />;
+  return <CheckCircle size={12} className="text-brand-green shrink-0 mt-0.5" />;
+}
 
 export default function CopilotPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -35,18 +121,33 @@ export default function CopilotPage() {
 
     try {
       const data = await sendMessageMutation.mutateAsync({ message: text, force_dynamic_planning: deepReasoning });
-      const reasoning = (data.audit_trail?.tools_called ?? []).map((tool: any, index: number) => ({
-        id: `${tool.tool}-${index}`,
-        step: `${tool.success ? 'Retrieved' : 'Could not retrieve'} ${tool.tool.replace(/^tool_/, '').replace(/_/g, ' ')}`,
-        completed: Boolean(tool.success),
-      }));
+      const audit = data.audit_trail ?? {};
+      const reasoning = buildReasoningSteps(data, deepReasoning);
+      const isDeep = deepReasoning || data.llm_mode === 'hosted' && data.selected_agent === 'dynamic_planning_agent';
+      // Auto-expand reasoning in Deep Mode so the user sees the trace
+      const botId = `bot-${Date.now()}`;
+      if (deepReasoning || reasoning.length > 0) {
+        setOpenReasoning(prev => ({ ...prev, [botId]: deepReasoning }));
+      }
       const assistantMsg: ChatMessage = {
-        id: `bot-${Date.now()}`,
+        id: botId,
         role: 'assistant',
         content: data.answer || data.text || JSON.stringify(data),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sender: data.llm_mode?.includes('deep') ? 'Copilot AI · Deep plan' : 'Copilot AI',
+        sender: isDeep
+          ? 'Copilot AI · Deep plan'
+          : data.fallback_used
+            ? 'Copilot AI · Grounded fallback'
+            : 'Copilot AI',
         reasoning,
+        meta: {
+          knowledgeBaseUsed: Boolean(audit.knowledge_base_used),
+          knowledgeBackend: audit.knowledge_backend ?? null,
+          llmProvider: audit.llm_provider_used ?? null,
+          geminiKeyIndex: audit.gemini_key_index ?? null,
+          fallbackUsed: Boolean(data.fallback_used || audit.fallback_used),
+          llmMode: data.llm_mode,
+        },
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
@@ -111,14 +212,32 @@ export default function CopilotPage() {
                   </div>
                 </div>
 
-                {/* Subtext info */}
-                <span className="text-[10px] font-mono uppercase tracking-wider text-apple-secondary px-2 select-none">
-                  {msg.timestamp} · {msg.sender}
-                </span>
+                {/* Subtext info + status badges */}
+                <div className="flex flex-wrap items-center gap-1.5 px-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-apple-secondary select-none">
+                    {msg.timestamp} · {msg.sender}
+                  </span>
+                  {!isUser && msg.meta?.knowledgeBaseUsed && (
+                    <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700/40 text-emerald-300">
+                      KB · {msg.meta.knowledgeBackend || 'rag'}
+                    </span>
+                  )}
+                  {!isUser && msg.meta?.fallbackUsed && (
+                    <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-900/40 border border-orange-700/40 text-orange-300">
+                      Fallback
+                    </span>
+                  )}
+                  {!isUser && msg.meta?.llmProvider && msg.meta.llmProvider !== 'cache' && (
+                    <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-700/30 text-amber-300">
+                      {msg.meta.llmProvider}
+                      {msg.meta.geminiKeyIndex ? ` #${msg.meta.geminiKeyIndex}` : ''}
+                    </span>
+                  )}
+                </div>
 
-                {/* Optional Expandable Tool Reasoning log */}
-                {!isUser && msg.reasoning && (
-                  <div className="ml-10 w-full max-w-md mt-1">
+                {/* Expandable operational / deep-reasoning trace */}
+                {!isUser && msg.reasoning && msg.reasoning.length > 0 && (
+                  <div className="ml-10 w-full max-w-lg mt-1">
                     <div className="bg-apple-card/60 border border-apple-border/50 rounded-2xl overflow-hidden">
                       <button
                         type="button"
@@ -127,7 +246,9 @@ export default function CopilotPage() {
                       >
                         <span className="flex items-center gap-2">
                           {isReasoningOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                          Show operational trace
+                          {msg.meta?.llmMode === 'hosted' && msg.sender?.includes('Deep')
+                            ? 'Show deep reasoning trace'
+                            : 'Show operational trace'}
                         </span>
                         <span className="text-[10px] font-mono text-apple-secondary/60">
                           {msg.reasoning.length} STEPS
@@ -135,11 +256,18 @@ export default function CopilotPage() {
                       </button>
 
                       {isReasoningOpen && (
-                        <div className="px-4 pb-3 pt-1 border-t border-apple-border/20 flex flex-col gap-2 font-mono text-[10px] text-apple-secondary leading-normal">
+                        <div className="px-4 pb-3 pt-1 border-t border-apple-border/20 flex flex-col gap-2 font-mono text-[10px] text-apple-secondary leading-normal max-h-64 overflow-y-auto">
                           {msg.reasoning.map((step) => (
                             <div key={step.id} className="flex items-start gap-2">
-                              <CheckCircle size={12} className="text-brand-green shrink-0 mt-0.5" />
-                              <span className="text-white">{step.step}</span>
+                              {stepIcon(step.type, step.completed)}
+                              <div className="flex flex-col gap-0.5">
+                                <span className={step.completed === false ? 'text-orange-200' : 'text-white'}>
+                                  {step.step}
+                                </span>
+                                {step.meta && (
+                                  <span className="text-apple-secondary/70">{step.meta}</span>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>

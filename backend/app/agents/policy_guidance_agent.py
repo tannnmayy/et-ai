@@ -31,8 +31,18 @@ def run_policy_guidance_agent(state: AgentState, audit: AuditTrail) -> None:
         return
 
     results = guidance_data.get("results", [])
-    retrieval_mode = guidance_data.get("retrieval_mode", "unknown")
+    retrieval_mode = (
+        guidance_data.get("retrieval_backend")
+        or guidance_data.get("retrieval_mode")
+        or "unknown"
+    )
     no_authoritative = guidance_data.get("no_authoritative_result", False)
+
+    # Record knowledge-base usage for the UI reasoning trace
+    if guidance_data.get("knowledge_base_used") or results:
+        audit.set_knowledge(True, backend=str(retrieval_mode), chunk_count=len(results))
+    else:
+        audit.set_knowledge(False, backend=str(retrieval_mode), chunk_count=0)
 
     if no_authoritative or not results:
         answer = (
@@ -45,18 +55,25 @@ def run_policy_guidance_agent(state: AgentState, audit: AuditTrail) -> None:
     else:
         lines = [f"Found {len(results)} relevant passage(s) from the guidance corpus:"]
         disclaimers: set[str] = set()
-        for r in results:
-            label = r.get("citation_label", f"[{r['rank']}]")
+        for i, r in enumerate(results, 1):
+            label = r.get("citation_label") or f"[{i}]"
             title = r.get("title", "Untitled")
             org = r.get("organization", "")
-            excerpt = r.get("excerpt", "")[:200]
+            # Chroma RAG returns "snippet"; TF-IDF path returns "excerpt"
+            excerpt = (r.get("excerpt") or r.get("snippet") or r.get("text") or "")[:240]
             page = r.get("page_number")
             guardrail_note = r.get("guardrail_note", "")
+            score = r.get("score")
             lines.append(f"\n{label} {title}")
             if org:
                 lines.append(f"   Source: {org}")
             if page is not None:
                 lines.append(f"   Page: {page}")
+            if score is not None:
+                try:
+                    lines.append(f"   Relevance: {float(score):.2f}")
+                except (TypeError, ValueError):
+                    pass
             lines.append(f"   {excerpt}")
             if guardrail_note:
                 lines.append(f"   Note: {guardrail_note}")
@@ -67,7 +84,10 @@ def run_policy_guidance_agent(state: AgentState, audit: AuditTrail) -> None:
             if r.get("source_guardrail") == "investigation_hypothesis_only":
                 disclaimers.add(SOURCE_NOT_CAUSAL_NOTE)
         lines.append(f"\nRetrieval mode: {retrieval_mode}")
-        lines.append("\nRetrieved passages support general guidance and do not prove station-level pollution causes.")
+        lines.append(
+            "\nRetrieved passages support general guidance and do not prove "
+            "station-level pollution causes."
+        )
         for d in sorted(disclaimers):
             lines.append(f"\n{d}")
         answer = "\n".join(lines)

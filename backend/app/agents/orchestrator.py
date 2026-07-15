@@ -31,21 +31,34 @@ logger = logging.getLogger(__name__)
 
 
 _TRIGGER_GROUPS: list[tuple[str, list[str]]] = [
-    ("why_explain", ["why", "explain", "evidence", "how is", "forecast", "change"]),
+    ("why_explain", ["why", "explain", "evidence", "how is", "forecast", "change", "source of", "pollut"]),
     ("confidence", ["confidence", "reliable", "trust", "reliability"]),
-    ("advisory", ["advisory", "guidance", "health", "breathe", "should i", "safe"]),
-    ("inspection", ["inspection", "priority", "enforce", "plan", "rank"]),
+    ("advisory", ["advisory", "guidance", "health", "breathe", "should i", "safe", "mask"]),
+    ("inspection", [
+        "inspection", "priority", "enforce", "plan", "rank", "dispatch", "hotspot",
+        "construction dust", "site inspect", "officer", "actionable",
+    ]),
     ("spatial_intel", ["spatial intelligence", "intelligence around", "map-ready", "station intelligence"]),
-    ("spatial_context", ["spatial", "geospatial", "road density", "land use", "land-use", "industrial context", "construction near", "facility near", "mapped", "nearest road"]),
+    ("spatial_context", ["spatial", "geospatial", "road density", "land use", "land-use", "industrial context", "construction near", "facility near", "mapped", "nearest road", "corridor"]),
     ("briefing", ["briefing", "summary", "overview", "situation", "status"]),
     ("travel", ["travel", "go outside", "go out", "bike", "two-wheeler", "two wheeler", "commute", "outing", "ride"]),
     ("weather", ["weather", "rain", "temperature", "humidity", "windy", "wind speed", "sunny", "storm", "thunder"]),
     ("neighbourhood", ["compare", "neighbourhood", "neighborhood", "suitability", "where to live", "best area", "candidate"]),
-    ("policy", ["policy", "official source", "official guidance", "cpcb says", "who says", "guidance support", "what does", "show the policy"]),
+    ("policy", [
+        "policy", "official source", "official guidance", "cpcb", "kspcb", "who says",
+        "guidance support", "what does", "show the policy", "regulation", "guideline",
+        "emission norm", "dust control", "legal", "gazette",
+    ]),
 ]
 
 
 def _is_compound_query(query: str) -> bool:
+    """True when the question spans multiple intent families (good for LangGraph).
+
+    Pure policy / pure enforcement questions stay on the fast deterministic path
+    even if a secondary keyword group also matches (e.g. 'construction dust'
+    appears in both policy and inspection triggers).
+    """
     q = query.lower().strip()
     if not q:
         return False
@@ -53,7 +66,30 @@ def _is_compound_query(query: str) -> bool:
     for group_name, triggers in _TRIGGER_GROUPS:
         if any(w in q for w in triggers):
             matched_groups.add(group_name)
-    return len(matched_groups) >= 2
+
+    # Dominant single-intent overrides (avoid over-triggering deep planning)
+    policy_primary = any(
+        w in q for w in ("cpcb", "kspcb", "policy", "regulation", "guideline", "emission norm", "legal")
+    )
+    if policy_primary and matched_groups <= {"policy", "inspection", "why_explain"}:
+        # "What does CPCB say about construction dust" → policy agent, not LangGraph
+        return False
+    if "enforcement" in matched_groups or "inspection" in matched_groups:
+        if matched_groups <= {"inspection", "why_explain", "spatial_context"} and not policy_primary:
+            # Pure dispatch / hotspot question → enforcement agent
+            if not any(g in matched_groups for g in ("travel", "weather", "neighbourhood", "advisory")):
+                # Still compound if user also asked for weather/travel etc.
+                if len(matched_groups) < 2:
+                    return False
+
+    # Multi-clause / multi-intent questions
+    if len(matched_groups) >= 2:
+        return True
+    # Long multi-part questions benefit from planning even with one intent family
+    clause_markers = q.count(" and ") + q.count(" then ") + q.count(" also ") + q.count("?")
+    if len(q) > 140 and clause_markers >= 2 and matched_groups:
+        return True
+    return False
 
 
 def _detect_intent(
@@ -118,8 +154,18 @@ def _detect_intent(
     if any(w in q for w in ["compare", "neighbourhood", "neighborhood", "suitability", "where to live", "best area", "candidate"]):
         return Intent.neighbourhood_comparison
 
-    if any(w in q for w in ["policy", "official source", "official guidance", "cpcb says", "who says", "guidance support", "what does", "show the policy"]):
+    if any(w in q for w in [
+        "policy", "official source", "official guidance", "cpcb", "kspcb", "who says",
+        "guidance support", "what does", "show the policy", "regulation", "guideline",
+        "emission norm", "dust control rule", "legal requirement",
+    ]):
         return Intent.policy_guidance
+
+    if any(w in q for w in [
+        "enforcement", "dispatch", "hotspot", "inspect construction", "priority hex",
+        "where should we inspect", "actionable source",
+    ]):
+        return Intent.inspection_plan
 
     if has_city_query:
         return Intent.city_briefing
@@ -350,7 +396,7 @@ def run_orchestrator(
             if intent == Intent.station_explanation:
                 state.response = render_station_explanation(state.structured_data or {})
             elif intent == Intent.station_confidence:
-                state.response = render_confidence_summary(state.structured_data or {})
+                state.response = _render_confidence_summary(state.structured_data or {})
             elif intent == Intent.inspection_plan:
                 state.response = render_inspection_plan(state.structured_data or {})
             elif intent == Intent.citizen_guidance:
@@ -366,10 +412,47 @@ def run_orchestrator(
             elif intent == Intent.neighbourhood_comparison:
                 state.response = render_neighbourhood_comparison(state.structured_data or {})
 
+    # Enrich deterministic answers with knowledge-base context when useful
+    # (skip if the agent already populated KB, e.g. policy_guidance_agent)
+    already_has_kb = bool(
+        audit.knowledge_base_used
+        or (state.structured_data or {}).get("knowledge_base")
+        or (state.structured_data or {}).get("knowledge_base_used")
+        or (state.structured_data or {}).get("retrieval_backend")
+    )
+    policy_like = any(
+        w in query.lower()
+        for w in ("cpcb", "kspcb", "policy", "guideline", "dust control", "regulation", "who ", "standard")
+    )
+    if policy_like and intent != Intent.dynamic_planning and not already_has_kb:
+        try:
+            from backend.app.services.knowledge_rag_service import retrieve_knowledge
+
+            rag = retrieve_knowledge(query, top_k=3)
+            if rag.get("used"):
+                audit.set_knowledge(True, backend=rag.get("backend"), chunk_count=len(rag.get("chunks") or []))
+                state.structured_data = {
+                    **(state.structured_data or {}),
+                    "knowledge_base": {
+                        "backend": rag.get("backend"),
+                        "chunks": rag.get("chunks"),
+                    },
+                }
+        except Exception as exc:
+            logger.debug("KB enrich skipped: %s", exc)
+
     if llm.is_available and not response_warnings and intent != Intent.dynamic_planning:
+        kb_note = ""
+        if state.structured_data and state.structured_data.get("knowledge_base"):
+            kb_note = " Prefer official knowledge-base snippets when citing rules."
         llm_response = llm.summarize(
-            f"Create a concise natural language response for: '{query}'",
+            f"Create a concise natural language response for: '{query}'.{kb_note} "
+            f"Do not invent regulations or numbers not present in the data.",
             state.structured_data or {},
+        )
+        audit.set_llm_meta(
+            getattr(llm, "last_provider", None),
+            getattr(llm, "last_gemini_key_index", None),
         )
         if llm_response:
             state.response = llm_response
@@ -378,9 +461,18 @@ def run_orchestrator(
         else:
             llm_mode = "deterministic"
             state.llm_status = "deterministic"
+            audit.record_reasoning(
+                "fallback",
+                "LLM summarization failed after multi-key attempts — using deterministic text",
+            )
+            fallback_used = True
     elif intent == Intent.dynamic_planning:
         llm_mode = state.llm_status
         fallback_used = state.fallback_used
+        audit.set_llm_meta(
+            getattr(llm, "last_provider", None),
+            getattr(llm, "last_gemini_key_index", None),
+        )
     else:
         state.llm_status = llm_mode
 

@@ -33,6 +33,27 @@ from backend.app.routers.copilot import (
 )
 from backend.app.schemas.copilot import CopilotQueryRequest, CopilotResponse
 
+# LLM env vars that enable live provider calls (must be cleared for fast unit tests)
+_LLM_ENV_KEYS = (
+    "AQI_SENTINEL_GEMINI_API_KEY",
+    "AQI_SENTINEL_GEMINI_API_KEY_2",
+    "AQI_SENTINEL_GEMINI_API_KEY_3",
+    "AQI_SENTINEL_OPENROUTER_API_KEY",
+    "AQI_SENTINEL_LLM_API_KEY",
+    "GOOGLE_API_KEY",
+)
+
+
+@pytest.fixture(autouse=True)
+def _disable_live_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unit tests deterministic and fast: no multi-key Gemini retries."""
+    for key in _LLM_ENV_KEYS:
+        # Empty string (not delenv) so load_dotenv(override=False) cannot re-inject .env keys.
+        monkeypatch.setenv(key, "")
+    monkeypatch.setenv("AQI_SENTINEL_LLM_MAX_RETRIES", "1")
+    monkeypatch.setenv("AQI_SENTINEL_LLM_BACKOFF_BASE", "0")
+
+
 # =========================================================================
 # Intent routing tests
 # =========================================================================
@@ -196,8 +217,7 @@ class TestGuardrails:
 
 
 class TestLLMFallback:
-    def test_no_api_key_uses_deterministic_mode(self, monkeypatch) -> None:
-        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
+    def test_no_api_key_uses_deterministic_mode(self) -> None:
         llm = LLMProvider()
         assert llm.is_available is False
         result = run_orchestrator(
@@ -206,11 +226,21 @@ class TestLLMFallback:
         assert result["llm_mode"] == "deterministic"
         assert result["fallback_used"] is False
 
-    def test_llm_summarize_returns_none_without_key(self, monkeypatch) -> None:
-        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
+    def test_llm_summarize_returns_none_without_key(self) -> None:
         llm = LLMProvider()
         result = llm.summarize("test prompt", {"key": "value"})
         assert result is None
+
+    def test_multi_key_env_names_are_loaded_when_present(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AQI_SENTINEL_GEMINI_API_KEY", "test-key-one")
+        monkeypatch.setenv("AQI_SENTINEL_GEMINI_API_KEY_2", "test-key-two")
+        monkeypatch.setenv("AQI_SENTINEL_GEMINI_API_KEY_3", "test-key-three")
+        monkeypatch.setenv("AQI_SENTINEL_OPENROUTER_API_KEY", "")
+        monkeypatch.setenv("AQI_SENTINEL_LLM_API_KEY", "")
+        llm = LLMProvider()
+        assert llm.is_available is True
+        assert len(llm._gemini_keys) == 3
+        assert llm._gemini_keys[0] == "test-key-one"
 
 
 # =========================================================================
@@ -219,8 +249,7 @@ class TestLLMFallback:
 
 
 class TestCopilotAPI:
-    def test_post_copilot_query(self, monkeypatch) -> None:
-        monkeypatch.delenv("AQI_SENTINEL_LLM_API_KEY", raising=False)
+    def test_post_copilot_query(self) -> None:
         req = CopilotQueryRequest(
             query="Why is Peenya forecast to worsen?",
             city="bengaluru",

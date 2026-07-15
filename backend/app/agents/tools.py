@@ -59,9 +59,38 @@ def tool_search_policy_guidance(
     source_types: list[str] | None = None,
     top_k: int = 3,
 ) -> dict[str, Any]:
+    """Search policy KB — prefers Chroma RAG, falls back to TF-IDF index."""
+    try:
+        from backend.app.services.knowledge_rag_service import retrieve_knowledge
+
+        rag = retrieve_knowledge(query, top_k=top_k)
+        if rag.get("used") and rag.get("chunks"):
+            return {
+                "query": query,
+                "retrieval_backend": rag.get("backend"),
+                "results": [
+                    {
+                        "title": c.get("title"),
+                        "snippet": c.get("text"),
+                        "score": c.get("score"),
+                        "organization": c.get("organization"),
+                        "source_type": c.get("source_type"),
+                        "allowed_for_citation": c.get("allowed_for_citation"),
+                    }
+                    for c in rag["chunks"]
+                ],
+                "context_block": rag.get("context_block"),
+                "knowledge_base_used": True,
+            }
+    except Exception:
+        pass
+
     from backend.app.services.policy_guidance_service import search_policy_guidance
     try:
-        return search_policy_guidance(query, city=city, source_types=source_types, top_k=top_k)
+        result = search_policy_guidance(query, city=city, source_types=source_types, top_k=top_k)
+        result["knowledge_base_used"] = bool(result.get("results"))
+        result["retrieval_backend"] = result.get("retrieval_backend") or "tfidf"
+        return result
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 
