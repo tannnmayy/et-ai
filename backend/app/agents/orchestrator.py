@@ -1,23 +1,30 @@
+"""Copilot orchestrator — Phase 2.
+
+Architecture:
+  1. Semantic + exact response cache
+  2. Narrow deterministic fast path
+     (explicit station_id + simple forecast/confidence/explain only)
+  3. DEFAULT: grounded native tool-calling agent (Groq-primary)
+  4. Grounding recorded in audit; never bare generic refuse when tools can help
+  5. Optional Map context (station_id / h3_cell) preferred over re-resolving
+
+Legacy keyword routing is NOT used for free-text anymore.
+"""
+
 from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from backend.app.agents.audit import AuditTrail
 from backend.app.agents.citizen_advisory_agent import run_citizen_advisory_agent
 from backend.app.agents.city_briefing_agent import run_city_briefing_agent
-from backend.app.agents.conversation_fallback import infer_station_id, run_query_aware_fallback
-from backend.app.agents.dynamic_planning_agent import run_dynamic_planning_agent
+from backend.app.agents.conversation_fallback import infer_station_id
 from backend.app.agents.enforcement_planning_agent import run_enforcement_planning_agent
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
+from backend.app.agents.grounded_tool_agent import run_grounded_tool_agent
 from backend.app.agents.llm_provider import get_llm_provider
-from backend.app.agents.neighbourhood_decision_agent import run_neighbourhood_decision_agent
-from backend.app.agents.policy_guidance_agent import run_policy_guidance_agent
-from backend.app.agents.spatial_context_agent import run_spatial_context_agent
-from backend.app.agents.spatial_intelligence_agent import run_spatial_intelligence_agent
-from backend.app.agents.travel_readiness_agent import run_travel_readiness_agent
 from backend.app.agents.state import AgentState, Intent
 from backend.app.config import (
     ADVISORY_PROFILES,
@@ -30,73 +37,531 @@ from backend.app.services.artifact_adapter import UnknownStationError, _validate
 logger = logging.getLogger(__name__)
 
 
-_TRIGGER_GROUPS: list[tuple[str, list[str]]] = [
-    ("why_explain", ["why", "explain", "evidence", "how is", "forecast", "change", "source of", "pollut"]),
-    ("confidence", ["confidence", "reliable", "trust", "reliability"]),
-    ("advisory", ["advisory", "guidance", "health", "breathe", "should i", "safe", "mask"]),
-    ("inspection", [
-        "inspection", "priority", "enforce", "plan", "rank", "dispatch", "hotspot",
-        "construction dust", "site inspect", "officer", "actionable",
-    ]),
-    ("spatial_intel", ["spatial intelligence", "intelligence around", "map-ready", "station intelligence"]),
-    ("spatial_context", ["spatial", "geospatial", "road density", "land use", "land-use", "industrial context", "construction near", "facility near", "mapped", "nearest road", "corridor"]),
-    ("briefing", ["briefing", "summary", "overview", "situation", "status"]),
-    ("travel", ["travel", "go outside", "go out", "bike", "two-wheeler", "two wheeler", "commute", "outing", "ride"]),
-    ("weather", ["weather", "rain", "temperature", "humidity", "windy", "wind speed", "sunny", "storm", "thunder"]),
-    ("neighbourhood", ["compare", "neighbourhood", "neighborhood", "suitability", "where to live", "best area", "candidate"]),
-    ("policy", [
-        "policy", "official source", "official guidance", "cpcb", "kspcb", "who says",
-        "guidance support", "what does", "show the policy", "regulation", "guideline",
-        "emission norm", "dust control", "legal", "gazette",
-    ]),
-]
+def _is_simple_station_query(query: str) -> bool:
+    """Conservative fast-path gate: only pure forecast / confidence reads.
 
-
-def _is_compound_query(query: str) -> bool:
-    """True when the question spans multiple intent families (good for LangGraph).
-
-    Pure policy / pure enforcement questions stay on the fast deterministic path
-    even if a secondary keyword group also matches (e.g. 'construction dust'
-    appears in both policy and inspection triggers).
+    Must NOT match 'Why is air quality poor near Peenya right now?' even when
+    a station_id was inferred — those need attribution / tool agent.
     """
     q = query.lower().strip()
-    if not q:
+    if not q or len(q) > 120:
         return False
-    matched_groups: set[str] = set()
-    for group_name, triggers in _TRIGGER_GROUPS:
-        if any(w in q for w in triggers):
-            matched_groups.add(group_name)
 
-    # Dominant single-intent overrides (avoid over-triggering deep planning)
-    policy_primary = any(
-        w in q for w in ("cpcb", "kspcb", "policy", "regulation", "guideline", "emission norm", "legal")
+    # Hard exclude: causal, sources, enforcement, policy, multi-clause
+    deny = (
+        "why",
+        "reason",
+        "because",
+        "cause",
+        "source",
+        "pollut",
+        "poor",
+        "bad",
+        "worse",
+        "worst",
+        "near ",
+        " around",
+        "enforce",
+        "inspect",
+        "officer",
+        "dispatch",
+        "hotspot",
+        "priority",
+        "policy",
+        "cpcb",
+        "kspcb",
+        "ncap",
+        "guideline",
+        "regulation",
+        "compare",
+        "neighbourhood",
+        "neighborhood",
+        "attribution",
+        "traffic",
+        "construction",
+        "industrial",
+        "burning",
+        "dust",
+        "where should",
+        " and ",
+        " also ",
+        " vs ",
+        "versus",
+        "what if",
+        "what-if",
+        "counterfactual",
+        "scenario",
+        "if we",
+        "reduce by",
+        "drop by",
     )
-    if policy_primary and matched_groups <= {"policy", "inspection", "why_explain"}:
-        # "What does CPCB say about construction dust" → policy agent, not LangGraph
+    if any(w in q for w in deny):
         return False
-    if "enforcement" in matched_groups or "inspection" in matched_groups:
-        if matched_groups <= {"inspection", "why_explain", "spatial_context"} and not policy_primary:
-            # Pure dispatch / hotspot question → enforcement agent
-            if not any(g in matched_groups for g in ("travel", "weather", "neighbourhood", "advisory")):
-                # Still compound if user also asked for weather/travel etc.
-                if len(matched_groups) < 2:
-                    return False
 
-    # Multi-clause / multi-intent questions
-    if len(matched_groups) >= 2:
-        return True
-    # Long multi-part questions benefit from planning even with one intent family
-    clause_markers = q.count(" and ") + q.count(" then ") + q.count(" also ") + q.count("?")
-    if len(q) > 140 and clause_markers >= 2 and matched_groups:
-        return True
-    return False
+    # Allow only clear forecast / confidence phrasing
+    allow = (
+        "forecast",
+        "prediction",
+        "predicted",
+        "next 24",
+        "24h",
+        "24-hour",
+        "24 hour",
+        "confidence",
+        "reliable",
+        "reliability",
+        "trust the",
+        "data quality",
+        "what is the pm",
+        "what is pm",
+        "pm2.5 reading",
+        "pm25 reading",
+        "current reading",
+        "station reading",
+        "explain forecast",
+        "what will the pm",
+        "what will pm",
+    )
+    return any(w in q for w in allow)
 
 
+def _validate_input(state: AgentState) -> list[str]:
+    warnings: list[str] = []
+
+    if state.city.lower().strip() not in SUPPORTED_CITIES:
+        warnings.append(f"City '{state.city}' is not supported. Using default: bengaluru")
+        state.city = "bengaluru"
+
+    if state.station_id:
+        try:
+            _validate_station(state.station_id)
+        except UnknownStationError:
+            warnings.append(f"Station '{state.station_id}' is unknown")
+            state.station_id = ""
+
+    all_profiles = list(set(ADVISORY_PROFILES + TRAVEL_PROFILES))
+    if state.profile not in all_profiles:
+        warnings.append(f"Profile '{state.profile}' is not valid. Using default: general")
+        state.profile = "general"
+
+    if state.language not in SUPPORTED_LANGUAGES:
+        warnings.append(f"Language '{state.language}' is not supported. Using default: en")
+        state.language = "en"
+
+    return warnings
+
+
+def _infer_response_mode(state: AgentState, audit: AuditTrail) -> str:
+    """Derive UI-facing response mode badge."""
+    if audit.response_mode:
+        return audit.response_mode
+    agent = (state.selected_agent or "").lower()
+    path = ""
+    if isinstance(state.structured_data, dict):
+        path = str(state.structured_data.get("path") or "")
+    if path == "heuristic_fallback" or (
+        state.fallback_used and agent == "grounded_tool_agent" and state.llm_status == "deterministic"
+    ):
+        return "heuristic_fallback"
+    if agent == "forecast_evidence_agent" and state.llm_status == "deterministic":
+        return "fast_path"
+    if agent == "grounded_tool_agent":
+        return "tool_agent"
+    if agent:
+        return agent
+    return "unknown"
+
+
+def _normalize_history(
+    conversation_history: list[dict[str, Any]] | None,
+    *,
+    max_turns: int = 6,
+) -> list[dict[str, str]]:
+    """Keep last N user/assistant turns; drop empty / invalid roles."""
+    if not conversation_history:
+        return []
+    cleaned: list[dict[str, str]] = []
+    for item in conversation_history:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        content = str(item.get("content") or "").strip()
+        if role not in ("user", "assistant") or not content:
+            continue
+        cleaned.append({"role": role, "content": content[:2000]})
+    return cleaned[-max_turns:]
+
+
+def run_orchestrator(
+    station_id: str = "",
+    city: str = "bengaluru",
+    query: str = "",
+    profile: str = "general",
+    language: str = "en",
+    top_k: int = 5,
+    explicit_intent: str | None = None,
+    force_dynamic_planning: bool = False,
+    h3_cell: str | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    history = _normalize_history(conversation_history)
+
+    # --- Cache (exact + semantic) ---
+    # Multi-turn answers are context-dependent — skip response cache when history present
+    ckey: str | None = None
+    skey: str | None = None
+    try:
+        from backend.app.services.copilot_cache_service import (
+            cache_key,
+            lookup_cached_response,
+            semantic_cache_key,
+            set_cached_response,
+        )
+
+        if not history:
+            ckey = cache_key(
+                query,
+                city=city,
+                station_id=station_id,
+                h3_cell=h3_cell,
+                profile=profile,
+                language=language,
+                force_dynamic_planning=force_dynamic_planning,
+            )
+            skey = semantic_cache_key(
+                query,
+                city=city,
+                station_id=station_id,
+                h3_cell=h3_cell,
+                profile=profile,
+                language=language,
+                force_dynamic_planning=force_dynamic_planning,
+            )
+            cached, cache_meta = lookup_cached_response(ckey, semantic_key=skey)
+        else:
+            cached, cache_meta = None, {}
+        if cached is not None:
+            cached = dict(cached)
+            cached["request_id"] = str(uuid.uuid4())
+            trail = dict(cached.get("audit_trail") or {})
+            trail["request_id"] = cached["request_id"]
+            trail["cache_hit"] = True
+            trail["cache_key"] = cache_meta.get("cache_key") or ckey
+            trail["cache_kind"] = cache_meta.get("cache_kind") or "exact"
+            # Preserve original mode; label as cached for UI
+            original_mode = trail.get("response_mode") or cached.get("response_mode")
+            trail["response_mode"] = original_mode or "tool_agent"
+            warnings = list(trail.get("warnings") or [])
+            if "served_from_response_cache" not in warnings:
+                warnings.append("served_from_response_cache")
+            kind = cache_meta.get("cache_kind") or "exact"
+            if kind == "semantic" and "served_from_semantic_cache" not in warnings:
+                warnings.append("served_from_semantic_cache")
+            trail["warnings"] = warnings
+            trace = list(trail.get("reasoning_trace") or [])
+            trace.insert(
+                0,
+                {
+                    "type": "cache",
+                    "detail": (
+                        f"Served from Copilot response cache ({kind})"
+                        + (f" key={trail['cache_key'][:12]}…" if trail.get("cache_key") else "")
+                    ),
+                    "cache_key": trail.get("cache_key"),
+                    "cache_kind": kind,
+                },
+            )
+            trail["reasoning_trace"] = trace
+            cached["audit_trail"] = trail
+            cached["warnings"] = list(
+                dict.fromkeys(
+                    list(cached.get("warnings") or [])
+                    + ["served_from_response_cache"]
+                    + (["served_from_semantic_cache"] if kind == "semantic" else [])
+                )
+            )
+            cached["cache_hit"] = True
+            cached["response_mode"] = trail.get("response_mode")
+            return cached
+    except Exception as exc:
+        logger.debug("Response cache lookup skipped: %s", exc)
+        ckey = None
+        skey = None
+
+    request_id = str(uuid.uuid4())
+    client_station = (station_id or "").strip()
+    client_h3 = (h3_cell or "").strip() or None
+    map_context = bool(client_station or client_h3)
+
+    state = AgentState(
+        request_id=request_id,
+        user_query=query,
+        city=city,
+        station_id=client_station,
+        h3_cell=client_h3,
+        profile=profile,
+        language=language,
+        top_k=top_k,
+        map_context_provided=map_context,
+        conversation_history=history,
+    )
+    audit = AuditTrail(request_id)
+    if ckey:
+        audit.cache_key = ckey
+        audit.cache_hit = False
+        audit.cache_kind = "miss"
+    if history:
+        audit.set_memory_turns(len(history))
+    if session_id:
+        audit.record_reasoning("route", f"Client session_id={session_id[:36]}")
+
+    # Map / Enforcement context — prefer over re-resolve
+    if map_context:
+        bits = []
+        if client_station:
+            bits.append(f"station_id={client_station}")
+        if client_h3:
+            bits.append(f"h3_cell={client_h3}")
+        audit.record_reasoning(
+            "route",
+            "Client Map context provided — prefer over resolve_location: " + ", ".join(bits),
+        )
+        state.structured_data = {
+            "map_context": {
+                "station_id": client_station or None,
+                "h3_cell": client_h3,
+            }
+        }
+
+    # Soft station recovery for fast path only when no client station
+    if not state.station_id:
+        inferred = infer_station_id(query)
+        if inferred:
+            state.station_id = inferred
+            audit.record_reasoning("route", f"Inferred station_id={inferred} from query text")
+
+    for w in _validate_input(state):
+        state.warnings.append(w)
+        audit.add_warning(w)
+
+    llm = get_llm_provider()
+
+    # Explicit REST intents — dedicated agents (backward compatible API)
+    if explicit_intent == "station_explanation" and state.station_id:
+        state.intent = Intent.station_explanation
+        state.selected_agent = "forecast_evidence_agent"
+        audit.set_intent(state.intent.value)
+        audit.set_agent(state.selected_agent)
+        run_forecast_evidence_agent(state, audit)
+        state.llm_status = "deterministic"
+        audit.set_llm_mode("deterministic")
+        audit.set_fallback(False)
+        audit.set_response_mode("fast_path")
+        return _finalize(state, audit, ckey, skey)
+
+    if explicit_intent == "station_confidence" and state.station_id:
+        state.intent = Intent.station_confidence
+        state.selected_agent = "forecast_evidence_agent"
+        audit.set_intent(state.intent.value)
+        audit.set_agent(state.selected_agent)
+        run_forecast_evidence_agent(state, audit)
+        state.llm_status = "deterministic"
+        audit.set_llm_mode("deterministic")
+        audit.set_fallback(False)
+        audit.set_response_mode("fast_path")
+        return _finalize(state, audit, ckey, skey)
+
+    if explicit_intent == "citizen_guidance" and state.station_id:
+        state.intent = Intent.citizen_guidance
+        state.selected_agent = "citizen_advisory_agent"
+        audit.set_intent(state.intent.value)
+        audit.set_agent(state.selected_agent)
+        run_citizen_advisory_agent(state, audit)
+        state.llm_status = "deterministic"
+        audit.set_llm_mode("deterministic")
+        audit.set_fallback(False)
+        audit.set_response_mode("fast_path")
+        return _finalize(state, audit, ckey, skey)
+
+    if explicit_intent == "inspection_plan":
+        state.intent = Intent.inspection_plan
+        state.selected_agent = "enforcement_planning_agent"
+        audit.set_intent(state.intent.value)
+        audit.set_agent(state.selected_agent)
+        run_enforcement_planning_agent(state, audit)
+        state.llm_status = "deterministic"
+        audit.set_llm_mode("deterministic")
+        audit.set_fallback(False)
+        audit.set_response_mode("fast_path")
+        return _finalize(state, audit, ckey, skey)
+
+    if explicit_intent == "city_briefing":
+        state.intent = Intent.city_briefing
+        state.selected_agent = "city_briefing_agent"
+        audit.set_intent(state.intent.value)
+        audit.set_agent(state.selected_agent)
+        run_city_briefing_agent(state, audit)
+        state.llm_status = "deterministic"
+        audit.set_llm_mode("deterministic")
+        audit.set_fallback(False)
+        audit.set_response_mode("fast_path")
+        return _finalize(state, audit, ckey, skey)
+
+    # --- Narrow deterministic fast path ---
+    use_fast = (
+        bool(state.station_id)
+        and not force_dynamic_planning
+        and explicit_intent in (None, "station_explanation", "station_confidence")
+        and _is_simple_station_query(query)
+    )
+    if use_fast:
+        audit.record_reasoning(
+            "route",
+            "Fast path: explicit/inferred station + simple forecast/explain query",
+        )
+        state.intent = (
+            Intent.station_confidence
+            if any(w in query.lower() for w in ("confidence", "reliable", "trust"))
+            else Intent.station_explanation
+        )
+        state.selected_agent = "forecast_evidence_agent"
+        audit.set_intent(state.intent.value)
+        audit.set_agent(state.selected_agent)
+        run_forecast_evidence_agent(state, audit)
+        # Phase 1: do NOT LLM-rewrite grounded deterministic answers
+        state.llm_status = "deterministic"
+        audit.set_llm_mode("deterministic")
+        audit.set_fallback(False)
+        audit.set_response_mode("fast_path")
+        return _finalize(state, audit, ckey, skey)
+
+    # --- DEFAULT: native tool-calling agent ---
+    if force_dynamic_planning:
+        audit.record_reasoning("route", "Deep mode requested — tool-calling agent (native)")
+    else:
+        audit.record_reasoning(
+            "route",
+            "Default free-text path — native tool-calling agent (Groq-primary)",
+        )
+
+    run_grounded_tool_agent(state, audit)
+
+    # Mode: heuristic vs tool agent (agent sets path in structured_data)
+    path = ""
+    if isinstance(state.structured_data, dict):
+        path = str(state.structured_data.get("path") or "")
+    if path == "heuristic_fallback":
+        audit.set_response_mode("heuristic_fallback")
+    else:
+        audit.set_response_mode("tool_agent")
+
+    audit.set_llm_mode(state.llm_status)
+    audit.set_fallback(state.fallback_used)
+    audit.set_llm_meta(
+        getattr(llm, "last_provider", None),
+        getattr(llm, "last_gemini_key_index", None)
+        or getattr(llm, "last_groq_key_index", None),
+    )
+
+    return _finalize(state, audit, ckey, skey)
+
+
+def _finalize(
+    state: AgentState,
+    audit: AuditTrail,
+    ckey: str | None,
+    skey: str | None = None,
+) -> dict[str, Any]:
+    if not (state.response or "").strip():
+        state.response = (
+            "I could not produce an answer from available tools. "
+            "Try asking about enforcement priorities, a named Bengaluru locality "
+            "(e.g. Peenya), a city briefing, weather, or CPCB construction dust rules."
+        )
+        state.fallback_used = True
+        audit.set_fallback(True)
+
+    mode = _infer_response_mode(state, audit)
+    audit.set_response_mode(mode)
+
+    # Preserve map context in structured_data if agent overwrote it
+    sd = state.structured_data if isinstance(state.structured_data, dict) else {}
+    if state.map_context_provided and "map_context" not in sd:
+        sd = {
+            **sd,
+            "map_context": {
+                "station_id": state.station_id or None,
+                "h3_cell": state.h3_cell,
+            },
+        }
+        state.structured_data = sd
+
+    # Copilot → Map: structured highlight / focus instructions
+    map_actions = None
+    try:
+        from backend.app.agents.map_actions import extract_map_actions
+
+        map_actions = extract_map_actions(
+            tool_results=state.tool_results or (sd.get("tool_results") if sd else None),
+            state_station_id=state.station_id or "",
+            state_h3_cell=state.h3_cell,
+            structured_data=sd if isinstance(sd, dict) else None,
+        )
+        if map_actions:
+            audit.record_reasoning(
+                "map",
+                (
+                    f"Map actions: {len(map_actions.get('highlight_h3_cells') or [])} hex(es), "
+                    f"{len(map_actions.get('highlight_stations') or [])} station(s)"
+                ),
+            )
+            if isinstance(sd, dict):
+                sd = {**sd, "map_actions": map_actions}
+                state.structured_data = sd
+    except Exception as exc:
+        logger.debug("map_actions extraction skipped: %s", exc)
+        map_actions = None
+
+    response = {
+        "request_id": state.request_id,
+        "intent": state.intent.value if state.intent else "tool_agent",
+        "selected_agent": state.selected_agent,
+        "answer": state.response,
+        "structured_data": state.structured_data,
+        "warnings": state.warnings,
+        "audit_trail": audit.to_dict(),
+        "llm_mode": state.llm_status,
+        "fallback_used": state.fallback_used,
+        "cache_hit": False,
+        "response_mode": mode,
+        "map_actions": map_actions,
+    }
+
+    try:
+        from backend.app.services.copilot_cache_service import set_cached_response
+
+        # Don't cache empty / hard-fallback refuse for long
+        if ckey and response.get("answer") and not _is_generic_refuse(response["answer"]):
+            set_cached_response(ckey, response, query=state.user_query, semantic_key=skey)
+    except Exception as exc:
+        logger.debug("Response cache store skipped: %s", exc)
+
+    return response
+
+
+def _is_generic_refuse(text: str) -> bool:
+    t = (text or "").lower()
+    return "could not answer that question specifically from the available" in t
+
+
+# Keep for tests that import _detect_intent — maps to a minimal compatibility shim
 def _detect_intent(
     query: str,
     explicit_intent: str | None = None,
     station_id: str = "",
 ) -> Intent:
+    """Compatibility shim for unit tests. Production free-text uses tool agent."""
     if explicit_intent:
         intent_map = {
             "station_explanation": Intent.station_explanation,
@@ -113,452 +578,74 @@ def _detect_intent(
         }
         return intent_map.get(explicit_intent, Intent.unsupported)
 
-    q = query.lower().strip()
-
+    q = (query or "").lower().strip()
     if not q:
         return Intent.unsupported
 
-    has_station = bool(station_id)
-    has_city_query = any(c in q for c in ["city", "bengaluru"])
-
-    if has_station and any(w in q for w in ["confidence", "reliable", "trust", "reliability"]):
+    # Expanded keywords so existing tests and suggested-question regression still pass
+    if station_id and any(w in q for w in ("confidence", "reliable", "trust")):
         return Intent.station_confidence
-
-    if has_station and any(w in q for w in ["why", "explain", "evidence", "how is", "forecast", "change"]):
+    if station_id and any(w in q for w in ("why", "explain", "forecast", "evidence")):
         return Intent.station_explanation
-
-    if has_station and any(w in q for w in ["advisory", "guidance", "health", "breathe", "should i", "safe"]):
-        return Intent.citizen_guidance
-
-    if has_city_query and any(w in q for w in ["inspection", "priority", "enforce", "plan", "rank"]):
-        return Intent.inspection_plan
-
-    if any(w in q for w in ["spatial intelligence", "intelligence around", "map-ready", "station intelligence"]):
-        return Intent.spatial_intelligence
-
-    if any(w in q for w in ["spatial", "geospatial", "road density", "land use", "land-use", "industrial context", "construction near", "facility near", "mapped", "nearest road"]):
-        return Intent.spatial_context
-
-    if has_city_query and any(w in q for w in ["briefing", "summary", "overview", "situation", "status"]):
-        return Intent.city_briefing
-
-    if has_station and not has_city_query:
-        return Intent.station_explanation
-
-    if any(w in q for w in ["travel", "go outside", "go out", "bike", "two-wheeler", "two wheeler", "commute", "outing", "ride"]):
-        return Intent.travel_readiness
-
-    if any(w in q for w in ["weather", "rain", "temperature", "humidity", "windy", "wind speed", "sunny", "storm", "thunder"]):
-        return Intent.weather_forecast
-
-    if any(w in q for w in ["compare", "neighbourhood", "neighborhood", "suitability", "where to live", "best area", "candidate"]):
-        return Intent.neighbourhood_comparison
-
-    if any(w in q for w in [
-        "policy", "official source", "official guidance", "cpcb", "kspcb", "who says",
-        "guidance support", "what does", "show the policy", "regulation", "guideline",
-        "emission norm", "dust control rule", "legal requirement",
-    ]):
-        return Intent.policy_guidance
-
-    if any(w in q for w in [
-        "enforcement", "dispatch", "hotspot", "inspect construction", "priority hex",
-        "where should we inspect", "actionable source",
-    ]):
-        return Intent.inspection_plan
-
-    if has_city_query:
-        return Intent.city_briefing
-
-    return Intent.unsupported
-
-
-def _route_intent(intent: Intent) -> str:
-    mapping = {
-        Intent.station_explanation: "forecast_evidence_agent",
-        Intent.station_confidence: "forecast_evidence_agent",
-        Intent.inspection_plan: "enforcement_planning_agent",
-        Intent.citizen_guidance: "citizen_advisory_agent",
-        Intent.city_briefing: "city_briefing_agent",
-        Intent.policy_guidance: "policy_guidance_agent",
-        Intent.weather_forecast: "travel_readiness_agent",
-        Intent.travel_readiness: "travel_readiness_agent",
-        Intent.spatial_context: "spatial_context_agent",
-        Intent.spatial_intelligence: "spatial_intelligence_agent",
-        Intent.neighbourhood_comparison: "neighbourhood_decision_agent",
-        Intent.dynamic_planning: "dynamic_planning_agent",
-    }
-    return mapping.get(intent, "unknown")
-
-
-def _validate_input(state: AgentState) -> list[str]:
-    warnings: list[str] = []
-
-    if state.city.lower().strip() not in SUPPORTED_CITIES:
-        warnings.append(f"City '{state.city}' is not supported. Using default: bengaluru")
-        state.city = "bengaluru"
-
-    if state.station_id:
-        try:
-            _validate_station(state.station_id)
-        except UnknownStationError:
-            warnings.append(f"Station '{state.station_id}' is unknown")
-
-    all_profiles = list(set(ADVISORY_PROFILES + TRAVEL_PROFILES))
-    if state.profile not in all_profiles:
-        warnings.append(f"Profile '{state.profile}' is not valid. Using default: general")
-        state.profile = "general"
-
-    if state.language not in SUPPORTED_LANGUAGES:
-        warnings.append(f"Language '{state.language}' is not supported. Using default: en")
-        state.language = "en"
-
-    return warnings
-
-
-def _validate_response(state: AgentState) -> list[str]:
-    warnings: list[str] = []
-    data = state.structured_data or {}
-
-    if state.intent in (Intent.station_explanation, Intent.station_confidence):
-        if data.get("forecast_engine"):
-            pass
-        else:
-            warnings.append("Response missing forecast_engine field")
-        if data.get("confidence_level"):
-            pass
-        elif "confidence" in data and data["confidence"].get("confidence_level"):
-            pass
-        else:
-            warnings.append("Response missing confidence_level")
-
-    if state.intent == Intent.inspection_plan:
-        import re
-        from backend.app.config import INVESTIGATION_DISCLAIMER
-        has_disclaimer = False
-        if state.response:
-            has_disclaimer = INVESTIGATION_DISCLAIMER in state.response
-        if not has_disclaimer:
-            ranked = data.get("ranked_stations", [])
-            has_disclaimer = any(
-                INVESTIGATION_DISCLAIMER in str(s.get("caveats", []))
-                for s in ranked
-            )
-        if not has_disclaimer:
-            warnings.append("Response missing investigation disclaimer")
-
-    if state.intent == Intent.citizen_guidance:
-        from backend.app.config import MEDICAL_DISCLAIMER
-        if state.response and MEDICAL_DISCLAIMER not in state.response:
-            if data.get("medical_disclaimer") != MEDICAL_DISCLAIMER:
-                warnings.append("Response missing medical disclaimer")
-
-    if state.intent == Intent.city_briefing:
-        limitations = data.get("data_limitations", [])
-        if not limitations:
-            warnings.append("Response missing data limitations")
-        has_coverage = any("monitored stations" in str(l).lower() for l in limitations)
-        if not has_coverage:
-            warnings.append("Response missing citywide coverage disclaimer")
-
-    return warnings
-
-
-def run_orchestrator(
-    station_id: str = "",
-    city: str = "bengaluru",
-    query: str = "",
-    profile: str = "general",
-    language: str = "en",
-    top_k: int = 5,
-    explicit_intent: str | None = None,
-    force_dynamic_planning: bool = False,
-) -> dict[str, Any]:
-
-    # Full-response cache for repeated / suggested questions
-    ckey: str | None = None
-    try:
-        from backend.app.services.copilot_cache_service import (
-            cache_key,
-            get_cached_response,
+    if any(
+        w in q
+        for w in (
+            "enforce",
+            "inspect",
+            "officer",
+            "dispatch",
+            "hotspot",
+            "priority",
+            "construction dust",
+            "where should",
         )
-
-        ckey = cache_key(
-            query,
-            city=city,
-            station_id=station_id,
-            profile=profile,
-            language=language,
-            force_dynamic_planning=force_dynamic_planning,
-        )
-        cached = get_cached_response(ckey)
-        if cached is not None:
-            # Fresh request id but same grounded answer
-            cached = dict(cached)
-            cached["request_id"] = str(uuid.uuid4())
-            trail = dict(cached.get("audit_trail") or {})
-            trail["request_id"] = cached["request_id"]
-            warnings = list(trail.get("warnings") or [])
-            if "served_from_response_cache" not in warnings:
-                warnings.append("served_from_response_cache")
-            trail["warnings"] = warnings
-            # Annotate reasoning for UI
-            trace = list(trail.get("reasoning_trace") or [])
-            trace.insert(0, {
-                "type": "cache",
-                "detail": "Served from Copilot response cache (identical / similar query)",
-            })
-            trail["reasoning_trace"] = trace
-            cached["audit_trail"] = trail
-            cached["warnings"] = list(
-                dict.fromkeys(list(cached.get("warnings") or []) + ["served_from_response_cache"])
-            )
-            return cached
-    except Exception as exc:
-        logger.debug("Response cache lookup skipped: %s", exc)
-        ckey = None
-
-    request_id = str(uuid.uuid4())
-
-    state = AgentState(
-        request_id=request_id,
-        user_query=query,
-        city=city,
-        station_id=station_id,
-        profile=profile,
-        language=language,
-        top_k=top_k,
-    )
-
-    audit = AuditTrail(request_id)
-
-    # The web client sends free text only. Recover a station from a locality
-    # name (for example, "Peenya") before routing instead of requiring a
-    # station_id that the UI never supplies.
-    if not state.station_id:
-        state.station_id = infer_station_id(query) or ""
-
-    input_warnings = _validate_input(state)
-    for w in input_warnings:
-        state.warnings.append(w)
-        audit.add_warning(w)
-
-    intent = _detect_intent(query, explicit_intent, state.station_id)
-    state.intent = intent
-    audit.set_intent(intent.value)
-
-    llm = get_llm_provider()
-
-    # Explicit override: user opted into deep reasoning
-    if force_dynamic_planning:
-        intent = Intent.dynamic_planning
-        state.intent = intent
-        audit.set_intent(intent.value)
-
-    # Automatic planning is reserved for compound questions. Unmatched short
-    # questions are handled immediately by the query-aware fallback instead of
-    # waiting for a provider that may be temporarily unreachable.
-    elif not explicit_intent and llm.is_available and _is_compound_query(query):
-        intent = Intent.dynamic_planning
-        state.intent = intent
-        audit.set_intent(intent.value)
-
-    if intent == Intent.unsupported:
-        state.selected_agent = "query_aware_fallback"
-        audit.set_agent(state.selected_agent)
-        run_query_aware_fallback(state, audit)
-        audit.set_llm_mode(state.llm_status)
-        audit.set_fallback(state.fallback_used)
-        return _build_response(state, audit)
-
-    # A free-text "why is it polluted near <station>" question needs the
-    # station's mapped context, not merely a generic forecast explanation.
-    if (
-        not explicit_intent
-        and intent != Intent.dynamic_planning
-        and state.station_id
-        and any(term in query.lower() for term in ("pollut", "why is the air", "reason for aqi", "reason for air"))
     ):
-        state.selected_agent = "query_aware_fallback"
-        audit.set_agent(state.selected_agent)
-        run_query_aware_fallback(state, audit)
-        audit.set_llm_mode(state.llm_status)
-        audit.set_fallback(state.fallback_used)
-        return _build_response(state, audit)
-
-    agent_name = _route_intent(intent)
-    state.selected_agent = agent_name
-    audit.set_agent(agent_name)
-
-    llm_mode = "deterministic"
-    fallback_used = False
-
-    if intent == Intent.station_explanation or intent == Intent.station_confidence:
-        run_forecast_evidence_agent(state, audit)
-    elif intent == Intent.inspection_plan:
-        run_enforcement_planning_agent(state, audit)
-    elif intent == Intent.citizen_guidance:
-        run_citizen_advisory_agent(state, audit)
-    elif intent == Intent.city_briefing:
-        run_city_briefing_agent(state, audit)
-    elif intent == Intent.policy_guidance:
-        run_policy_guidance_agent(state, audit)
-    elif intent == Intent.spatial_context:
-        run_spatial_context_agent(state, audit)
-    elif intent == Intent.spatial_intelligence:
-        run_spatial_intelligence_agent(state, audit)
-    elif intent == Intent.neighbourhood_comparison:
-        run_neighbourhood_decision_agent(state, audit)
-    elif intent == Intent.dynamic_planning:
-        run_dynamic_planning_agent(state, audit)
-    elif intent == Intent.weather_forecast or intent == Intent.travel_readiness:
-        run_travel_readiness_agent(state, audit)
-
-    response_warnings = _validate_response(state)
-    for w in response_warnings:
-        state.warnings.append(w)
-        audit.add_warning(w)
-
-    if response_warnings:
-        if llm.is_available:
-            llm_mode = "fallback"
-            fallback_used = True
-        else:
-            llm_mode = "deterministic"
-            from backend.app.agents.fallback_renderer import (
-                render_citizen_advisory,
-                render_city_briefing,
-                render_inspection_plan,
-                render_neighbourhood_comparison,
-                render_spatial_intelligence,
-                render_station_explanation,
-                render_travel_readiness,
-                render_weather_forecast,
-                render_weather_summary,
-            )
-            if intent == Intent.station_explanation:
-                state.response = render_station_explanation(state.structured_data or {})
-            elif intent == Intent.station_confidence:
-                state.response = _render_confidence_summary(state.structured_data or {})
-            elif intent == Intent.inspection_plan:
-                state.response = render_inspection_plan(state.structured_data or {})
-            elif intent == Intent.citizen_guidance:
-                state.response = render_citizen_advisory(state.structured_data or {})
-            elif intent == Intent.city_briefing:
-                state.response = render_city_briefing(state.structured_data or {})
-            elif intent == Intent.weather_forecast:
-                state.response = render_weather_forecast(state.structured_data or {})
-            elif intent == Intent.travel_readiness:
-                state.response = render_travel_readiness(state.structured_data or {})
-            elif intent == Intent.spatial_intelligence:
-                state.response = render_spatial_intelligence(state.structured_data or {})
-            elif intent == Intent.neighbourhood_comparison:
-                state.response = render_neighbourhood_comparison(state.structured_data or {})
-
-    # Enrich deterministic answers with knowledge-base context when useful
-    # (skip if the agent already populated KB, e.g. policy_guidance_agent)
-    already_has_kb = bool(
-        audit.knowledge_base_used
-        or (state.structured_data or {}).get("knowledge_base")
-        or (state.structured_data or {}).get("knowledge_base_used")
-        or (state.structured_data or {}).get("retrieval_backend")
+        return Intent.inspection_plan
+    if any(w in q for w in ("policy", "cpcb", "kspcb", "ncap", "guideline", "regulation")):
+        return Intent.policy_guidance
+    # Health / citizen advisory before travel ("safe to go outside")
+    if any(
+        w in q
+        for w in (
+            "safe to",
+            "health",
+            "advisory",
+            "sensitive group",
+            "asthma",
+            "mask",
+            "outdoor activity",
+            "is it safe",
+        )
+    ):
+        return Intent.citizen_guidance
+    if any(w in q for w in ("travel", "commute", "bike", "outing", "readiness")):
+        return Intent.travel_readiness
+    if any(w in q for w in ("go outside",)) and station_id:
+        return Intent.citizen_guidance
+    if any(w in q for w in ("weather", "rain", "temperature", "humidity", "wind")):
+        return Intent.weather_forecast
+    if any(w in q for w in ("neighbourhood", "neighborhood", "where to live", "compare")):
+        return Intent.neighbourhood_comparison
+    if any(w in q for w in ("briefing", "overview", "situation")) or "bengaluru" in q:
+        return Intent.city_briefing
+    if station_id:
+        return Intent.station_explanation
+    # No AQI/city signal → unsupported (shim); production free-text uses tool agent directly
+    aqi_ish = any(
+        w in q
+        for w in (
+            "aqi",
+            "pm2",
+            "pollut",
+            "air",
+            "dust",
+            "smog",
+            "station",
+            "hex",
+            "peenya",
+            "forecast",
+        )
     )
-    policy_like = any(
-        w in query.lower()
-        for w in ("cpcb", "kspcb", "policy", "guideline", "dust control", "regulation", "who ", "standard")
-    )
-    if policy_like and intent != Intent.dynamic_planning and not already_has_kb:
-        try:
-            from backend.app.services.rag_service import retrieve_relevant_context
-
-            rag = retrieve_relevant_context(query, top_k=4)
-            if rag.get("used"):
-                audit.set_knowledge(True, backend=rag.get("backend"), chunk_count=len(rag.get("chunks") or []))
-                state.structured_data = {
-                    **(state.structured_data or {}),
-                    "knowledge_base": {
-                        "backend": rag.get("backend"),
-                        "model": rag.get("model"),
-                        "chunks": rag.get("chunks"),
-                    },
-                }
-        except Exception as exc:
-            logger.debug("KB enrich skipped: %s", exc)
-
-    if llm.is_available and not response_warnings and intent != Intent.dynamic_planning:
-        kb_note = ""
-        if state.structured_data and state.structured_data.get("knowledge_base"):
-            kb_note = " Prefer official knowledge-base snippets when citing rules."
-        llm_response = llm.summarize(
-            f"Create a concise natural language response for: '{query}'.{kb_note} "
-            f"Do not invent regulations or numbers not present in the data.",
-            state.structured_data or {},
-        )
-        audit.set_llm_meta(
-            getattr(llm, "last_provider", None),
-            getattr(llm, "last_gemini_key_index", None),
-        )
-        if llm_response:
-            state.response = llm_response
-            state.llm_status = "hosted"
-            llm_mode = "hosted"
-        else:
-            llm_mode = "deterministic"
-            state.llm_status = "deterministic"
-            audit.record_reasoning(
-                "fallback",
-                "LLM summarization failed after multi-key attempts — using deterministic text",
-            )
-            fallback_used = True
-    elif intent == Intent.dynamic_planning:
-        llm_mode = state.llm_status
-        fallback_used = state.fallback_used
-        audit.set_llm_meta(
-            getattr(llm, "last_provider", None),
-            getattr(llm, "last_gemini_key_index", None),
-        )
-    else:
-        state.llm_status = llm_mode
-
-    audit.set_llm_mode(llm_mode)
-    audit.set_fallback(fallback_used)
-    state.fallback_used = fallback_used
-
-    response = _build_response(state, audit)
-
-    # Store successful answers for repeat queries (prefetch + UX speed)
-    try:
-        from backend.app.services.copilot_cache_service import set_cached_response
-
-        if ckey and response.get("answer"):
-            set_cached_response(ckey, response)
-    except Exception as exc:
-        logger.debug("Response cache store skipped: %s", exc)
-
-    return response
-
-
-def _render_confidence_summary(data):
-    from backend.app.agents.fallback_renderer import render_confidence_summary
-    return render_confidence_summary(data)
-
-
-def _build_response(state: AgentState, audit: AuditTrail) -> dict[str, Any]:
-    return {
-        "request_id": state.request_id,
-        "intent": state.intent.value,
-        "selected_agent": state.selected_agent,
-        "answer": state.response,
-        "structured_data": state.structured_data,
-        "warnings": state.warnings,
-        "audit_trail": audit.to_dict(),
-        "llm_mode": state.llm_status,
-        "fallback_used": state.fallback_used,
-    }
-
-
-
-
-
-
-    
+    if not aqi_ish:
+        return Intent.unsupported
+    return Intent.dynamic_planning

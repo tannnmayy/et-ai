@@ -157,9 +157,178 @@ def tool_resolve_location(
     latitude: float | None = None,
     longitude: float | None = None,
 ) -> dict[str, Any]:
-    from backend.app.services.location_service import resolve_location
+    """Resolve free-text place → station / coords / H3.
+
+    Order: coordinates → station/locality registry match → Google geocode (if key).
+    Always tries offline registry first so Copilot works without Maps keys.
+    """
+    import re
+    from math import asin, cos, radians, sin, sqrt
+
+    def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        r = 6371.0
+        dlat = radians(lat2 - lat1)
+        dlon = radians(lon2 - lon1)
+        a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+        return 2 * r * asin(min(1.0, sqrt(a)))
+
     try:
-        return resolve_location(query=query, latitude=latitude, longitude=longitude)
+        # 1) Direct coordinates
+        if latitude is not None and longitude is not None:
+            from backend.app.services.location_service import resolve_location
+
+            base = resolve_location(query="", latitude=latitude, longitude=longitude)
+            if base.get("success"):
+                import h3 as _h3
+
+                lat, lon = float(base["latitude"]), float(base["longitude"])
+                h3_cell = _h3.latlng_to_cell(lat, lon, 9)
+                # nearest station
+                from pipeline.station_registry import get_registry_stations
+
+                best = None
+                best_d = 1e9
+                for s in get_registry_stations():
+                    if s.latitude is None or s.longitude is None:
+                        continue
+                    d = _haversine_km(lat, lon, float(s.latitude), float(s.longitude))
+                    if d < best_d:
+                        best_d = d
+                        best = s
+                base["h3_cell"] = h3_cell
+                base["resolved_name"] = base.get("label")
+                if best:
+                    base["nearest_station_id"] = best.station_id
+                    base["station_id"] = best.station_id if best_d <= 3.5 else None
+                    base["nearest_station_name"] = getattr(best, "display_name", None) or best.station_name
+                    base["nearest_station_distance_km"] = round(best_d, 2)
+                    base["confidence"] = "high" if best_d <= 1.5 else "medium" if best_d <= 3.5 else "low"
+                return base
+
+        q = (query or "").strip()
+        if not q:
+            return {"_tool_error": "Empty location query", "_error_type": "ParameterError"}
+
+        norm = re.sub(r"\s+", " ", q.lower())
+        norm = re.sub(r"\b(near|around|in|at|area|bengaluru|bangalore|station)\b", " ", norm).strip()
+
+        # 2) Station registry substring match
+        from pipeline.station_registry import get_registry_stations
+
+        stations = list(get_registry_stations())
+        best_station = None
+        best_score = 0
+        for s in stations:
+            candidates = [
+                s.station_id.replace("cpcb_", "").replace("_", " "),
+                getattr(s, "display_name", None) or "",
+                getattr(s, "station_name", None) or "",
+            ]
+            for c in candidates:
+                c_norm = re.sub(r"\b(bengaluru|kspcb|cpcb|station)\b", "", (c or "").lower()).strip()
+                if not c_norm:
+                    continue
+                if c_norm in norm or norm in c_norm:
+                    score = len(c_norm)
+                    if score > best_score:
+                        best_score = score
+                        best_station = s
+
+        if best_station and best_station.latitude is not None:
+            import h3 as _h3
+
+            lat, lon = float(best_station.latitude), float(best_station.longitude)
+            return {
+                "success": True,
+                "resolved_name": getattr(best_station, "display_name", None)
+                or best_station.station_name,
+                "label": getattr(best_station, "display_name", None) or best_station.station_name,
+                "station_id": best_station.station_id,
+                "nearest_station_id": best_station.station_id,
+                "nearest_station_name": getattr(best_station, "display_name", None)
+                or best_station.station_name,
+                "nearest_station_distance_km": 0.0,
+                "latitude": lat,
+                "longitude": lon,
+                "h3_cell": _h3.latlng_to_cell(lat, lon, 9),
+                "resolution_method": "station_registry",
+                "confidence": "high",
+                "city_scope": "bengaluru",
+            }
+
+        # 3) Locality centroids (offline list)
+        from backend.app.agents.conversation_fallback import _LOCALITY_CENTRES
+
+        for name, (lat, lon) in _LOCALITY_CENTRES.items():
+            if name in norm or norm in name:
+                import h3 as _h3
+
+                # nearest station to locality
+                best = None
+                best_d = 1e9
+                for s in stations:
+                    if s.latitude is None or s.longitude is None:
+                        continue
+                    d = _haversine_km(lat, lon, float(s.latitude), float(s.longitude))
+                    if d < best_d:
+                        best_d = d
+                        best = s
+                out = {
+                    "success": True,
+                    "resolved_name": name.title(),
+                    "label": name.title(),
+                    "locality": name.title(),
+                    "latitude": lat,
+                    "longitude": lon,
+                    "h3_cell": _h3.latlng_to_cell(lat, lon, 9),
+                    "resolution_method": "locality_centroid",
+                    "confidence": "medium",
+                    "city_scope": "bengaluru",
+                }
+                if best:
+                    out["nearest_station_id"] = best.station_id
+                    out["station_id"] = best.station_id if best_d <= 4.0 else None
+                    out["nearest_station_name"] = (
+                        getattr(best, "display_name", None) or best.station_name
+                    )
+                    out["nearest_station_distance_km"] = round(best_d, 2)
+                return out
+
+        # 4) Google geocode fallback
+        from backend.app.services.location_service import resolve_location
+
+        geo = resolve_location(query=q)
+        if geo.get("success"):
+            import h3 as _h3
+
+            lat, lon = float(geo["latitude"]), float(geo["longitude"])
+            geo["h3_cell"] = _h3.latlng_to_cell(lat, lon, 9)
+            geo["resolved_name"] = geo.get("label")
+            best = None
+            best_d = 1e9
+            for s in stations:
+                if s.latitude is None or s.longitude is None:
+                    continue
+                d = _haversine_km(lat, lon, float(s.latitude), float(s.longitude))
+                if d < best_d:
+                    best_d = d
+                    best = s
+            if best:
+                geo["nearest_station_id"] = best.station_id
+                geo["station_id"] = best.station_id if best_d <= 3.5 else None
+                geo["nearest_station_name"] = (
+                    getattr(best, "display_name", None) or best.station_name
+                )
+                geo["nearest_station_distance_km"] = round(best_d, 2)
+                geo["confidence"] = "medium"
+            return geo
+
+        return {
+            "_tool_error": f"Could not resolve location: {q}",
+            "_error_type": "UnresolvedLocation",
+            "query": q,
+            "success": False,
+        }
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 
@@ -274,6 +443,56 @@ def tool_get_causal_explanation(
         if "error" in attribution:
             return {"_tool_error": attribution["error"], "_error_type": "ServiceError"}
         return generate_causal_explanation(attribution, language=language)
+    except Exception as e:
+        return {"_tool_error": str(e), "_error_type": type(e).__name__}
+
+
+def tool_run_whatif_scenario(
+    city: str = "bengaluru",
+    h3_cell: str | None = None,
+    station_id: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    traffic_scale: float | None = None,
+    industrial_scale: float | None = None,
+    construction_scale: float | None = None,
+    burning_scale: float | None = None,
+    traffic_reduction_percent: float | None = None,
+    industrial_reduction_percent: float | None = None,
+    construction_reduction_percent: float | None = None,
+    burning_reduction_percent: float | None = None,
+    traffic_increase_percent: float | None = None,
+    industrial_increase_percent: float | None = None,
+    construction_increase_percent: float | None = None,
+    burning_increase_percent: float | None = None,
+    scenario_text: str | None = None,
+    include_enforcement_delta: bool = True,
+) -> dict[str, Any]:
+    """Counterfactual what-if simulation (attribution-based, not a forecast)."""
+    from backend.app.services.whatif_scenario_service import run_whatif_scenario
+
+    try:
+        return run_whatif_scenario(
+            city=city,
+            h3_cell=h3_cell,
+            station_id=station_id,
+            lat=lat,
+            lon=lon,
+            traffic_scale=traffic_scale,
+            industrial_scale=industrial_scale,
+            construction_scale=construction_scale,
+            burning_scale=burning_scale,
+            traffic_reduction_percent=traffic_reduction_percent,
+            industrial_reduction_percent=industrial_reduction_percent,
+            construction_reduction_percent=construction_reduction_percent,
+            burning_reduction_percent=burning_reduction_percent,
+            traffic_increase_percent=traffic_increase_percent,
+            industrial_increase_percent=industrial_increase_percent,
+            construction_increase_percent=construction_increase_percent,
+            burning_increase_percent=burning_increase_percent,
+            scenario_text=scenario_text,
+            include_enforcement_delta=include_enforcement_delta,
+        )
     except Exception as e:
         return {"_tool_error": str(e), "_error_type": type(e).__name__}
 

@@ -104,6 +104,10 @@ def copilot_query(body: CopilotQueryRequest) -> CopilotResponse:
             detail=f"Invalid language '{body.language}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}",
         )
 
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in (body.conversation_history or [])
+    ]
     result = _handle_agent_errors(
         run_orchestrator,
         station_id=body.station_id,
@@ -113,6 +117,9 @@ def copilot_query(body: CopilotQueryRequest) -> CopilotResponse:
         language=body.language,
         top_k=body.top_k,
         force_dynamic_planning=body.force_dynamic_planning,
+        h3_cell=body.h3_cell,
+        conversation_history=history,
+        session_id=body.session_id,
     )
     return CopilotResponse(**result)
 

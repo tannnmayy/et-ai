@@ -11,6 +11,10 @@ interface MapContainerProps {
   viewMode: 'aqi' | 'enforcement' | 'confidence';
   /** Smaller map labels when showing many polluted hexes (30–100). */
   compactLabels?: boolean;
+  /** H3 cell ids to emphasize from Copilot map_actions */
+  highlightedHexIds?: string[];
+  /** Optional lat/lng from Copilot focus_on */
+  focusCenter?: { lat: number; lng: number } | null;
 }
 
 const API_KEY = String(
@@ -54,6 +58,30 @@ function MapStyleController({ enabled }: { enabled: boolean }) {
   return null;
 }
 
+/** Pan/zoom when Copilot requests focus_on. */
+function MapFocusController({
+  center,
+}: {
+  center: { lat: number; lng: number } | null | undefined;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !center) return;
+    if (
+      typeof center.lat !== 'number' ||
+      typeof center.lng !== 'number' ||
+      Number.isNaN(center.lat) ||
+      Number.isNaN(center.lng)
+    ) {
+      return;
+    }
+    map.panTo(center);
+    const z = map.getZoom() ?? 12;
+    if (z < 12) map.setZoom(13);
+  }, [map, center?.lat, center?.lng]);
+  return null;
+}
+
 function confidenceColor(score: number | undefined): string {
   const s = score ?? 0;
   if (s >= 80) return '#34C759'; // High
@@ -91,10 +119,13 @@ function MapContainer({
   allHexes,
   viewMode,
   compactLabels = false,
+  highlightedHexIds = [],
+  focusCenter = null,
 }: MapContainerProps) {
   const [showRealMap, setShowRealMap] = useState(isRealKey);
   const [activeLayer, setActiveLayer] = useState<'h3' | 'heatmap' | 'sat'>('h3');
   const [mapsError, setMapsError] = useState<string | null>(null);
+  const highlightSet = useMemo(() => new Set(highlightedHexIds || []), [highlightedHexIds]);
 
   useEffect(() => {
     if (!isRealKey && import.meta.env.DEV) {
@@ -246,15 +277,18 @@ function MapContainer({
               colorScheme="DARK"
             >
               {!MAP_ID && <MapStyleController enabled />}
+              <MapFocusController center={focusCenter} />
               {allHexes.map((hex) => {
                 const color = hexColor(hex, viewMode);
                 const label = formatLocationName(hex);
                 const isSelected = selectedHex?.id === hex.id;
+                const isCopilotHighlight = highlightSet.has(hex.id);
                 const confScore = hex.attributionConfidence ?? hex.confidence;
                 const confW =
                   viewMode === 'confidence'
                     ? confidenceVisualWeight(confScore)
                     : { borderPx: 1.5, glow: 0 };
+                const borderColor = isCopilotHighlight ? '#BF5AF2' : color;
                 return (
                   <AdvancedMarker
                     key={hex.id}
@@ -264,24 +298,36 @@ function MapContainer({
                     <div
                       className={`cursor-pointer rounded-lg bg-black/85 font-mono text-white transition-transform hover:scale-105 ${
                         compactLabels ? 'p-1.5 text-[8px] max-w-[88px]' : 'p-2 text-[10px]'
-                      }`}
+                      } ${isCopilotHighlight ? 'ring-2 ring-fuchsia-400/80 scale-105' : ''}`}
                       style={{
                         borderStyle: 'solid',
-                        borderWidth: viewMode === 'confidence' ? confW.borderPx : isSelected ? 2 : 1.5,
-                        borderColor: color,
-                        boxShadow:
-                          viewMode === 'confidence'
+                        borderWidth: isCopilotHighlight
+                          ? 2.5
+                          : viewMode === 'confidence'
+                            ? confW.borderPx
+                            : isSelected
+                              ? 2
+                              : 1.5,
+                        borderColor,
+                        boxShadow: isCopilotHighlight
+                          ? `0 0 16px #BF5AF2aa, 0 0 0 2px #BF5AF2`
+                          : viewMode === 'confidence'
                             ? `0 0 ${confW.glow}px ${color}${isSelected ? 'cc' : '88'}, 0 0 0 ${isSelected ? 2 : 0}px ${color}`
                             : isSelected
                               ? `0 0 0 2px ${color}`
                               : undefined,
                       }}
-                      title={`${label} · ${hex.pm25} µg/m³ · conf ${confScore ?? '—'}% · ${hex.id}`}
+                      title={`${label} · ${hex.pm25} µg/m³ · conf ${confScore ?? '—'}% · ${hex.id}${isCopilotHighlight ? ' · Copilot highlight' : ''}`}
                     >
+                      {isCopilotHighlight && (
+                        <span className="text-[7px] uppercase tracking-wider text-fuchsia-300 font-bold block mb-0.5">
+                          Copilot
+                        </span>
+                      )}
                       <span className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[76px]' : ''}`}>
                         {compactLabels && label.length > 12 ? `${label.slice(0, 11)}…` : label}
                       </span>
-                      <div className="text-right font-bold mt-0.5" style={{ color }}>
+                      <div className="text-right font-bold mt-0.5" style={{ color: isCopilotHighlight ? '#BF5AF2' : color }}>
                         {viewMode === 'enforcement'
                           ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
                           : viewMode === 'confidence'
@@ -308,11 +354,14 @@ function MapContainer({
               const { x, y } = project(hex.lat, hex.lng);
               const color = hexColor(hex, viewMode);
               const isSelected = selectedHex?.id === hex.id;
+              const isCopilotHighlight = highlightSet.has(hex.id);
               const label = formatLocationName(hex);
               const confScore = hex.attributionConfidence ?? hex.confidence;
               const confW = confidenceVisualWeight(confScore);
-              const strokeW =
-                viewMode === 'confidence'
+              const strokeColor = isCopilotHighlight ? '#BF5AF2' : color;
+              const strokeW = isCopilotHighlight
+                ? 3
+                : viewMode === 'confidence'
                   ? confW.borderPx
                   : isSelected
                     ? 2.5
@@ -323,6 +372,15 @@ function MapContainer({
                   className="cursor-pointer pointer-events-auto group/hex"
                   onClick={() => onSelectHex(hex)}
                 >
+                  {isCopilotHighlight && (
+                    <polygon
+                      points={getHexPoints(x, y, (compactLabels ? 28 : 42) + 8)}
+                      fill="none"
+                      stroke="#BF5AF2"
+                      strokeWidth={2}
+                      opacity={0.55}
+                    />
+                  )}
                   {viewMode === 'confidence' && confW.glow > 4 && (
                     <polygon
                       points={getHexPoints(x, y, (compactLabels ? 28 : 42) + 4)}
@@ -334,8 +392,14 @@ function MapContainer({
                   )}
                   <polygon
                     points={getHexPoints(x, y, compactLabels ? 28 : 42)}
-                    fill={isSelected ? `${color}40` : `${color}${viewMode === 'confidence' ? '28' : '15'}`}
-                    stroke={color}
+                    fill={
+                      isCopilotHighlight
+                        ? '#BF5AF240'
+                        : isSelected
+                          ? `${color}40`
+                          : `${color}${viewMode === 'confidence' ? '28' : '15'}`
+                    }
+                    stroke={strokeColor}
                     strokeWidth={strokeW}
                     className="transition-all duration-300 hover:fill-white/10"
                   />
@@ -355,7 +419,7 @@ function MapContainer({
                   <text
                     x={x}
                     y={y + 8}
-                    fill={color}
+                    fill={isCopilotHighlight ? '#BF5AF2' : color}
                     fontSize={compactLabels ? '6' : '8'}
                     fontFamily="monospace"
                     textAnchor="middle"

@@ -14,12 +14,31 @@ from pipeline.station_registry import get_registry_stations
 # Used only to select the nearest monitoring station when a user names a
 # common locality without a monitor ID. These are not exact local readings.
 _LOCALITY_CENTRES: dict[str, tuple[float, float]] = {
-    "whitefield": (12.9698, 77.7500), "indiranagar": (12.9784, 77.6408),
-    "koramangala": (12.9352, 77.6245), "marathahalli": (12.9592, 77.6974),
-    "bellandur": (12.9260, 77.6762), "electronic city": (12.8456, 77.6603),
-    "hsr layout": (12.9116, 77.6389), "jayanagar": (12.9299, 77.5828),
-    "peenya": (13.0285, 77.5190), "hebbal": (13.0358, 77.5970),
+    "whitefield": (12.9698, 77.7500),
+    "indiranagar": (12.9784, 77.6408),
+    "koramangala": (12.9352, 77.6245),
+    "marathahalli": (12.9592, 77.6974),
+    "bellandur": (12.9260, 77.6762),
+    "electronic city": (12.8456, 77.6603),
+    "hsr layout": (12.9116, 77.6389),
+    "hsr": (12.9116, 77.6389),
+    "jayanagar": (12.9299, 77.5828),
+    "peenya": (13.0285, 77.5190),
+    "hebbal": (13.0358, 77.5970),
     "btm": (12.9166, 77.6101),
+    "yeshwanthpur": (13.0280, 77.5400),
+    "yeshvantpur": (13.0280, 77.5400),
+    "manyata": (13.0475, 77.6210),
+    "manyata tech park": (13.0475, 77.6210),
+    "silk board": (12.9177, 77.6238),
+    "kormangala": (12.9352, 77.6245),  # common misspelling
+    "mg road": (12.9750, 77.6063),
+    "majestic": (12.9767, 77.5713),
+    "airport": (13.1986, 77.7066),
+    "kempegowda": (13.1986, 77.7066),
+    "banashankari": (12.9255, 77.5468),
+    "rajajinagar": (12.9911, 77.5540),
+    "malleshwaram": (13.0035, 77.5640),
 }
 
 

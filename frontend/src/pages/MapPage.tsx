@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCityExtremes, usePriorities, useStations } from '../api/client';
 import { PriorityHex } from '../types';
 import MapContainer from '../components/MapContainer';
 import SourceIcon from '../components/SourceIcon';
 import { formatLocationName } from '../services/enforcementUtils';
-import { Shield, AlertTriangle, ArrowRight, MapPin, ChevronDown, BarChart3 } from 'lucide-react';
+import { useMapCopilotContext } from '../context/MapCopilotContext';
+import {
+  Shield,
+  AlertTriangle,
+  ArrowRight,
+  MapPin,
+  ChevronDown,
+  BarChart3,
+  Bot,
+  Sparkles,
+  X,
+} from 'lucide-react';
 
 /** Map view mode: cleanest-only, both, or most-polluted with selectable depth. */
 type ExtremeMode = 'best' | 'both' | 'worst';
@@ -27,6 +38,15 @@ const CLEANEST_COUNT = 15;
 
 export default function MapPage() {
   const navigate = useNavigate();
+  const {
+    setMapContext,
+    mapActions,
+    mapActionsUpdatedAt,
+    clearMapActions,
+    station_id: mapCtxStation,
+    h3_cell: mapCtxH3,
+    label: mapCtxLabel,
+  } = useMapCopilotContext();
   const { data: extremes, isError: extremesError, isLoading: extremesLoading } = useCityExtremes();
   const { data: priorities = [] } = usePriorities();
   const { isError: stationsError, isLoading: stationsLoading } = useStations();
@@ -36,6 +56,76 @@ export default function MapPage() {
   /** Demo-friendly default: Top 30 most polluted when viewing polluted set */
   const [pollutedDepth, setPollutedDepth] = useState<PollutedDepth>(30);
   const [mapLayer, setMapLayer] = useState<MapLayerMode>('aqi');
+
+  const cleanestPool = extremes?.best ?? [];
+  const pollutedPool = extremes?.worst ?? [];
+  const pollutedAvailable = pollutedPool.length;
+  const cleanestShown = cleanestPool.slice(0, CLEANEST_COUNT);
+  const pollutedShown = pollutedPool.slice(0, Math.min(pollutedDepth, pollutedAvailable));
+
+  const baseHexes: PriorityHex[] =
+    extremeMode === 'best'
+      ? cleanestShown
+      : extremeMode === 'worst'
+        ? pollutedShown
+        : [...cleanestShown, ...pollutedShown];
+
+  // Merge priority hexes so Copilot-highlighted cells (often top enforcement) are on the map
+  const allHexes = useMemo(() => {
+    const byId = new Map<string, PriorityHex>();
+    for (const h of baseHexes) byId.set(h.id, h);
+    for (const p of priorities || []) {
+      if (p?.id && !byId.has(p.id)) byId.set(p.id, p);
+    }
+    return Array.from(byId.values());
+  }, [baseHexes, priorities]);
+
+  const highlightedHexIds = useMemo(
+    () => mapActions?.highlight_h3_cells || [],
+    [mapActions?.highlight_h3_cells],
+  );
+
+  const focusCenter = useMemo(() => {
+    const f = mapActions?.focus_on;
+    if (f?.lat != null && f?.lng != null) {
+      return { lat: Number(f.lat), lng: Number(f.lng) };
+    }
+    const cell = f?.h3_cell || highlightedHexIds[0];
+    if (cell) {
+      const match = allHexes.find((h) => h.id === cell);
+      if (match) return { lat: match.lat, lng: match.lng };
+    }
+    return null;
+  }, [mapActions?.focus_on, highlightedHexIds, allHexes]);
+
+  // When Copilot publishes new map_actions, select / focus the primary hex
+  useEffect(() => {
+    if (!mapActionsUpdatedAt || !mapActions) return;
+    const focusId =
+      mapActions.focus_on?.h3_cell || mapActions.highlight_h3_cells?.[0] || null;
+    if (!focusId) return;
+    const match =
+      allHexes.find((h) => h.id === focusId) ||
+      (priorities || []).find((h) => h.id === focusId);
+    if (match) {
+      setSelectedHex(match);
+      setExtremeMode((m) => (m === 'best' ? 'both' : m));
+    }
+  }, [mapActionsUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const compactLabels =
+    extremeMode === 'worst'
+      ? pollutedDepth > 15
+      : extremeMode === 'both'
+        ? pollutedDepth > 15
+        : false;
+
+  const activeHex = selectedHex || allHexes[0] || null;
+  const hasMapCtx = Boolean(mapCtxStation || mapCtxH3);
+  const hasCopilotHighlights = highlightedHexIds.length > 0;
+  const pollutedLabel =
+    POLLUTED_OPTIONS.find((o) => o.value === pollutedDepth)?.label ??
+    `Top ${pollutedDepth} Most Polluted`;
 
   if (extremesLoading || stationsLoading) {
     return (
@@ -65,31 +155,6 @@ export default function MapPage() {
     );
   }
 
-  const cleanestPool = extremes?.best ?? [];
-  const pollutedPool = extremes?.worst ?? [];
-  const pollutedAvailable = pollutedPool.length;
-  const cleanestShown = cleanestPool.slice(0, CLEANEST_COUNT);
-  const pollutedShown = pollutedPool.slice(0, Math.min(pollutedDepth, pollutedAvailable));
-
-  const allHexes: PriorityHex[] =
-    extremeMode === 'best'
-      ? cleanestShown
-      : extremeMode === 'worst'
-        ? pollutedShown
-        : [...cleanestShown, ...pollutedShown];
-
-  const compactLabels =
-    extremeMode === 'worst'
-      ? pollutedDepth > 15
-      : extremeMode === 'both'
-        ? pollutedDepth > 15
-        : false;
-
-  const activeHex = selectedHex || allHexes[0] || null;
-  const pollutedLabel =
-    POLLUTED_OPTIONS.find((o) => o.value === pollutedDepth)?.label ??
-    `Top ${pollutedDepth} Most Polluted`;
-
   const handleDispatch = (hex: PriorityHex) => {
     setDispatchedUnits((prev) => ({ ...prev, [hex.id]: true }));
     const qs = new URLSearchParams({
@@ -100,6 +165,20 @@ export default function MapPage() {
       action: hex.explanation?.text || 'Inspect site for dust control compliance and document evidence.',
     });
     navigate(`/dispatch?${qs.toString()}`);
+  };
+
+  /** One-way Map → Copilot: stash hex (and optional nearest station) then open Copilot. */
+  const handleAskCopilot = (hex: PriorityHex) => {
+    setMapContext({
+      h3_cell: hex.id,
+      station_id: undefined,
+      label: formatLocationName(hex) || hex.name || hex.id,
+    });
+    const qs = new URLSearchParams({
+      h3_cell: hex.id,
+      label: formatLocationName(hex) || hex.name || hex.id,
+    });
+    navigate(`/copilot?${qs.toString()}`);
   };
 
   const topFive = (priorities || []).slice(0, 5);
@@ -114,7 +193,51 @@ export default function MapPage() {
           allHexes={allHexes}
           viewMode={mapLayer}
           compactLabels={compactLabels}
+          highlightedHexIds={highlightedHexIds}
+          focusCenter={focusCenter}
         />
+
+        {/* Map ↔ Copilot status chips */}
+        {(hasCopilotHighlights || hasMapCtx) && (
+          <div className="absolute top-4 right-4 z-20 flex flex-col gap-2 items-end max-w-[280px]">
+            {hasCopilotHighlights && (
+              <div className="ui-glass ui-glass-floating rounded-2xl px-3 py-2 border border-fuchsia-500/40 shadow-lg flex items-start gap-2">
+                <Sparkles size={14} className="text-fuchsia-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">
+                    Copilot highlights
+                  </div>
+                  <div className="text-[10px] text-white/80 font-mono truncate">
+                    {highlightedHexIds.length} hex
+                    {highlightedHexIds.length === 1 ? '' : 'es'}
+                    {mapActions?.focus_on?.label
+                      ? ` · ${mapActions.focus_on.label}`
+                      : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => clearMapActions()}
+                  className="p-1 rounded-full hover:bg-white/10 text-apple-secondary hover:text-white shrink-0"
+                  title="Clear Copilot highlights"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+            {hasMapCtx && (
+              <div className="ui-glass ui-glass-subtle rounded-2xl px-3 py-2 border border-brand-blue/40 flex items-center gap-2">
+                <MapPin size={12} className="text-brand-blue shrink-0" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+                  Map context active
+                </span>
+                <span className="text-[10px] text-white/70 font-mono truncate max-w-[120px]">
+                  {mapCtxLabel || mapCtxStation || String(mapCtxH3 || '').slice(0, 10)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Layer toggle — prominent top-left control */}
         <div className="absolute top-4 left-4 z-20 flex flex-col gap-1.5">
@@ -502,8 +625,16 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* Action dispatch button */}
+            {/* Actions: Ask Copilot (Map → Copilot) + Dispatch */}
             <div className="p-5 border-t border-apple-border bg-apple-card/20 space-y-2">
+              <button
+                type="button"
+                onClick={() => handleAskCopilot(activeHex)}
+                className="w-full min-h-[44px] py-3 rounded-full text-xs font-bold uppercase tracking-wider transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-indigo-600/20 border border-indigo-400/30"
+              >
+                <Bot size={14} />
+                Ask Copilot about this area
+              </button>
               <button
                 type="button"
                 onClick={() => handleDispatch(activeHex)}

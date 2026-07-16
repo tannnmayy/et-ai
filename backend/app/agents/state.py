@@ -27,6 +27,7 @@ class AgentState:
     user_query: str = ""
     city: str = "bengaluru"
     station_id: str = ""
+    h3_cell: str | None = None  # Map / Enforcement hex context
     intent: Intent = Intent.unsupported
     profile: str = "general"
     language: str = "en"
@@ -39,3 +40,7 @@ class AgentState:
     audit_events: list[dict] = field(default_factory=list)
     llm_status: str = "deterministic"
     fallback_used: bool = False
+    # Client-provided map context (prefer over re-resolving)
+    map_context_provided: bool = False
+    # Multi-turn: prior messages [{role, content}, ...] (last 4–6)
+    conversation_history: list[dict[str, str]] = field(default_factory=list)

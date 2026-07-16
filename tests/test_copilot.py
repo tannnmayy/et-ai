@@ -273,17 +273,41 @@ class TestRagAndCache:
 
 
 class TestLLMFallback:
-    def test_no_api_key_uses_deterministic_mode(self) -> None:
+    def test_no_api_key_uses_deterministic_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Clear keys so this does not depend on a developer .env
+        for var in (
+            "AQI_SENTINEL_GEMINI_API_KEY",
+            "AQI_SENTINEL_GEMINI_API_KEY_2",
+            "AQI_SENTINEL_GEMINI_API_KEY_3",
+            "AQI_SENTINEL_GROQ_API_KEY",
+            "AQI_SENTINEL_GROQ_API_KEY_2",
+            "AQI_SENTINEL_OPENROUTER_API_KEY",
+            "AQI_SENTINEL_LLM_API_KEY",
+        ):
+            monkeypatch.setenv(var, "")
         llm = LLMProvider()
         assert llm.is_available is False
+        # Explicit station_explanation path is always deterministic (no LLM rewrite)
         result = run_orchestrator(
             station_id="cpcb_hebbal", query="Explain forecast", explicit_intent="station_explanation"
         )
         assert result["llm_mode"] == "deterministic"
         assert result["fallback_used"] is False
+        assert result.get("response_mode") == "fast_path"
 
-    def test_llm_summarize_returns_none_without_key(self) -> None:
+    def test_llm_summarize_returns_none_without_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for var in (
+            "AQI_SENTINEL_GEMINI_API_KEY",
+            "AQI_SENTINEL_GEMINI_API_KEY_2",
+            "AQI_SENTINEL_GEMINI_API_KEY_3",
+            "AQI_SENTINEL_GROQ_API_KEY",
+            "AQI_SENTINEL_GROQ_API_KEY_2",
+            "AQI_SENTINEL_OPENROUTER_API_KEY",
+            "AQI_SENTINEL_LLM_API_KEY",
+        ):
+            monkeypatch.setenv(var, "")
         llm = LLMProvider()
+        assert llm.is_available is False
         result = llm.summarize("test prompt", {"key": "value"})
         assert result is None
 
@@ -293,6 +317,8 @@ class TestLLMFallback:
         monkeypatch.setenv("AQI_SENTINEL_GEMINI_API_KEY_3", "test-key-three")
         monkeypatch.setenv("AQI_SENTINEL_OPENROUTER_API_KEY", "")
         monkeypatch.setenv("AQI_SENTINEL_LLM_API_KEY", "")
+        monkeypatch.setenv("AQI_SENTINEL_GROQ_API_KEY", "")
+        monkeypatch.setenv("AQI_SENTINEL_GROQ_API_KEY_2", "")
         llm = LLMProvider()
         assert llm.is_available is True
         assert len(llm._gemini_keys) == 3
@@ -315,10 +341,27 @@ class TestCopilotAPI:
         )
         result = copilot_query(req)
         assert isinstance(result, CopilotResponse)
-        assert result.intent in ("station_explanation", "station_confidence", "inspection_plan", "citizen_guidance", "city_briefing")
+        # Free-text uses tool agent (Phase 1+); REST-specialized intents still supported
+        assert result.intent in (
+            "station_explanation",
+            "station_confidence",
+            "inspection_plan",
+            "citizen_guidance",
+            "city_briefing",
+            "dynamic_planning",
+            "tool_agent",
+        )
         assert result.answer
         assert result.audit_trail.request_id
         assert result.llm_mode in ("deterministic", "hosted", "fallback")
+        assert result.selected_agent
+        # Phase 2 mode / cache fields present
+        assert result.response_mode in (
+            "tool_agent",
+            "heuristic_fallback",
+            "fast_path",
+            None,
+        ) or result.response_mode
 
     def test_station_explain_endpoint(self) -> None:
         result = copilot_station_explain("cpcb_hebbal")

@@ -5,6 +5,7 @@ import MainLayout from './components/MainLayout';
 import MapPage from './pages/MapPage';
 import LandingPage from './pages/LandingPage';
 import { SessionProvider, useSession, defaultPathForRole } from './context/SessionContext';
+import { MapCopilotProvider } from './context/MapCopilotContext';
 
 const EnforcementPage = lazy(() => import('./pages/EnforcementPage'));
 const CopilotPage = lazy(() => import('./pages/CopilotPage'));
@@ -57,6 +58,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
+        <MapCopilotProvider>
         <HashRouter>
           <Routes>
             <Route path="/welcome" element={<WelcomeGate />} />
@@ -120,6 +122,7 @@ export default function App() {
             </Route>
           </Routes>
         </HashRouter>
+        </MapCopilotProvider>
       </SessionProvider>
     </QueryClientProvider>
   );

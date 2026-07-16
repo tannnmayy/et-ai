@@ -20,6 +20,13 @@ class AuditTrail:
         self.knowledge_backend: str | None = None
         self.llm_provider_used: str | None = None
         self.gemini_key_index: int | None = None
+        # Phase 2 cache / mode metadata
+        self.cache_hit: bool = False
+        self.cache_key: str | None = None
+        self.cache_kind: str | None = None  # exact | semantic | miss
+        self.response_mode: str | None = None  # tool_agent | heuristic_fallback | fast_path
+        self.memory_turns_used: int = 0
+        self.whatif_used: bool = False
 
     def record_tool_call(self, tool_name: str, arguments: dict[str, Any], success: bool) -> None:
         event = {
@@ -79,6 +86,40 @@ class AuditTrail:
                 detail += f" (Gemini key #{gemini_key_index})"
             self.record_reasoning("llm", detail, provider=provider, gemini_key_index=gemini_key_index)
 
+    def set_cache_meta(
+        self,
+        *,
+        cache_hit: bool,
+        cache_key: str | None = None,
+        cache_kind: str | None = None,
+    ) -> None:
+        self.cache_hit = cache_hit
+        self.cache_key = cache_key
+        self.cache_kind = cache_kind
+        if cache_hit:
+            self.record_reasoning(
+                "cache",
+                f"Cache hit ({cache_kind or 'exact'})",
+                cache_key=cache_key,
+                cache_kind=cache_kind,
+            )
+
+    def set_response_mode(self, mode: str) -> None:
+        self.response_mode = mode
+
+    def set_memory_turns(self, n: int) -> None:
+        self.memory_turns_used = max(0, int(n))
+        if self.memory_turns_used:
+            self.record_reasoning(
+                "memory",
+                f"Using {self.memory_turns_used} prior turn(s) from conversation history",
+                turns=self.memory_turns_used,
+            )
+
+    def mark_whatif(self) -> None:
+        self.whatif_used = True
+        self.record_reasoning("whatif", "What-if / counterfactual simulation tool used")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "request_id": self.request_id,
@@ -94,4 +135,10 @@ class AuditTrail:
             "knowledge_backend": self.knowledge_backend,
             "llm_provider_used": self.llm_provider_used,
             "gemini_key_index": self.gemini_key_index,
+            "cache_hit": self.cache_hit,
+            "cache_key": self.cache_key,
+            "cache_kind": self.cache_kind,
+            "response_mode": self.response_mode,
+            "memory_turns_used": self.memory_turns_used,
+            "whatif_used": self.whatif_used,
         }

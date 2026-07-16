@@ -86,6 +86,14 @@ export interface ReasoningStep {
   meta?: string;
 }
 
+/** Phase 2 Copilot response mode badges */
+export type CopilotResponseMode =
+  | 'tool_agent'
+  | 'heuristic_fallback'
+  | 'fast_path'
+  | 'cached'
+  | string;
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -93,7 +101,7 @@ export interface ChatMessage {
   timestamp: string;
   sender: string;
   reasoning?: ReasoningStep[];
-  /** Optional badges: KB used, LLM key fallback, etc. */
+  /** Optional badges: KB used, mode, cache, LLM provider, etc. */
   meta?: {
     knowledgeBaseUsed?: boolean;
     knowledgeBackend?: string | null;
@@ -101,6 +109,15 @@ export interface ChatMessage {
     geminiKeyIndex?: number | null;
     fallbackUsed?: boolean;
     llmMode?: string;
+    responseMode?: CopilotResponseMode | null;
+    cacheHit?: boolean;
+    cacheKind?: string | null;
+    isGenericRefuse?: boolean;
+    isLimitedResponse?: boolean;
+    whatifUsed?: boolean;
+    memoryTurns?: number;
+    mapActionsApplied?: boolean;
+    mapActionCount?: number;
   };
   attachments?: { name: string; type: string }[];
 }

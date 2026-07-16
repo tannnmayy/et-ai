@@ -18,6 +18,37 @@ _CACHE_TTL_SECONDS = int(os.getenv("AQI_SENTINEL_LLM_CACHE_TTL", str(8 * 60)))  
 _MAX_RETRIES = max(1, int(os.getenv("AQI_SENTINEL_LLM_MAX_RETRIES", "3")))
 _BACKOFF_BASE = float(os.getenv("AQI_SENTINEL_LLM_BACKOFF_BASE", "0.8"))  # seconds
 
+# Circuit breaker: provider_name -> unix timestamp until which we skip it
+_CIRCUIT_COOLDOWN_UNTIL: dict[str, float] = {}
+_CIRCUIT_COOLDOWN_S = float(os.getenv("AQI_SENTINEL_LLM_CIRCUIT_COOLDOWN", "90"))
+
+# Groq model for native tool calling.
+# Many projects block Llama 3.1/3.3 70B; openai/gpt-oss-120b is widely available.
+# Override with AQI_SENTINEL_GROQ_MODEL if your project enables other models.
+_DEFAULT_GROQ_TOOL_MODEL = os.getenv(
+    "AQI_SENTINEL_GROQ_MODEL", "openai/gpt-oss-120b"
+)
+
+
+def _circuit_open(provider: str) -> bool:
+    until = _CIRCUIT_COOLDOWN_UNTIL.get(provider, 0.0)
+    if until <= 0:
+        return False
+    if time.time() >= until:
+        _CIRCUIT_COOLDOWN_UNTIL.pop(provider, None)
+        return False
+    return True
+
+
+def _trip_circuit(provider: str, reason: str = "rate_limit") -> None:
+    _CIRCUIT_COOLDOWN_UNTIL[provider] = time.time() + _CIRCUIT_COOLDOWN_S
+    logger.warning(
+        "Circuit breaker OPEN for %s (%.0fs) — %s",
+        provider,
+        _CIRCUIT_COOLDOWN_S,
+        reason,
+    )
+
 
 def _has_broken_loopback_proxy() -> bool:
     """Detect the known unusable local proxy without overriding real proxies."""
@@ -154,31 +185,57 @@ class LLMProvider:
             if val and val not in self._gemini_keys:
                 self._gemini_keys.append(val)
 
+        # Multi-key Groq pool (dedicated Copilot keys first)
+        self._groq_keys: list[str] = []
+        for env_name in (
+            "AQI_SENTINEL_GROQ_API_KEY",
+            "AQI_SENTINEL_GROQ_API_KEY_2",
+            "AQI_SENTINEL_LLM_API_KEY",  # legacy single Groq key
+            "GROQ_API_KEY",
+        ):
+            val = (os.getenv(env_name) or "").strip()
+            if val and val not in self._groq_keys:
+                self._groq_keys.append(val)
+
+        self.groq_model = (
+            os.getenv("AQI_SENTINEL_GROQ_MODEL")
+            or (self.model if self.provider == "groq" and self.model else None)
+            or _DEFAULT_GROQ_TOOL_MODEL
+        )
+
         self._keys = {
             "gemini": self._gemini_keys[0] if self._gemini_keys else None,
             "openrouter": os.getenv("AQI_SENTINEL_OPENROUTER_API_KEY"),
-            "groq": os.getenv("AQI_SENTINEL_LLM_API_KEY"),
+            "groq": self._groq_keys[0] if self._groq_keys else None,
         }
         self._providers = self._configured_providers()
         self.api_key: str | None = self._keys.get(self.provider)
         self.last_provider: str | None = None
         self.last_gemini_key_index: int | None = None
+        self.last_groq_key_index: int | None = None
         self.last_fallback_note: str | None = None
-        self._available = bool(self._providers) or bool(self._gemini_keys)
+        self._available = bool(self._providers) or bool(self._gemini_keys) or bool(self._groq_keys)
 
     def _configured_providers(self) -> list[str]:
-        """Prefer Gemini multi-key, then other configured services."""
+        """Copilot Phase 1: Groq first (tool-calling), then Gemini, then OpenRouter."""
         configured: list[str] = []
-        order = (self.provider, "gemini", "openrouter", "groq")
+        # Explicit preferred order for the new architecture
+        prefer = os.getenv("AQI_SENTINEL_LLM_PROVIDER", "groq").strip().lower()
+        if prefer == "gemini":
+            order = ("gemini", "groq", "openrouter")
+        else:
+            order = ("groq", "gemini", "openrouter")
         for provider in order:
             if provider == "gemini" and self._gemini_keys and "gemini" not in configured:
                 configured.append("gemini")
-            elif provider in self._keys and self._keys[provider] and provider not in configured:
-                if provider != "gemini" or self._gemini_keys:
-                    configured.append(provider)
-        # Ensure gemini is tried first when keys exist
-        if "gemini" in configured and configured[0] != "gemini":
-            configured = ["gemini"] + [p for p in configured if p != "gemini"]
+            elif provider == "groq" and self._groq_keys and "groq" not in configured:
+                configured.append("groq")
+            elif (
+                provider == "openrouter"
+                and self._keys.get("openrouter")
+                and "openrouter" not in configured
+            ):
+                configured.append("openrouter")
         return configured
 
     @property
@@ -283,6 +340,9 @@ class LLMProvider:
 
         self.last_fallback_note = None
         for provider in self._providers:
+            if _circuit_open(provider):
+                logger.info("Skipping %s (circuit open)", provider)
+                continue
             if provider == "gemini":
                 response = self._call_gemini_with_key_fallback(prompt, structured_data, system_prompt=system_msg)
             elif provider == "openrouter":
@@ -301,6 +361,65 @@ class LLMProvider:
                 _cache_set(key, response)
                 return response
             self.last_fallback_note = f"{provider} unavailable; trying next provider"
+        return None
+
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 1200,
+    ) -> dict[str, Any] | None:
+        """Native function-calling turn (OpenAI-compatible API).
+
+        Returns:
+          {
+            "content": str | None,
+            "tool_calls": [{"id", "name", "arguments": dict}, ...],
+            "provider": str,
+            "finish_reason": str | None,
+          }
+        or None if all providers fail.
+        """
+        if not self._available:
+            return None
+
+        # Prefer Groq for tool calling, then OpenRouter; Gemini text path is weaker here
+        order: list[str] = []
+        for p in ("groq", "openrouter", "gemini"):
+            if p in self._providers and p not in order:
+                order.append(p)
+        for p in self._providers:
+            if p not in order:
+                order.append(p)
+
+        for provider in order:
+            if _circuit_open(provider):
+                continue
+            if provider == "groq" and self._groq_keys:
+                result = self._chat_tools_groq(messages, tools, temperature, max_tokens)
+                if result:
+                    self.last_provider = "groq"
+                    return result
+            elif provider == "openrouter" and self._keys.get("openrouter"):
+                result = self._chat_tools_openai_compatible(
+                    api_key=self._keys["openrouter"],
+                    base_url="https://openrouter.ai/api/v1",
+                    model=self.openrouter_model or "openrouter/free",
+                    messages=messages,
+                    tools=tools,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    provider_label="openrouter",
+                )
+                if result:
+                    self.last_provider = "openrouter"
+                    return result
+            elif provider == "gemini" and self._gemini_keys:
+                # Gemini: use OpenAI-compatible endpoint when available, else skip tools
+                # Fall through to text-only is handled by agent fallback
+                continue
         return None
 
     def _call_gemini_with_key_fallback(
@@ -427,34 +546,233 @@ class LLMProvider:
             return None
 
     def _call_groq(self, prompt: str, structured_data: dict[str, Any], system_prompt: str | None = None) -> str | None:
+        if not self._groq_keys:
+            return None
+        system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
+        user_content = f"{prompt}\n\nData:\n{json.dumps(structured_data, indent=2, default=str)}"
+        for key_index, api_key in enumerate(self._groq_keys, start=1):
+            if _circuit_open(f"groq:{key_index}"):
+                continue
+            try:
+                import openai
+                from openai import APITimeoutError
+
+                client = openai.OpenAI(
+                    api_key=api_key,
+                    base_url="https://api.groq.com/openai/v1",
+                    timeout=20.0,
+                )
+                resp = client.chat.completions.create(
+                    model=self.groq_model,
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": user_content},
+                    ],
+                    temperature=0.3,
+                    max_tokens=800,
+                )
+                self.last_groq_key_index = key_index
+                return resp.choices[0].message.content
+            except ImportError:
+                logger.warning("openai package not installed")
+                return None
+            except Exception as exc:
+                msg = str(exc).lower()
+                if "429" in msg or "rate" in msg or "quota" in msg:
+                    _trip_circuit(f"groq:{key_index}", "rate_limit")
+                    logger.warning("Groq key #%d rate-limited; trying next", key_index)
+                    continue
+                logger.warning("Groq key #%d call failed: %s", key_index, exc)
+                continue
+        _trip_circuit("groq", "all_keys_failed")
+        return None
+
+    def _chat_tools_groq(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        temperature: float,
+        max_tokens: int,
+    ) -> dict[str, Any] | None:
+        for key_index, api_key in enumerate(self._groq_keys, start=1):
+            if _circuit_open(f"groq:{key_index}"):
+                continue
+            try:
+                import openai
+
+                client = openai.OpenAI(
+                    api_key=api_key,
+                    base_url="https://api.groq.com/openai/v1",
+                    timeout=35.0,
+                )
+                resp = client.chat.completions.create(
+                    model=self.groq_model,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                choice = resp.choices[0]
+                msg = choice.message
+                tool_calls: list[dict[str, Any]] = []
+                if getattr(msg, "tool_calls", None):
+                    for tc in msg.tool_calls:
+                        args_raw = tc.function.arguments or "{}"
+                        try:
+                            args = json.loads(args_raw)
+                        except json.JSONDecodeError:
+                            args = {"_raw": args_raw}
+                        tool_calls.append(
+                            {
+                                "id": tc.id,
+                                "name": tc.function.name,
+                                "arguments": args if isinstance(args, dict) else {"value": args},
+                            }
+                        )
+                self.last_groq_key_index = key_index
+                self.last_provider = "groq"
+                return {
+                    "content": msg.content,
+                    "tool_calls": tool_calls,
+                    "provider": "groq",
+                    "finish_reason": choice.finish_reason,
+                    "key_index": key_index,
+                }
+            except Exception as exc:
+                msg = str(exc).lower()
+                if "429" in msg or "rate" in msg or "quota" in msg:
+                    _trip_circuit(f"groq:{key_index}", "rate_limit")
+                    continue
+                # Project-level model blocks — try lighter fallback model once
+                if "blocked" in msg or "permission" in msg or "403" in msg:
+                    for fallback_model in (
+                        "openai/gpt-oss-120b",
+                        "llama-3.1-8b-instant",
+                        "llama-3.3-70b-versatile",
+                    ):
+                        if fallback_model == self.groq_model:
+                            continue
+                        try:
+                            import openai as _oai
+
+                            client2 = _oai.OpenAI(
+                                api_key=api_key,
+                                base_url="https://api.groq.com/openai/v1",
+                                timeout=35.0,
+                            )
+                            resp2 = client2.chat.completions.create(
+                                model=fallback_model,
+                                messages=messages,
+                                tools=tools,
+                                tool_choice="auto",
+                                temperature=temperature,
+                                max_tokens=max_tokens,
+                            )
+                            choice = resp2.choices[0]
+                            msg2 = choice.message
+                            tool_calls = []
+                            if getattr(msg2, "tool_calls", None):
+                                for tc in msg2.tool_calls:
+                                    args_raw = tc.function.arguments or "{}"
+                                    try:
+                                        args = json.loads(args_raw)
+                                    except json.JSONDecodeError:
+                                        args = {"_raw": args_raw}
+                                    tool_calls.append(
+                                        {
+                                            "id": tc.id,
+                                            "name": tc.function.name,
+                                            "arguments": args
+                                            if isinstance(args, dict)
+                                            else {"value": args},
+                                        }
+                                    )
+                            self.last_groq_key_index = key_index
+                            self.last_provider = "groq"
+                            self.groq_model = fallback_model
+                            logger.info("Groq fallback model OK: %s", fallback_model)
+                            return {
+                                "content": msg2.content,
+                                "tool_calls": tool_calls,
+                                "provider": "groq",
+                                "finish_reason": choice.finish_reason,
+                                "key_index": key_index,
+                                "model": fallback_model,
+                            }
+                        except Exception as exc2:
+                            logger.warning(
+                                "Groq fallback model %s failed: %s", fallback_model, exc2
+                            )
+                            continue
+                logger.warning("Groq tools key #%d failed: %s", key_index, exc)
+                continue
+        return None
+
+    def _chat_tools_openai_compatible(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        temperature: float,
+        max_tokens: int,
+        provider_label: str,
+    ) -> dict[str, Any] | None:
         try:
             import openai
-            from openai import APITimeoutError
-            client = openai.OpenAI(
-                api_key=self._keys["groq"],
-                base_url="https://api.groq.com/openai/v1",
-                timeout=15.0,
+            import httpx
+
+            http_client = httpx.Client(
+                timeout=35.0, trust_env=not _has_broken_loopback_proxy()
             )
-            model = self.model if self.provider == "groq" and self.model else "openai/gpt-oss-120b"
-            system_msg = system_prompt or _SUMMARIZER_SYSTEM_PROMPT
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": f"{prompt}\n\nData:\n{json.dumps(structured_data, indent=2, default=str)}"},
-                ],
-                temperature=0.3,
-                max_tokens=800,
-            )
-            return resp.choices[0].message.content
-        except ImportError:
-            logger.warning("openai package not installed")
-            return None
-        except APITimeoutError:
-            logger.warning("Groq API call timed out — falling back")
-            return None
+            try:
+                client = openai.OpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    timeout=35.0,
+                    http_client=http_client,
+                )
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                choice = resp.choices[0]
+                msg = choice.message
+                tool_calls: list[dict[str, Any]] = []
+                if getattr(msg, "tool_calls", None):
+                    for tc in msg.tool_calls:
+                        args_raw = tc.function.arguments or "{}"
+                        try:
+                            args = json.loads(args_raw)
+                        except json.JSONDecodeError:
+                            args = {"_raw": args_raw}
+                        tool_calls.append(
+                            {
+                                "id": tc.id,
+                                "name": tc.function.name,
+                                "arguments": args if isinstance(args, dict) else {"value": args},
+                            }
+                        )
+                return {
+                    "content": msg.content,
+                    "tool_calls": tool_calls,
+                    "provider": provider_label,
+                    "finish_reason": choice.finish_reason,
+                }
+            finally:
+                http_client.close()
         except Exception as exc:
-            logger.warning("Groq call failed: %s", exc)
+            msg = str(exc).lower()
+            if "429" in msg or "rate" in msg:
+                _trip_circuit(provider_label, "rate_limit")
+            logger.warning("%s tools call failed: %s", provider_label, exc)
             return None
 
 
