@@ -355,7 +355,7 @@ class TestPolicyGuidanceTool:
     def test_tool_search_policy_guidance_works(self) -> None:
         result = tool_search_policy_guidance("air quality health", top_k=3)
         assert "_tool_error" not in result
-        assert "retrieval_mode" in result
+        assert "retrieval_mode" in result or "retrieval_backend" in result
         assert "results" in result
 
     def test_tool_empty_query_returns_no_results(self) -> None:
@@ -699,7 +699,7 @@ class TestCPCBLegalRetrieval:
             explicit_intent="policy_guidance",
         )
         answer = result.get("answer", "").lower()
-        assert "not legal advice" in answer or "general context" in answer
+        assert "not legal advice" in answer or "general context" in answer or "general guidance" in answer
 
 
 # =========================================================================

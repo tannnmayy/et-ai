@@ -55,12 +55,13 @@ def _get_service_account_path() -> str | None:
     """Return absolute path to GEE service-account JSON, or None."""
     global _GEE_KEY_WARNED
     path = (os.environ.get("GEE_SERVICE_ACCOUNT_KEY_PATH") or "").strip()
-    if not path and not _GEE_KEY_WARNED:
-        logger.warning(
-            "GEE_SERVICE_ACCOUNT_KEY_PATH not set. "
-            "Sentinel-5P NO2 data will be unavailable."
-        )
-        _GEE_KEY_WARNED = True
+    if not path:
+        if not _GEE_KEY_WARNED:
+            logger.warning(
+                "GEE_SERVICE_ACCOUNT_KEY_PATH not set. "
+                "Sentinel-5P NO2 data will be unavailable."
+            )
+            _GEE_KEY_WARNED = True
         return None
 
     p = Path(path)

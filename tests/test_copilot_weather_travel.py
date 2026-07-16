@@ -9,6 +9,14 @@ from backend.app.agents.orchestrator import _detect_intent, run_orchestrator
 from backend.app.agents.state import Intent
 from backend.app.config import MEDICAL_DISCLAIMER, SCOPE_AQI_COVERAGE, SCOPE_NO_TRAFFIC, SCOPE_WEATHER_CHANGE
 
+@pytest.fixture(autouse=True)
+def remove_llm_keys(monkeypatch):
+    from backend.app.agents.llm_provider import LLMProvider
+    monkeypatch.setattr(LLMProvider, "_configured_providers", lambda self: [])
+    monkeypatch.setattr(LLMProvider, "is_available", property(lambda self: False))
+
+
+
 
 # ---------------------------------------------------------------------------
 # Intent detection tests

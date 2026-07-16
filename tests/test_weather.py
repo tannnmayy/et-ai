@@ -49,7 +49,8 @@ def _sample_raw_response(start_hour: int = 0, hours: int = 72) -> dict:
         "wind_gusts_10m": [],
         "winddirection_10m": [],
     }
-    base = datetime(2026, 7, 6, 0, 0, 0, tzinfo=IST)
+    now = datetime.now(tz=IST)
+    base = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=IST) - timedelta(days=1)
     for i in range(hours):
         dt = base + timedelta(hours=start_hour + i)
         times.append(dt.strftime("%Y-%m-%dT%H:%M"))
@@ -118,8 +119,7 @@ def _sample_raw_response(start_hour: int = 0, hours: int = 72) -> dict:
 
 def _make_multi_day_fixture(days: int = 3, start_hour: int = 8) -> dict:
     """Build a raw Open-Meteo-style fixture spanning multiple calendar days."""
-    from datetime import date, timedelta
-    base = date(2026, 7, 6)
+    base = datetime.now(tz=IST).date() - timedelta(days=1)
     times = []
     fields: dict[str, list] = {
         "temperature_2m": [],

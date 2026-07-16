@@ -27,6 +27,20 @@ from pipeline.firms_ingestion import (
     get_fire_detections,
 )
 
+class MockDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is not None:
+            return datetime(2026, 7, 8, 15, 0, 0, tzinfo=timezone.utc).astimezone(tz)
+        return datetime(2026, 7, 8, 15, 0, 0)
+
+@pytest.fixture(autouse=True)
+def mock_firms_datetime():
+    with patch("pipeline.firms_ingestion.datetime", MockDateTime), \
+         patch("tests.test_firms_ingestion.datetime", MockDateTime):
+        yield
+
+
 # Small fixture CSV with known lat/lon values around Bengaluru
 # All within BENGALURU_BOUNDING_BOX, spanning different H3 cells
 FIXTURE_CSV = """latitude,longitude,frp,confidence,acq_date,acq_time,daynight

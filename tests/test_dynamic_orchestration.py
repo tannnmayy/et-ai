@@ -120,7 +120,7 @@ class MockLLM:
     def is_available(self) -> bool:
         return self._available
 
-    def plan_next_step(self, query: str, tool_schemas: dict, tool_results_so_far: dict, step_number: int, max_steps: int) -> dict | None:
+    def plan_next_step(self, query: str, tool_schemas: dict, tool_results_so_far: dict, step_number: int, max_steps: int, **kwargs) -> dict | None:
         if self.index >= len(self.responses):
             return None
         import json
@@ -314,7 +314,7 @@ class TestPlanNextStep:
         with patch("backend.app.agents.dynamic_planning_agent.get_llm_provider", return_value=mock):
             with patch("backend.app.agents.orchestrator.get_llm_provider", return_value=mock):
                 result = run_orchestrator(
-                    query="What is the capital of France?",
+                    query="Why is Peenya bad and what are the inspection priorities?",
                     station_id="",
                 )
         assert result["intent"] == "dynamic_planning"
@@ -339,6 +339,7 @@ class TestGroqProvider:
         with patch.object(openai_module, "OpenAI", side_effect=mock_constructor):
             llm = LLMProvider()
             llm.api_key = "test-key-for-unit-test"
+            llm._keys["groq"] = "test-key-for-unit-test"
             with patch.object(llm, "_available", True):
                 llm.model = ""
                 result = llm._call_groq("test prompt", {}, system_prompt=None)
@@ -367,6 +368,7 @@ class TestGroqProvider:
         with patch.object(openai_module, "OpenAI", return_value=FakeClient()):
             llm = LLMProvider()
             llm.api_key = "test-key-for-unit-test"
+            llm._keys["groq"] = "test-key-for-unit-test"
             with patch.object(llm, "_available", True):
                 llm.model = ""
                 result = llm._call_groq("test", {})
