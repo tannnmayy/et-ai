@@ -195,7 +195,7 @@ export default function DispatchPage() {
   };
 
   return (
-    <div className="w-full h-full overflow-y-auto bg-black landing-mesh">
+    <div className="w-full h-full overflow-y-auto bg-black">
       <div className="max-w-3xl mx-auto px-5 md:px-8 py-8 pb-20">
         {/* Toolbar — hidden when printing */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6 print:hidden">

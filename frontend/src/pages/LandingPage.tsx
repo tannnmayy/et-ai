@@ -235,19 +235,12 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen w-full landing-mesh text-white font-sans overflow-x-hidden">
-      {/* Ambient orbs */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="ambient-orb absolute -top-24 -left-24 w-[420px] h-[420px] rounded-full bg-brand-blue/20 blur-3xl" />
-        <div className="ambient-orb absolute top-1/3 -right-32 w-[360px] h-[360px] rounded-full bg-brand-green/10 blur-3xl" style={{ animationDelay: '2s' }} />
-        <div className="absolute bottom-0 left-1/3 w-[480px] h-[240px] rounded-full bg-brand-orange/10 blur-3xl" />
-      </div>
-
-      {/* Sticky glass header */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/40 backdrop-blur-2xl">
+    <div className="min-h-screen w-full bg-black text-white font-sans overflow-x-hidden">
+      {/* Sticky header — solid black, no ambient color wash */}
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-brand-blue/15 border border-brand-blue/30 flex items-center justify-center text-brand-blue shrink-0 shadow-[0_0_24px_rgba(10,132,255,0.25)]">
+            <div className="w-10 h-10 rounded-2xl bg-white/[0.06] border border-white/15 flex items-center justify-center text-white shrink-0">
               <Satellite size={18} />
             </div>
             <div className="min-w-0">
@@ -367,8 +360,6 @@ export default function LandingPage() {
         {/* Role + auth */}
         <section id="enter" className="scroll-mt-24">
           <div className="glass-panel-strong rounded-[28px] p-6 sm:p-10 md:p-12 relative overflow-hidden">
-            <div className="pointer-events-none absolute -top-20 right-0 w-72 h-72 rounded-full bg-brand-blue/15 blur-3xl" />
-
             <div className="relative">
               <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
                 <div>

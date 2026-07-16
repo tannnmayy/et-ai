@@ -1017,7 +1017,7 @@ export default function InsightsPage() {
   }, [insights]);
 
   return (
-    <div className="w-full h-full overflow-y-auto bg-black landing-mesh">
+    <div className="w-full h-full overflow-y-auto bg-black">
       <div className="max-w-6xl mx-auto px-5 md:px-8 py-8 md:py-10 space-y-6 md:space-y-8 pb-16">
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 animate-fade-up">
           <div>
