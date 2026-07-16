@@ -524,3 +524,10 @@ et-ai/
 independently-confirmed check. Anything marked "in progress" or "planned" should be
 re-verified before being treated as done — that discipline is the reason this
 project is in the shape it's in.*
+
+---
+
+## Contributors
+
+- **Panshul**
+- **Tanmay Singh** (tannnmayy)
