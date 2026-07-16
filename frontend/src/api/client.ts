@@ -17,4 +17,6 @@ export {
 } from '../services/geospatialService';
 export { useDashboardData } from '../services/analyticsService';
 export { useSendMessage } from '../services/copilotService';
+export { useCityInsights, fetchCityInsights } from '../services/insightsService';
+export type { CityInsightsPack } from '../services/insightsService';
 export { warmAppFromLanding, prefetchMapAndEnforcementData } from '../services/prefetchService';
