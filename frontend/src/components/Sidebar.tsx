@@ -20,8 +20,8 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const role = session?.role ?? 'guest';
 
   return (
-    <aside className="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-black/70 backdrop-blur-2xl border-r border-white/10 flex flex-col p-4 z-40">
-      <div className="flex items-center gap-3 mb-8 p-3 rounded-2xl glass-panel">
+    <aside className="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-black/80 backdrop-blur-xl border-r border-white/10 flex flex-col p-4 z-40">
+      <div className="flex items-center gap-3 mb-8 p-3 rounded-2xl ui-glass ui-glass-subtle">
         <div className="w-10 h-10 rounded-xl bg-brand-blue/15 border border-brand-blue/25 flex items-center justify-center text-brand-blue">
           <Shield size={18} />
         </div>

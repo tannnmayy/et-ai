@@ -116,31 +116,48 @@ export default function MapPage() {
           compactLabels={compactLabels}
         />
 
-        {/* Layer toggle */}
-        <div className="absolute top-6 left-6 z-10 flex gap-1 bg-apple-card/90 border border-apple-border backdrop-blur-md p-1 rounded-xl shadow-xl">
-          {(
-            [
-              { id: 'aqi' as const, label: 'PM2.5' },
-              { id: 'confidence' as const, label: 'Attribution Confidence' },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setMapLayer(opt.id)}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors ${
-                mapLayer === opt.id
-                  ? 'bg-brand-blue text-white'
-                  : 'text-apple-secondary hover:text-white'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        {/* Layer toggle — prominent top-left control */}
+        <div className="absolute top-4 left-4 z-20 flex flex-col gap-1.5">
+          <div className="text-[9px] font-mono uppercase tracking-[0.18em] text-apple-secondary px-1">
+            Map layer
+          </div>
+          <div className="flex gap-1 ui-glass ui-glass-floating p-1.5 rounded-2xl shadow-2xl shadow-black/40">
+            {(
+              [
+                { id: 'aqi' as const, label: 'PM2.5 AQI', hint: 'Pollution intensity' },
+                {
+                  id: 'confidence' as const,
+                  label: 'Attribution Confidence',
+                  hint: 'How much we trust source mix',
+                },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setMapLayer(opt.id)}
+                title={opt.hint}
+                className={`px-3.5 py-2.5 rounded-xl text-[11px] font-bold tracking-wide transition-colors min-h-[44px] active:scale-[0.97] ${
+                  mapLayer === opt.id
+                    ? opt.id === 'confidence'
+                      ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30'
+                      : 'bg-white/15 text-white border border-white/20'
+                    : 'text-apple-secondary hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {mapLayer === 'confidence' && (
+            <div className="text-[10px] text-brand-blue ui-glass ui-glass-subtle border-brand-blue/25 rounded-xl px-2.5 py-1.5 max-w-[260px] leading-snug">
+              Thicker glow = higher confidence. Low-confidence hexes stay thin/dim.
+            </div>
+          )}
         </div>
 
         {/* Legend Overlay (Floating at bottom-left) */}
-        <div className="absolute bottom-6 left-6 z-10 bg-apple-card/90 border border-apple-border backdrop-blur-md p-4 rounded-2xl max-w-[220px] shadow-2xl">
+        <div className="absolute bottom-6 left-6 z-10 ui-glass ui-glass-floating p-4 rounded-2xl max-w-[220px]">
           <div className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest mb-3">
             {mapLayer === 'confidence' ? 'Attribution confidence' : 'PM2.5 Levels (µg/m³)'}
           </div>
@@ -208,7 +225,7 @@ export default function MapPage() {
 
         {/* Map layer control: cleanest / both / polluted depth dropdown */}
         <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2 max-w-[min(100vw-2rem,280px)]">
-          <div className="flex flex-wrap justify-end bg-apple-card/90 backdrop-blur-md rounded-full p-1 border border-apple-border shadow-lg">
+          <div className="flex flex-wrap justify-end ui-glass ui-glass-floating rounded-full p-1 shadow-lg">
             <button
               type="button"
               onClick={() => setExtremeMode('best')}
@@ -297,9 +314,9 @@ export default function MapPage() {
 
         {/* Floating Sidebar Detail Panel (Right side) */}
         {activeHex && (
-          <div className="absolute right-6 top-24 bottom-6 w-80 bg-apple-modal/95 border border-apple-border backdrop-blur-xl rounded-2xl shadow-2xl flex flex-col overflow-hidden z-20">
+          <div className="absolute right-6 top-24 bottom-6 w-80 ui-glass ui-glass-strong rounded-3xl shadow-2xl flex flex-col overflow-hidden z-20">
             {/* Header */}
-            <div className="p-5 border-b border-apple-border flex flex-col gap-1 bg-apple-card/30">
+            <div className="p-5 border-b border-white/10 flex flex-col gap-1 bg-black/20">
               <span className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest flex items-center gap-1.5">
                 <MapPin size={10} className="text-brand-blue" />
                 {formatLocationName(activeHex)}
@@ -357,28 +374,39 @@ export default function MapPage() {
                   })()}
                 </div>
 
-                {/* Attribution confidence */}
+                {/* Attribution confidence — primary highlighted card */}
                 {(activeHex.attributionConfidence != null || activeHex.confidence > 0) && (
-                  <div className="mt-2 rounded-xl bg-white/[0.04] border border-white/10 px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-apple-secondary">
+                  <div className="mt-3 rounded-2xl border border-brand-blue/35 bg-gradient-to-br from-brand-blue/15 to-white/[0.03] px-3.5 py-3 shadow-lg shadow-brand-blue/10">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-brand-blue font-bold">
                         Attribution confidence
                       </span>
-                      <span className="text-sm font-mono font-bold text-white">
-                        {activeHex.attributionConfidence ?? activeHex.confidence}%
-                        {activeHex.attributionConfidenceLevel
-                          ? ` · ${activeHex.attributionConfidenceLevel}`
-                          : ''}
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          (activeHex.attributionConfidence ?? activeHex.confidence) >= 80
+                            ? 'bg-brand-green/15 border-brand-green/30 text-brand-green'
+                            : (activeHex.attributionConfidence ?? activeHex.confidence) >= 55
+                              ? 'bg-brand-blue/15 border-brand-blue/30 text-brand-blue'
+                              : (activeHex.attributionConfidence ?? activeHex.confidence) >= 30
+                                ? 'bg-brand-orange/15 border-brand-orange/30 text-brand-orange'
+                                : 'bg-brand-red/15 border-brand-red/30 text-brand-red'
+                        }`}
+                      >
+                        {activeHex.attributionConfidenceLevel || '—'}
                       </span>
                     </div>
+                    <div className="text-3xl font-mono font-bold text-white leading-none">
+                      {activeHex.attributionConfidence ?? activeHex.confidence}
+                      <span className="text-base text-apple-secondary">%</span>
+                    </div>
                     {activeHex.confidenceExplanation && (
-                      <p className="text-[11px] text-apple-secondary mt-1.5 leading-snug">
+                      <p className="text-[12px] text-white/85 mt-2 leading-snug font-medium">
                         {activeHex.confidenceExplanation}
                       </p>
                     )}
                     {activeHex.nearestStationDistanceM != null && (
-                      <p className="text-[10px] font-mono text-white/40 mt-1">
-                        Nearest station {(activeHex.nearestStationDistanceM / 1000).toFixed(1)} km
+                      <p className="text-[10px] font-mono text-white/45 mt-1.5">
+                        Nearest station · {(activeHex.nearestStationDistanceM / 1000).toFixed(1)} km
                       </p>
                     )}
                   </div>

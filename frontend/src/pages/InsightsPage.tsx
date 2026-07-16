@@ -40,6 +40,7 @@ import type {
   SensorBlindSpotsInsight,
   TargetedEnforcementInsight,
 } from '../services/insightsService';
+import { SpringButton } from '../components/ui';
 
 function GlassCard({
   children,
@@ -52,8 +53,10 @@ function GlassCard({
 }) {
   return (
     <div
-      className={`glass-panel rounded-3xl border ${
-        hero ? 'border-brand-blue/35 shadow-lg shadow-brand-blue/10' : 'border-white/10'
+      className={`ui-glass rounded-3xl ${
+        hero
+          ? 'ui-glass-strong border-brand-blue/35 shadow-lg shadow-brand-blue/10'
+          : 'ui-glass-subtle'
       } ${className}`}
     >
       {children}
@@ -358,6 +361,21 @@ function SensorBlindSpotsCard({ data }: { data: SensorBlindSpotsInsight }) {
   );
 }
 
+function uncertaintyFromRmse(rmse: number | null | undefined): {
+  level: 'Low' | 'Medium' | 'High';
+  color: string;
+  reason: string;
+} {
+  const r = Number(rmse ?? 99);
+  if (r < 12) {
+    return { level: 'Low', color: '#34C759', reason: `Test RMSE ${r.toFixed(1)} µg/m³ (<12)` };
+  }
+  if (r < 22) {
+    return { level: 'Medium', color: '#FF9F0A', reason: `Test RMSE ${r.toFixed(1)} µg/m³ (12–22)` };
+  }
+  return { level: 'High', color: '#ff453a', reason: `Test RMSE ${r.toFixed(1)} µg/m³ (>22)` };
+}
+
 /* ─── Insight 3: Predictability Map ─── */
 function PredictabilityMapCard({ data }: { data: PredictabilityMapInsight }) {
   if (!data.available || !data.stations?.length) {
@@ -370,6 +388,15 @@ function PredictabilityMapCard({ data }: { data: PredictabilityMapInsight }) {
     winner: s.winner,
   }));
 
+  const withUncertainty = data.stations.map((s) => {
+    const selectedRmse =
+      s.winner === 'lightgbm'
+        ? (s.lightgbm_rmse ?? s.persistence_rmse)
+        : (s.persistence_rmse ?? s.lightgbm_rmse);
+    return { ...s, selectedRmse, unc: uncertaintyFromRmse(selectedRmse) };
+  });
+  const highUnc = withUncertainty.filter((s) => s.unc.level === 'High');
+
   return (
     <GlassCard className="p-6 md:p-7 h-full">
       <InsightBadge n={3} label="Model behaviour · LightGBM vs persistence" />
@@ -377,6 +404,18 @@ function PredictabilityMapCard({ data }: { data: PredictabilityMapInsight }) {
         {data.headline || 'The Predictability Map'}
       </h2>
       <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed">{data.finding}</p>
+
+      {highUnc.length > 0 && (
+        <div className="mt-3 rounded-xl border border-brand-red/30 bg-brand-red/10 px-3.5 py-2.5">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-brand-red font-bold mb-1">
+            High forecast uncertainty
+          </div>
+          <p className="text-[12px] text-white/85 leading-snug">
+            {highUnc.map((s) => s.display_name.replace(/CPCB |KSPCB /gi, '')).join(' · ')} — point
+            forecasts should be read with RMSE intervals, not as certain values.
+          </p>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <StatPill
@@ -442,7 +481,7 @@ function PredictabilityMapCard({ data }: { data: PredictabilityMapInsight }) {
       </div>
 
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {data.stations.map((s) => (
+        {withUncertainty.map((s) => (
           <div
             key={s.station_id}
             className="rounded-2xl bg-white/[0.04] border border-white/10 px-3 py-2.5"
@@ -461,6 +500,27 @@ function PredictabilityMapCard({ data }: { data: PredictabilityMapInsight }) {
                 {s.winner}
               </span>
             </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span
+                className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border"
+                style={{
+                  color: s.unc.color,
+                  borderColor: `${s.unc.color}55`,
+                  background: `${s.unc.color}18`,
+                }}
+                title={s.unc.reason}
+              >
+                Uncertainty · {s.unc.level}
+              </span>
+              {s.selectedRmse != null && (
+                <span className="text-[10px] font-mono text-apple-secondary">
+                  RMSE {Number(s.selectedRmse).toFixed(1)}
+                </span>
+              )}
+            </div>
+            {s.unc.level === 'High' && (
+              <p className="text-[10px] text-brand-red/90 mt-1 leading-snug">{s.unc.reason}</p>
+            )}
             <p className="text-[11px] text-apple-secondary mt-1 leading-snug">
               {s.interpretation}
             </p>
@@ -675,58 +735,96 @@ function RentVsAirCard({ data }: { data: RentVsAirInsight }) {
   );
 }
 
-/* ─── Insight 6: Before / After ─── */
+function isFailureModeLive(liveExample: string): boolean {
+  const t = liveExample.toLowerCase();
+  if (t.includes('inactive')) return false;
+  if (t.includes('none in registry') || /:\s*none\b/.test(t) || /^0\s+station/.test(t)) {
+    return false;
+  }
+  if (t.includes('active')) return true;
+  const m = t.match(/(\d+)\s+station/);
+  if (m && Number(m[1]) > 0) return true;
+  return false;
+}
+
 function FailureModesCard({ data }: { data?: FailureModesInsight }) {
   if (!data?.available || !data.modes?.length) {
     return data?.reason ? (
       <UnavailableCard title="Failure Mode Taxonomy" reason={data.reason} />
     ) : null;
   }
+  const n = data.modes.length;
+  const liveCount = data.modes.filter((m) => isFailureModeLive(m.live_example)).length;
   return (
     <GlassCard className="p-6 md:p-7">
       <InsightBadge n={7} label="Honesty layer · Known limitations" />
       <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
         {data.headline || 'Formal Failure Mode Taxonomy'}
       </h2>
+      <div className="mt-3 inline-flex flex-wrap items-center gap-2">
+        <span className="text-sm font-bold text-white bg-white/8 border border-white/15 px-3 py-1.5 rounded-full">
+          {n} known failure modes currently handled gracefully
+        </span>
+        {liveCount > 0 && (
+          <span className="text-[11px] font-semibold text-brand-green bg-brand-green/10 border border-brand-green/30 px-2.5 py-1 rounded-full">
+            {liveCount} with live signal right now
+          </span>
+        )}
+      </div>
       <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
         {data.finding}
       </p>
-      <div className="mt-5 space-y-3">
-        {data.modes.map((m) => (
-          <div
-            key={m.id}
-            className="rounded-2xl bg-white/[0.03] border border-white/10 p-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-white">{m.name}</h3>
-              {m.status_flag && (
-                <span className="text-[10px] font-mono text-brand-orange bg-brand-orange/10 border border-brand-orange/25 px-2 py-0.5 rounded-full">
-                  {m.status_flag}
-                </span>
-              )}
+      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {data.modes.map((m) => {
+          const live = isFailureModeLive(m.live_example);
+          return (
+            <div
+              key={m.id}
+              className={`rounded-2xl border p-4 ${
+                live
+                  ? 'bg-brand-green/[0.06] border-brand-green/25'
+                  : 'bg-white/[0.03] border-white/10'
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h3 className="text-sm font-bold text-white leading-snug pr-2">{m.name}</h3>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {live && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-brand-green bg-brand-green/15 border border-brand-green/30 px-1.5 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
+                      Live
+                    </span>
+                  )}
+                  {m.status_flag && (
+                    <span className="text-[9px] font-mono text-brand-orange bg-brand-orange/10 border border-brand-orange/25 px-1.5 py-0.5 rounded-full">
+                      {m.status_flag}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 space-y-2.5 text-[11px] leading-relaxed">
+                <div>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary">
+                    Detection
+                  </span>
+                  <p className="text-white/80 mt-0.5">{m.detected_by}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary">
+                    Graceful degradation
+                  </span>
+                  <p className="text-white/80 mt-0.5">{m.degradation}</p>
+                </div>
+                <div className="rounded-xl bg-black/30 border border-white/8 px-2.5 py-2">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-brand-blue">
+                    Real example
+                  </span>
+                  <p className="text-brand-blue font-medium mt-0.5">{m.live_example}</p>
+                </div>
+              </div>
             </div>
-            <dl className="mt-2 space-y-1.5 text-[11px] leading-relaxed">
-              <div>
-                <dt className="text-apple-secondary font-mono uppercase tracking-wider text-[9px]">
-                  Detected by
-                </dt>
-                <dd className="text-white/80">{m.detected_by}</dd>
-              </div>
-              <div>
-                <dt className="text-apple-secondary font-mono uppercase tracking-wider text-[9px]">
-                  Graceful degradation
-                </dt>
-                <dd className="text-white/80">{m.degradation}</dd>
-              </div>
-              <div>
-                <dt className="text-apple-secondary font-mono uppercase tracking-wider text-[9px]">
-                  Live example
-                </dt>
-                <dd className="text-brand-blue font-medium">{m.live_example}</dd>
-              </div>
-            </dl>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <MethodNote text={data.method_note} />
     </GlassCard>
@@ -750,11 +848,32 @@ function AblationStudiesCard({ data }: { data?: AblationStudiesInsight }) {
       <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
         {data.finding}
       </p>
-      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
         {wind && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <h3 className="text-sm font-bold text-white">Wind-weighted vs pure distance</h3>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border border-brand-blue/30 bg-gradient-to-br from-brand-blue/10 to-white/[0.02] p-5">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-brand-blue font-bold mb-2">
+              Ablation 1 · Attribution physics
+            </div>
+            <h3 className="text-base font-bold text-white leading-snug">
+              Wind-weighted vs pure distance
+            </h3>
+            <p className="mt-3 text-[15px] font-semibold text-white leading-snug">
+              Dominant source flips on{' '}
+              <span className="text-brand-blue">{wind.dominant_source_change_pct}%</span> of a{' '}
+              {wind.sample_size}-hex corridor sample
+              {wind.mean_abs_traffic_fraction_delta_pp > 0 && (
+                <>
+                  {' '}
+                  (mean |Δ traffic|{' '}
+                  <span className="text-brand-orange">
+                    {wind.mean_abs_traffic_fraction_delta_pp} pp
+                  </span>
+                  )
+                </>
+              )}
+              .
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
               <StatPill
                 label="Dominant flips"
                 value={`${wind.dominant_source_change_pct}%`}
@@ -766,21 +885,30 @@ function AblationStudiesCard({ data }: { data?: AblationStudiesInsight }) {
                 accent="text-brand-orange"
               />
             </div>
-            <p className="text-[11px] text-apple-secondary mt-3 leading-snug">
-              n={wind.sample_size} corridor hexes · {wind.dominant_source_changes} dominant
-              source changes
-            </p>
-            <p className="text-[11px] text-white/70 mt-2 leading-snug">{wind.interpretation}</p>
+            <p className="text-[11px] text-white/70 mt-3 leading-snug">{wind.interpretation}</p>
           </div>
         )}
         {fus && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <h3 className="text-sm font-bold text-white">Fusion vs no-fusion (city median)</h3>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border border-brand-orange/30 bg-gradient-to-br from-brand-orange/10 to-white/[0.02] p-5">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-brand-orange font-bold mb-2">
+              Ablation 2 · Station fusion
+            </div>
+            <h3 className="text-base font-bold text-white leading-snug">
+              Fusion vs no-fusion
+            </h3>
+            <p className="mt-3 text-[15px] font-semibold text-white leading-snug">
+              While overall rank correlation stays high (
+              <span className="text-brand-green">{fus.spearman_rank_correlation}</span>
+              ), only{' '}
+              <span className="text-brand-orange">{fus.top_k_overlap_pct}%</span> of the top-
+              {fus.top_k} enforcement targets overlap — fusion meaningfully changes who gets
+              prioritized.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
               <StatPill
                 label={`Top-${fus.top_k} overlap`}
                 value={`${fus.top_k_overlap_pct}%`}
-                accent="text-brand-red"
+                accent="text-brand-orange"
               />
               <StatPill
                 label="Spearman ρ"
@@ -789,10 +917,9 @@ function AblationStudiesCard({ data }: { data?: AblationStudiesInsight }) {
               />
             </div>
             <p className="text-[11px] text-apple-secondary mt-3 leading-snug">
-              Fill = {fus.no_fusion_fill} ({fus.city_median_pm25_used} µg/m³) ·{' '}
-              {fus.scored_hexes_with_fusion.toLocaleString()} fused hexes
+              No-fusion fill = city median {fus.city_median_pm25_used} µg/m³ ·{' '}
+              {fus.scored_hexes_with_fusion.toLocaleString()} fused hexes scored
             </p>
-            <p className="text-[11px] text-white/70 mt-2 leading-snug">{fus.interpretation}</p>
           </div>
         )}
       </div>
@@ -923,23 +1050,25 @@ export default function InsightsPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
+            <SpringButton
+              variant="secondary"
+              size="md"
+              className="rounded-full"
               onClick={() => refetch()}
               disabled={isFetching}
-              className="min-h-[44px] inline-flex items-center gap-2 px-4 rounded-full border border-white/15 bg-white/[0.04] text-white text-sm font-semibold hover:bg-white/[0.08] transition-colors disabled:opacity-50"
             >
               <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
               Refresh
-            </button>
-            <button
-              type="button"
+            </SpringButton>
+            <SpringButton
+              variant="primary"
+              size="md"
+              className="rounded-full"
               onClick={() => navigate('/enforcement')}
-              className="min-h-[44px] inline-flex items-center gap-2 px-5 rounded-full bg-brand-blue text-white text-sm font-bold shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 transition-colors"
             >
               Open Enforcement
               <ArrowRight size={16} />
-            </button>
+            </SpringButton>
           </div>
         </header>
 

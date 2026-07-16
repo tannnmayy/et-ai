@@ -560,7 +560,7 @@ export default function CopilotPage() {
 
           <form
             onSubmit={handleSend}
-            className="relative flex items-center bg-apple-card rounded-full shadow-2xl px-2.5 py-1.5 border border-apple-border focus-within:border-brand-blue/60 transition-all duration-300"
+            className="relative flex items-center ui-glass ui-glass-floating rounded-full shadow-2xl px-2.5 py-1.5 focus-within:border-brand-blue/50 transition-colors duration-200"
           >
             <button
               type="button"
@@ -591,7 +591,7 @@ export default function CopilotPage() {
 
               <button
                 type="submit"
-                className="bg-brand-blue hover:bg-blue-600 text-white w-9 h-9 rounded-full transition-colors flex items-center justify-center shadow-md shadow-brand-blue/10 shrink-0"
+                className="bg-brand-blue hover:bg-brand-blue/90 active:scale-95 text-white w-10 h-10 min-w-[40px] min-h-[40px] rounded-full transition-all flex items-center justify-center shadow-md shadow-brand-blue/20 shrink-0"
                 title="Transmit"
               >
                 <Send size={14} />

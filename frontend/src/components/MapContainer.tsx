@@ -62,6 +62,15 @@ function confidenceColor(score: number | undefined): string {
   return '#ff453a'; // Very Low
 }
 
+/** High confidence = thicker border + stronger glow */
+function confidenceVisualWeight(score: number | undefined): { borderPx: number; glow: number } {
+  const s = score ?? 0;
+  if (s >= 80) return { borderPx: 3.5, glow: 18 };
+  if (s >= 55) return { borderPx: 2.5, glow: 12 };
+  if (s >= 30) return { borderPx: 1.5, glow: 6 };
+  return { borderPx: 1, glow: 2 };
+}
+
 function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement' | 'confidence'): string {
   if (viewMode === 'enforcement') {
     return actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
@@ -241,6 +250,11 @@ function MapContainer({
                 const color = hexColor(hex, viewMode);
                 const label = formatLocationName(hex);
                 const isSelected = selectedHex?.id === hex.id;
+                const confScore = hex.attributionConfidence ?? hex.confidence;
+                const confW =
+                  viewMode === 'confidence'
+                    ? confidenceVisualWeight(confScore)
+                    : { borderPx: 1.5, glow: 0 };
                 return (
                   <AdvancedMarker
                     key={hex.id}
@@ -248,14 +262,21 @@ function MapContainer({
                     onClick={() => onSelectHex(hex)}
                   >
                     <div
-                      className={`cursor-pointer rounded-lg bg-black/80 border font-mono text-white shadow-lg transition-transform hover:scale-105 ${
+                      className={`cursor-pointer rounded-lg bg-black/85 font-mono text-white transition-transform hover:scale-105 ${
                         compactLabels ? 'p-1.5 text-[8px] max-w-[88px]' : 'p-2 text-[10px]'
                       }`}
                       style={{
+                        borderStyle: 'solid',
+                        borderWidth: viewMode === 'confidence' ? confW.borderPx : isSelected ? 2 : 1.5,
                         borderColor: color,
-                        boxShadow: isSelected ? `0 0 0 2px ${color}` : undefined,
+                        boxShadow:
+                          viewMode === 'confidence'
+                            ? `0 0 ${confW.glow}px ${color}${isSelected ? 'cc' : '88'}, 0 0 0 ${isSelected ? 2 : 0}px ${color}`
+                            : isSelected
+                              ? `0 0 0 2px ${color}`
+                              : undefined,
                       }}
-                      title={`${label} · ${hex.pm25} µg/m³ · conf ${hex.attributionConfidence ?? hex.confidence ?? '—'}% · ${hex.id}`}
+                      title={`${label} · ${hex.pm25} µg/m³ · conf ${confScore ?? '—'}% · ${hex.id}`}
                     >
                       <span className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[76px]' : ''}`}>
                         {compactLabels && label.length > 12 ? `${label.slice(0, 11)}…` : label}
@@ -264,7 +285,7 @@ function MapContainer({
                         {viewMode === 'enforcement'
                           ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
                           : viewMode === 'confidence'
-                            ? `${hex.attributionConfidence ?? hex.confidence ?? '—'}% conf`
+                            ? `${confScore ?? '—'}% conf`
                             : `${hex.pm25} µg/m³`}
                       </div>
                     </div>
@@ -288,17 +309,34 @@ function MapContainer({
               const color = hexColor(hex, viewMode);
               const isSelected = selectedHex?.id === hex.id;
               const label = formatLocationName(hex);
+              const confScore = hex.attributionConfidence ?? hex.confidence;
+              const confW = confidenceVisualWeight(confScore);
+              const strokeW =
+                viewMode === 'confidence'
+                  ? confW.borderPx
+                  : isSelected
+                    ? 2.5
+                    : 1.2;
               return (
                 <g
                   key={hex.id}
                   className="cursor-pointer pointer-events-auto group/hex"
                   onClick={() => onSelectHex(hex)}
                 >
+                  {viewMode === 'confidence' && confW.glow > 4 && (
+                    <polygon
+                      points={getHexPoints(x, y, (compactLabels ? 28 : 42) + 4)}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={confW.glow / 4}
+                      opacity={0.35}
+                    />
+                  )}
                   <polygon
                     points={getHexPoints(x, y, compactLabels ? 28 : 42)}
-                    fill={isSelected ? `${color}40` : `${color}15`}
+                    fill={isSelected ? `${color}40` : `${color}${viewMode === 'confidence' ? '28' : '15'}`}
                     stroke={color}
-                    strokeWidth={isSelected ? '2.5' : '1.2'}
+                    strokeWidth={strokeW}
                     className="transition-all duration-300 hover:fill-white/10"
                   />
                   <text

@@ -19,4 +19,11 @@ export { useDashboardData } from '../services/analyticsService';
 export { useSendMessage } from '../services/copilotService';
 export { useCityInsights, fetchCityInsights } from '../services/insightsService';
 export type { CityInsightsPack } from '../services/insightsService';
+export {
+  loadDispatchHistory,
+  recordDispatch,
+  logAuditEvent,
+  mirrorSession,
+} from '../services/persistenceService';
+export type { DispatchRecord, DispatchStatus } from '../services/persistenceService';
 export { warmAppFromLanding, prefetchMapAndEnforcementData } from '../services/prefetchService';

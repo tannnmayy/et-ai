@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -12,46 +12,41 @@ import {
   User,
   ClipboardList,
   AlertCircle,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import { useSession } from '../context/SessionContext';
+import {
+  type DispatchRecord,
+  type DispatchStatus,
+  loadDispatchHistory,
+  logAuditEvent,
+  recordDispatch,
+  updateDispatchStatusApi,
+  upsertLocalDispatch,
+} from '../services/persistenceService';
 
-const HISTORY_KEY = 'aqi_sentinel_dispatch_history_v1';
-const MAX_HISTORY = 12;
+const MAX_DISPLAY = 40;
 
-export type DispatchRecord = {
-  id: string;
-  unitId: string;
-  target: string;
-  hexId: string;
-  source: string;
-  score: string;
-  action: string;
-  notes: string;
-  officer: string;
-  operator: string;
-  status: 'open' | 'resolved';
-  issuedAt: string;
-  signedOperator: boolean;
-  signedLead: boolean;
-};
-
-function loadHistory(): DispatchRecord[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as DispatchRecord[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+function statusStyles(status: DispatchStatus) {
+  if (status === 'resolved') {
+    return 'text-brand-green bg-brand-green/15 border-brand-green/30';
   }
+  if (status === 'in_progress') {
+    return 'text-brand-blue bg-brand-blue/15 border-brand-blue/30';
+  }
+  return 'text-brand-orange bg-brand-orange/15 border-brand-orange/30';
 }
 
-function saveHistory(items: DispatchRecord[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY)));
+function statusLabel(status: DispatchStatus) {
+  if (status === 'resolved') return 'Resolved';
+  if (status === 'in_progress') return 'In Progress';
+  return 'Open';
 }
 
 /**
- * Full-screen enforcement dispatch sheet with validation, history, and print/PDF.
+ * Full-screen enforcement dispatch sheet with validation, SQLite+local history,
+ * and print/PDF.
  */
 export default function DispatchPage() {
   const navigate = useNavigate();
@@ -74,13 +69,17 @@ export default function DispatchPage() {
   const [notes, setNotes] = useState('');
   const [officer, setOfficer] = useState(session?.name || '');
   const [operator, setOperator] = useState(session?.name || 'AQI Sentinel Operator');
-  const [status, setStatus] = useState<'open' | 'resolved'>('open');
+  const [status, setStatus] = useState<DispatchStatus>('open');
   const [signedOperator, setSignedOperator] = useState(false);
   const [signedLead, setSignedLead] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState<DispatchRecord | null>(null);
   const [history, setHistory] = useState<DispatchRecord[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const [historySource, setHistorySource] = useState<'sqlite' | 'local' | 'merged'>('local');
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [showHistory, setShowHistory] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [remoteOk, setRemoteOk] = useState<boolean | null>(null);
 
   const unitId = useMemo(
     () => `EN-${Math.floor(100 + Math.random() * 900)}-${Date.now().toString().slice(-4)}`,
@@ -88,12 +87,22 @@ export default function DispatchPage() {
   );
   const issuedAt = useMemo(() => new Date().toLocaleString(), []);
 
-  useEffect(() => {
-    setHistory(loadHistory());
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const { items, source: src } = await loadDispatchHistory();
+      setHistory(items.slice(0, MAX_DISPLAY));
+      setHistorySource(src);
+    } finally {
+      setHistoryLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    // Keep prefill in sync if navigated with new query params
+    void refreshHistory();
+  }, [refreshHistory]);
+
+  useEffect(() => {
     setTarget(prefillTarget);
     setHexId(prefillHex);
     setSource(prefillSource);
@@ -112,7 +121,7 @@ export default function DispatchPage() {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     setErrors(e);
     if (e.length) return;
@@ -133,10 +142,23 @@ export default function DispatchPage() {
       signedOperator,
       signedLead,
     };
-    const next = [record, ...loadHistory()].slice(0, MAX_HISTORY);
-    saveHistory(next);
-    setHistory(next);
-    setSubmitted(record);
+
+    setSaving(true);
+    try {
+      const { items, persistedRemote } = await recordDispatch(record);
+      setHistory(items.slice(0, MAX_DISPLAY));
+      setHistorySource(persistedRemote ? 'merged' : 'local');
+      setRemoteOk(persistedRemote);
+      setSubmitted(record);
+      setShowHistory(true);
+      void logAuditEvent(
+        'dispatch_submitted',
+        { dispatchId: record.id, target: record.target, status: record.status },
+        record.operator,
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleExportPdf = () => {
@@ -152,12 +174,24 @@ export default function DispatchPage() {
     setNotes(r.notes);
     setOfficer(r.officer);
     setOperator(r.operator);
-    setStatus(r.status);
+    setStatus(r.status === 'resolved' || r.status === 'in_progress' ? r.status : 'open');
     setSignedOperator(r.signedOperator);
     setSignedLead(r.signedLead);
     setSubmitted(null);
-    setShowHistory(false);
     setErrors([]);
+    // Keep history open so officers can switch records quickly
+    void logAuditEvent('dispatch_reloaded', { dispatchId: r.id, target: r.target });
+  };
+
+  const cycleStatusInHistory = async (r: DispatchRecord, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const order: DispatchStatus[] = ['open', 'in_progress', 'resolved'];
+    const next = order[(order.indexOf(r.status) + 1) % order.length];
+    const updated: DispatchRecord = { ...r, status: next };
+    const items = upsertLocalDispatch(updated);
+    setHistory(items.slice(0, MAX_DISPLAY));
+    void updateDispatchStatusApi(r.id, next);
+    void logAuditEvent('dispatch_status_cycled', { dispatchId: r.id, status: next });
   };
 
   return (
@@ -177,10 +211,22 @@ export default function DispatchPage() {
             <button
               type="button"
               onClick={() => setShowHistory((v) => !v)}
-              className="min-h-[44px] inline-flex items-center gap-2 px-4 rounded-full glass-panel text-sm font-semibold"
+              className={`min-h-[44px] inline-flex items-center gap-2 px-4 rounded-full text-sm font-semibold border transition-colors ${
+                showHistory
+                  ? 'bg-brand-blue/20 border-brand-blue/40 text-brand-blue'
+                  : 'glass-panel border-white/10'
+              }`}
             >
               <History size={16} />
               History ({history.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => void refreshHistory()}
+              className="min-h-[44px] inline-flex items-center gap-2 px-3 rounded-full glass-panel text-sm font-semibold"
+              title="Refresh history from server"
+            >
+              <RefreshCw size={15} className={historyLoading ? 'animate-spin' : ''} />
             </button>
             <button
               type="button"
@@ -201,38 +247,67 @@ export default function DispatchPage() {
           </div>
         </div>
 
-        {/* History panel */}
+        {/* History panel — always useful for demos */}
         {showHistory && (
           <div className="glass-panel rounded-3xl p-5 mb-6 border border-white/10 print:hidden">
-            <h2 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-              <History size={16} className="text-brand-blue" />
-              Dispatch history (this browser)
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <History size={16} className="text-brand-blue" />
+                Dispatch history
+              </h2>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-apple-secondary">
+                <Database size={11} className="text-brand-blue" />
+                {historyLoading
+                  ? 'Loading…'
+                  : historySource === 'sqlite'
+                    ? 'SQLite'
+                    : historySource === 'merged'
+                      ? 'SQLite + local'
+                      : 'This browser (local)'}
+              </span>
+            </div>
+            <p className="text-[11px] text-apple-secondary mb-3">
+              Click a record to reload it into the form. Click the status badge to cycle Open → In
+              Progress → Resolved.
+            </p>
             {history.length === 0 ? (
-              <p className="text-xs text-apple-secondary">No dispatches saved yet.</p>
+              <p className="text-xs text-apple-secondary">
+                {historyLoading ? 'Loading dispatches…' : 'No dispatches saved yet.'}
+              </p>
             ) : (
-              <ul className="space-y-2 max-h-56 overflow-y-auto">
+              <ul className="space-y-2 max-h-72 overflow-y-auto">
                 {history.map((r) => (
                   <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => loadFromHistory(r)}
-                      className="w-full text-left rounded-2xl bg-white/[0.04] border border-white/10 hover:border-brand-blue/40 px-3 py-2.5 transition-colors"
-                    >
-                      <div className="flex justify-between gap-2">
-                        <span className="text-xs font-semibold text-white truncate">{r.target}</span>
-                        <span
-                          className={`text-[9px] font-bold uppercase shrink-0 ${
-                            r.status === 'resolved' ? 'text-brand-green' : 'text-brand-orange'
-                          }`}
-                        >
-                          {r.status}
-                        </span>
-                      </div>
-                      <div className="text-[10px] font-mono text-apple-secondary mt-0.5">
-                        {r.unitId} · {new Date(r.issuedAt).toLocaleString()}
-                      </div>
-                    </button>
+                    <div className="w-full rounded-2xl bg-white/[0.04] border border-white/10 hover:border-brand-blue/40 px-3 py-2.5 transition-colors flex gap-2 items-start">
+                      <button
+                        type="button"
+                        onClick={() => loadFromHistory(r)}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <div className="flex justify-between gap-2">
+                          <span className="text-xs font-semibold text-white truncate">
+                            {r.target}
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-mono text-apple-secondary mt-0.5">
+                          {r.unitId} · {new Date(r.issuedAt).toLocaleString()}
+                          {r.officer ? ` · ${r.officer}` : ''}
+                        </div>
+                        {r.action && (
+                          <p className="text-[10px] text-apple-secondary/80 mt-1 line-clamp-1">
+                            {r.action}
+                          </p>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(ev) => void cycleStatusInHistory(r, ev)}
+                        className={`text-[9px] font-bold uppercase shrink-0 px-2 py-1 rounded-full border ${statusStyles(r.status)}`}
+                        title="Click to cycle status"
+                      >
+                        {statusLabel(r.status)}
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -247,7 +322,13 @@ export default function DispatchPage() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-brand-green">Dispatch recorded</p>
               <p className="text-[11px] text-apple-secondary">
-                Unit {submitted.unitId} saved to history. You can export a PDF for the field team.
+                Unit {submitted.unitId} saved
+                {remoteOk === true
+                  ? ' to database and browser history'
+                  : remoteOk === false
+                    ? ' to browser history (server unavailable — will retry on next open)'
+                    : ' to history'}
+                . You can export a PDF for the field team.
               </p>
             </div>
             <button
@@ -325,14 +406,17 @@ export default function DispatchPage() {
                 </span>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as 'open' | 'resolved')}
+                  onChange={(e) => setStatus(e.target.value as DispatchStatus)}
                   className="mt-1.5 w-full min-h-[44px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white focus:outline-none focus:border-brand-blue/50 print:bg-white print:text-black print:border-gray-300"
                 >
                   <option value="open" className="bg-apple-card">
                     Open — field action pending
                   </option>
+                  <option value="in_progress" className="bg-apple-card">
+                    In Progress — team deployed
+                  </option>
                   <option value="resolved" className="bg-apple-card">
-                    Issue resolved
+                    Resolved — issue closed
                   </option>
                 </select>
               </label>
@@ -522,11 +606,12 @@ export default function DispatchPage() {
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
-            className="min-h-[48px] px-6 rounded-2xl bg-brand-blue hover:bg-brand-blue/90 text-white text-sm font-bold shadow-lg shadow-brand-blue/20 inline-flex items-center gap-2"
+            onClick={() => void handleSubmit()}
+            disabled={saving}
+            className="min-h-[48px] px-6 rounded-2xl bg-brand-blue hover:bg-brand-blue/90 text-white text-sm font-bold shadow-lg shadow-brand-blue/20 inline-flex items-center gap-2 disabled:opacity-60"
           >
             <Shield size={16} />
-            Record dispatch
+            {saving ? 'Saving…' : 'Record dispatch'}
           </button>
         </div>
       </div>

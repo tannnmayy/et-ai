@@ -2,6 +2,7 @@ import React, {
   Suspense,
   lazy,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -16,15 +17,18 @@ import {
   Search,
   ArrowUpDown,
   Clock,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   actionTierLabel,
   actionTierStyles,
   formatLocationName,
+  rankDelta,
   sortHexes,
   type SortKey,
 } from '../services/enforcementUtils';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { FluidSheet, Glass, SpringButton } from '../components/ui';
 
 // Lazy: Recharts lives behind the detail panel — keep it out of the first paint.
 const EnforcementDetailPanel = lazy(
@@ -77,6 +81,15 @@ export default function EnforcementPage() {
   const [trafficCorridorOnly, setTrafficCorridorOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  /** FluidSheet only on narrow viewports — desktop keeps docked panel */
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   const {
     data: allPriorities = [],
@@ -283,47 +296,93 @@ export default function EnforcementPage() {
               </select>
             </label>
 
-            <button
-              type="button"
-              onClick={() => setRiskAdjusted((v) => !v)}
-              className={`rounded-full px-3 py-2 border text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                riskAdjusted
-                  ? 'bg-brand-blue/20 border-brand-blue/40 text-brand-blue'
-                  : 'bg-apple-card border-apple-border text-apple-secondary hover:text-white'
-              }`}
-              title="Rank by base_priority × (0.35 + 0.65 × confidence/100)"
-              aria-pressed={riskAdjusted}
-            >
-              Risk-Adjusted Priorities
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-3 px-3 py-2.5 rounded-xl bg-apple-card/40 border border-apple-border/60 text-[10px] text-apple-secondary leading-relaxed shrink-0">
-          <div className="flex items-start gap-2">
-            <Info size={12} className="text-brand-blue shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-white">Score (0–10)</strong> = exposure × attributable
-              magnitude × actionability.
-              {riskAdjusted ? (
-                <>
-                  {' '}
-                  <strong className="text-brand-blue">Risk-adjusted ranking ON</strong>
-                  : sort key is base × (0.35 + 0.65 × attribution confidence). Low-confidence
-                  hotspots fall behind slightly lower but better-anchored targets.
-                </>
-              ) : (
-                <> Toggle “Risk-Adjusted Priorities” to fold attribution confidence into rank.</>
-              )}{' '}
-              Time simulation is cached per hour.
-              {(isFetching || isPlaceholderData) && (
-                <span className="ml-2 text-brand-blue animate-pulse">
-                  {isPlaceholderData ? 'Loading simulation…' : 'Refreshing…'}
-                </span>
-              )}
+            <div className="relative group/risk">
+              <SpringButton
+                variant={riskAdjusted ? 'primary' : 'secondary'}
+                size="sm"
+                className="uppercase tracking-wider text-[10px] font-bold rounded-full px-3.5"
+                onClick={() => {
+                  setRiskAdjusted((v) => {
+                    const next = !v;
+                    void import('../services/persistenceService').then(({ logAuditEvent }) => {
+                      void logAuditEvent('risk_adjusted_view_toggled', { enabled: next });
+                    });
+                    return next;
+                  });
+                }}
+                aria-pressed={riskAdjusted}
+                aria-describedby="risk-adjusted-help"
+              >
+                <ShieldAlert size={13} />
+                Risk-Adjusted View
+                <Info size={11} className={riskAdjusted ? 'text-white/80' : 'text-apple-secondary'} />
+              </SpringButton>
+              <div
+                id="risk-adjusted-help"
+                role="tooltip"
+                className="pointer-events-none absolute right-0 top-full mt-2 z-30 w-72 opacity-0 group-hover/risk:opacity-100 group-focus-within/risk:opacity-100 transition-opacity rounded-2xl ui-glass ui-glass-floating p-3 text-[11px] text-apple-secondary leading-relaxed"
+              >
+                <p className="text-white font-semibold mb-1">How ranking changes</p>
+                <p>
+                  <span className="font-mono text-brand-blue">risk_score = base × (0.35 + 0.65 × confidence/100)</span>
+                </p>
+                <p className="mt-1.5">
+                  High scores with <strong className="text-white">low attribution confidence</strong> drop
+                  in rank vs slightly lower but better-anchored targets. Toggle to re-sort the live list.
+                </p>
+              </div>
             </div>
           </div>
         </div>
+
+        {riskAdjusted && (
+          <Glass variant="floating" className="mb-3 px-3.5 py-2.5 rounded-2xl text-[11px] text-apple-secondary leading-relaxed shrink-0 border-brand-blue/30">
+            <div className="flex items-start gap-2">
+              <ShieldAlert size={14} className="text-brand-blue shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-brand-blue">Risk-Adjusted View is ON</strong>
+                <span className="text-white"> — </span>
+                list is sorted by confidence-weighted priority. Rows with{' '}
+                <span className="text-brand-green font-bold">↑</span> /{' '}
+                <span className="text-brand-red font-bold">↓</span> badges moved vs base ranking.
+                {(() => {
+                  const movers = priorities.filter((h) => {
+                    const d = rankDelta(h);
+                    return d != null && Math.abs(d) >= 2;
+                  }).length;
+                  return movers > 0 ? (
+                    <span className="text-white font-semibold">
+                      {' '}
+                      {movers} target{movers === 1 ? '' : 's'} shifted by 2+ ranks.
+                    </span>
+                  ) : null;
+                })()}
+                {(isFetching || isPlaceholderData) && (
+                  <span className="ml-2 text-brand-blue animate-pulse">Refreshing…</span>
+                )}
+              </div>
+            </div>
+          </Glass>
+        )}
+
+        {!riskAdjusted && (
+          <Glass variant="subtle" className="mb-3 px-3 py-2.5 rounded-2xl text-[10px] text-apple-secondary leading-relaxed shrink-0">
+            <div className="flex items-start gap-2">
+              <Info size={12} className="text-brand-blue shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-white">Score (0–10)</strong> = exposure × attributable
+                magnitude × actionability. Turn on{' '}
+                <strong className="text-brand-blue">Risk-Adjusted View</strong> to fold attribution
+                confidence into ranking — this changes who appears at the top.
+                {(isFetching || isPlaceholderData) && (
+                  <span className="ml-2 text-brand-blue animate-pulse">
+                    {isPlaceholderData ? 'Loading simulation…' : 'Refreshing…'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </Glass>
+        )}
 
         <div className="flex flex-col gap-2 mb-3 shrink-0">
           <div className="relative">
@@ -416,7 +475,13 @@ export default function EnforcementPage() {
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-          <div className="grid grid-cols-[44px_minmax(0,1.4fr)_72px_88px_72px_80px_100px] gap-2 px-3 py-2 border-b border-apple-border mb-1.5 shrink-0">
+          <div
+            className={`grid gap-2 px-3 py-2 border-b border-apple-border mb-1.5 shrink-0 ${
+              riskAdjusted
+                ? 'grid-cols-[52px_minmax(0,1.3fr)_68px_64px_72px_64px_72px_96px]'
+                : 'grid-cols-[44px_minmax(0,1.4fr)_72px_88px_72px_80px_100px]'
+            }`}
+          >
             <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">
               <SortBtn k="rank">#</SortBtn>
             </div>
@@ -426,9 +491,20 @@ export default function EnforcementPage() {
             <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase">
               <SortBtn k="source">Source</SortBtn>
             </div>
-            <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">
-              <SortBtn k="score">Score</SortBtn>
-            </div>
+            {riskAdjusted ? (
+              <>
+                <div className="text-[9px] font-mono font-bold text-apple-secondary uppercase text-right">
+                  Base
+                </div>
+                <div className="text-[9px] font-mono font-bold text-brand-blue uppercase text-right">
+                  Risk-Adj
+                </div>
+              </>
+            ) : (
+              <div className="text-[10px] font-mono font-bold text-apple-secondary uppercase text-right">
+                <SortBtn k="score">Score</SortBtn>
+              </div>
+            )}
             <div className="text-[10px] font-sans font-bold text-apple-secondary uppercase text-right">
               <SortBtn k="exposure">Exp.</SortBtn>
             </div>
@@ -452,6 +528,7 @@ export default function EnforcementPage() {
                 item={item}
                 isSelected={activeHex?.id === item.id}
                 onSelect={handleSelectHex}
+                riskAdjusted={riskAdjusted}
               />
             ))}
           </div>
@@ -468,21 +545,47 @@ export default function EnforcementPage() {
           />
         </div>
 
+        {/* Desktop: docked glass detail strip */}
         {activeHex && (
-          <Suspense
-            fallback={
-              <div className="p-6 border-t border-apple-border bg-apple-modal/95 text-xs text-apple-secondary text-center">
-                Loading detail panel…
-              </div>
-            }
+          <div className="hidden md:block shrink-0 max-h-[52%] overflow-hidden border-t border-white/10">
+            <Suspense
+              fallback={
+                <div className="p-6 ui-glass ui-glass-strong text-xs text-apple-secondary text-center">
+                  Loading detail panel…
+                </div>
+              }
+            >
+              <EnforcementDetailPanel
+                hex={activeHex}
+                onClose={handleCloseDetail}
+                dispatched={!!dispatchedUnits[activeHex.id]}
+                onDispatch={handleDispatchActive}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {/* Mobile: FluidSheet drawer (desktop uses docked panel above) */}
+        {isNarrow && (
+          <FluidSheet
+            open={Boolean(activeHex)}
+            onOpenChange={(open) => {
+              if (!open) handleCloseDetail();
+            }}
+            title={activeHex ? formatLocationName(activeHex) : 'Enforcement detail'}
+            size="tall"
           >
-            <EnforcementDetailPanel
-              hex={activeHex}
-              onClose={handleCloseDetail}
-              dispatched={!!dispatchedUnits[activeHex.id]}
-              onDispatch={handleDispatchActive}
-            />
-          </Suspense>
+            {activeHex && (
+              <Suspense fallback={<p className="text-xs text-apple-secondary py-6">Loading…</p>}>
+                <EnforcementDetailPanel
+                  hex={activeHex}
+                  onClose={handleCloseDetail}
+                  dispatched={!!dispatchedUnits[activeHex.id]}
+                  onDispatch={handleDispatchActive}
+                />
+              </Suspense>
+            )}
+          </FluidSheet>
         )}
       </section>
     </div>

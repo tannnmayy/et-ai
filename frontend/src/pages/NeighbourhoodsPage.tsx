@@ -1,11 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Compass, ArrowRight, Info } from 'lucide-react';
+import { Glass, MotionCard, SpringButton } from '../components/ui';
 
 /**
  * Admin-facing Neighbourhoods landing.
- * Live personalised matching lives in Citizen Mode (#/citizen) —
- * this page deep-links there instead of inventing demo neighbourhood cards.
+ * Live personalised matching lives in Citizen Mode (#/citizen).
  */
 export default function NeighbourhoodsPage() {
   const navigate = useNavigate();
@@ -29,9 +29,11 @@ export default function NeighbourhoodsPage() {
           </div>
         </div>
 
-        <div className="bg-apple-card border border-apple-border rounded-2xl p-6 space-y-5">
+        <MotionCard glass="strong" interactive={false} className="p-6 space-y-5">
           <div className="flex items-start gap-3">
-            <Compass className="w-5 h-5 text-brand-blue shrink-0 mt-0.5" />
+            <div className="w-10 h-10 rounded-xl bg-brand-blue/15 border border-brand-blue/25 flex items-center justify-center shrink-0">
+              <Compass className="w-5 h-5 text-brand-blue" />
+            </div>
             <div className="space-y-1 text-left">
               <h2 className="text-base font-semibold text-white">Citizen Mode</h2>
               <p className="text-xs text-apple-secondary leading-relaxed">
@@ -42,25 +44,26 @@ export default function NeighbourhoodsPage() {
             </div>
           </div>
 
-          <button
-            type="button"
+          <SpringButton
             id="btn-open-citizen-mode"
+            variant="primary"
+            size="lg"
+            className="w-full"
             onClick={() => navigate('/citizen')}
-            className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-xl bg-brand-blue hover:bg-brand-blue/90 active:bg-brand-blue/85 text-white font-bold text-sm shadow-lg shadow-brand-blue/10 transition-all"
           >
             <span>Open Citizen Mode</span>
             <ArrowRight size={16} />
-          </button>
-        </div>
+          </SpringButton>
+        </MotionCard>
 
-        <div className="flex items-start gap-2.5 text-[11px] text-apple-secondary leading-relaxed px-1">
+        <Glass variant="subtle" className="rounded-2xl p-4 flex items-start gap-2.5">
           <Info className="w-4 h-4 shrink-0 mt-0.5 text-apple-secondary" />
-          <p>
+          <p className="text-[11px] text-apple-secondary leading-relaxed">
             You can also switch via the <strong className="text-white">Citizen</strong> pill
             in the top navigation. City Admin tools (Map, Enforcement, Copilot) stay on this
             side of the app.
           </p>
-        </div>
+        </Glass>
       </div>
     </div>
   );

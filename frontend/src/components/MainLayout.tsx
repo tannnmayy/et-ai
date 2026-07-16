@@ -40,7 +40,7 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-black text-white overflow-hidden font-sans select-none">
+    <div className="w-screen h-screen flex flex-col bg-black text-white overflow-hidden font-sans select-none antialiased">
       <TopNav activeTab={getActiveTab()} setActiveTab={handleTabChange} />
 
       <div className="flex-1 flex mt-16 h-[calc(100vh-64px)] overflow-hidden">
@@ -48,6 +48,7 @@ export default function MainLayout() {
           <Sidebar activeTab={getActiveTab()} setActiveTab={handleTabChange} />
         )}
 
+        {/* App chrome stays solid black; glass is reserved for elevated panels inside views */}
         <main
           className={`flex-grow h-full overflow-hidden bg-black relative ${
             isCitizen ? 'ml-0' : 'ml-64'

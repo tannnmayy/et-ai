@@ -84,6 +84,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setSession(next);
     setLanguageState(next.language);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    // Best-effort SQLite mirror — never blocks login
+    void import('../services/persistenceService').then(({ mirrorSession, logAuditEvent }) => {
+      void mirrorSession(next);
+      void logAuditEvent('session_enter', { role: next.role, language: next.language }, next.name);
+    });
   }, []);
 
   const clearSession = useCallback(() => {

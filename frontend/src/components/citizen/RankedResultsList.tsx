@@ -124,7 +124,7 @@ export default function RankedResultsList({
               key={match.name}
               id={`ranked-match-${idx + 1}`}
               onClick={() => onSelectNeighbourhood(match)}
-              className="group bg-apple-card border border-apple-border hover:border-brand-blue rounded-xl p-6 cursor-pointer transition-all duration-300 relative overflow-hidden active:scale-[0.99] select-none"
+              className="group ui-glass ui-glass-subtle hover:border-brand-blue/40 rounded-2xl p-6 cursor-pointer transition-colors duration-200 relative overflow-hidden active:scale-[0.99] select-none"
             >
               
               {/* Header inside card: Rank and Match Score */}

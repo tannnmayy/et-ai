@@ -22,6 +22,21 @@ export function toScore10(priorityScore01: number): number {
   return Math.round(Math.min(1, Math.max(0, priorityScore01)) * 100) / 10;
 }
 
+/** Rank delta under risk-adjusted view: baseRank − currentRank (positive = rose). */
+export function rankDelta(hex: PriorityHex): number | null {
+  if (hex.baseRank == null || hex.rank == null) return null;
+  return hex.baseRank - hex.rank;
+}
+
+export function confidenceLevelColor(level?: string, score?: number): string {
+  const s = score ?? 0;
+  const l = (level || '').toLowerCase();
+  if (l === 'high' || s >= 80) return '#34C759';
+  if (l === 'medium' || s >= 55) return '#0A84FF';
+  if (l === 'low' || s >= 30) return '#FF9F0A';
+  return '#ff453a';
+}
+
 /**
  * Bounded what-if: scale construction share, renormalize, recompute priority
  * using the same E×M×A×L ingredients available on the hex (client-side preview).

@@ -41,7 +41,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
     .toUpperCase();
 
   return (
-    <nav className="fixed top-0 left-0 w-full h-16 bg-black/55 backdrop-blur-2xl border-b border-white/10 z-50 flex items-center justify-between px-4 sm:px-8">
+    <nav className="fixed top-0 left-0 w-full h-16 bg-black/70 backdrop-blur-xl border-b border-white/10 z-50 flex items-center justify-between px-4 sm:px-8">
       <div
         className="flex items-center gap-3 cursor-pointer min-w-0"
         onClick={() => setActiveTab(isCitizen ? 'citizen' : 'map')}
