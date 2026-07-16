@@ -63,6 +63,7 @@ export default function EnforcementPage() {
   // Immediate UI value for Simulate; debounced before it hits React Query
   const [simHourUi, setSimHourUi] = useState<number | null>(null);
   const simulatedHour = useDebouncedValue(simHourUi, 250);
+  const [riskAdjusted, setRiskAdjusted] = useState(false);
 
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
@@ -83,7 +84,7 @@ export default function EnforcementPage() {
     isLoading,
     isFetching,
     isPlaceholderData,
-  } = useEnforcementPriorities(simulatedHour, topK);
+  } = useEnforcementPriorities(simulatedHour, topK, riskAdjusted);
 
   // Server already returns topK rows; keep slice as safety
   const priorities = useMemo(
@@ -281,6 +282,20 @@ export default function EnforcementPage() {
                 ))}
               </select>
             </label>
+
+            <button
+              type="button"
+              onClick={() => setRiskAdjusted((v) => !v)}
+              className={`rounded-full px-3 py-2 border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                riskAdjusted
+                  ? 'bg-brand-blue/20 border-brand-blue/40 text-brand-blue'
+                  : 'bg-apple-card border-apple-border text-apple-secondary hover:text-white'
+              }`}
+              title="Rank by base_priority × (0.35 + 0.65 × confidence/100)"
+              aria-pressed={riskAdjusted}
+            >
+              Risk-Adjusted Priorities
+            </button>
           </div>
         </div>
 
@@ -289,8 +304,18 @@ export default function EnforcementPage() {
             <Info size={12} className="text-brand-blue shrink-0 mt-0.5" />
             <div>
               <strong className="text-white">Score (0–10)</strong> = exposure × attributable
-              magnitude × actionability. Top-N is client-side (instant). Time simulation is
-              cached per hour.
+              magnitude × actionability.
+              {riskAdjusted ? (
+                <>
+                  {' '}
+                  <strong className="text-brand-blue">Risk-adjusted ranking ON</strong>
+                  : sort key is base × (0.35 + 0.65 × attribution confidence). Low-confidence
+                  hotspots fall behind slightly lower but better-anchored targets.
+                </>
+              ) : (
+                <> Toggle “Risk-Adjusted Priorities” to fold attribution confidence into rank.</>
+              )}{' '}
+              Time simulation is cached per hour.
               {(isFetching || isPlaceholderData) && (
                 <span className="ml-2 text-brand-blue animate-pulse">
                   {isPlaceholderData ? 'Loading simulation…' : 'Refreshing…'}

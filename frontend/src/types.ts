@@ -22,12 +22,27 @@ export interface PriorityHex {
   score10: number;
   /** Backend 0–1 priority score (kept for sorting fidelity) */
   priorityScore: number;
+  /** Risk-adjusted score = base × confidence factor */
+  riskAdjustedScore?: number;
+  /** Display 0–10 from risk-adjusted score */
+  riskAdjustedScore10?: number;
+  /** Rank under unadjusted base priority */
+  baseRank?: number;
   rank: number;
   changeVal: number;
   exposure: ExposureLevel;
   /** Attributable magnitude 0–100 */
   magnitude: number;
+  /** @deprecated actionability weight 0–100 — prefer attributionConfidence */
   confidence: number;
+  /** 0–100 attribution reliability */
+  attributionConfidence?: number;
+  attributionConfidenceLevel?: string;
+  confidenceExplanation?: string;
+  confidenceFlags?: string[];
+  riskConfidenceFactor?: number;
+  nearestStationDistanceM?: number | null;
+  attributionMethod?: string;
   /** @deprecated use actionTier */
   actionability: ActionTier;
   actionTier: ActionTier;
@@ -57,6 +72,8 @@ export interface PriorityHex {
     exposure_weight: number;
     attributable_magnitude: number;
     actionability_weight: number;
+    risk_confidence_factor?: number;
+    attribution_confidence_score?: number;
   };
 }
 

@@ -134,6 +134,52 @@ export interface BeforeAfterInsight {
   };
 }
 
+export interface FailureMode {
+  id: string;
+  name: string;
+  detected_by: string;
+  degradation: string;
+  live_example: string;
+  status_flag?: string;
+  examples?: string[];
+}
+
+export interface FailureModesInsight {
+  available: boolean;
+  reason?: string;
+  headline?: string;
+  finding?: string;
+  method_note?: string;
+  modes?: FailureMode[];
+}
+
+export interface AblationStudiesInsight {
+  available: boolean;
+  reason?: string;
+  headline?: string;
+  finding?: string;
+  method_note?: string;
+  wind_vs_distance?: {
+    sample_size: number;
+    dominant_source_changes: number;
+    dominant_source_change_pct: number;
+    mean_abs_traffic_fraction_delta: number;
+    mean_abs_traffic_fraction_delta_pp: number;
+    interpretation: string;
+  };
+  fusion_vs_no_fusion?: {
+    top_k: number;
+    top_k_overlap: number;
+    top_k_overlap_pct: number;
+    top_k_jaccard: number;
+    spearman_rank_correlation: number;
+    scored_hexes_with_fusion: number;
+    no_fusion_fill: string;
+    city_median_pm25_used: number;
+    interpretation: string;
+  };
+}
+
 export interface CityInsightsPack {
   city: string;
   generated_at: string;
@@ -145,6 +191,8 @@ export interface CityInsightsPack {
     targeted_enforcement: TargetedEnforcementInsight;
     rent_vs_air: RentVsAirInsight;
     before_after: BeforeAfterInsight;
+    failure_modes?: FailureModesInsight;
+    ablation_studies?: AblationStudiesInsight;
   };
 }
 

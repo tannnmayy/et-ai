@@ -355,7 +355,33 @@ def get_multistation_forecasts() -> MultiStationForecastResponse:
             latest, model, feature_columns, station_id, station_config.station_name, station_config.source,
             project_root=project_root,
         )
-        forecast.model_rmse_on_test = s_metrics.get("lightgbm_rmse")
+        selected = s_metrics.get("model_selected_for_serving") or "lightgbm"
+        rmse = (
+            s_metrics.get("persistence_rmse")
+            if selected == "persistence"
+            else s_metrics.get("lightgbm_rmse")
+        )
+        if rmse is None:
+            rmse = s_metrics.get("lightgbm_rmse") or s_metrics.get("persistence_rmse")
+        forecast.model_rmse_on_test = rmse
+        forecast.selected_model = selected
+        if rmse is not None and forecast.predicted_pm25 is not None:
+            # z=1 ≈ 68% coverage under residual ~ N(0, RMSE²) — labelled as approximate
+            low = max(0.0, float(forecast.predicted_pm25) - float(rmse))
+            high = float(forecast.predicted_pm25) + float(rmse)
+            forecast.interval_low_pm25 = round(low, 1)
+            forecast.interval_high_pm25 = round(high, 1)
+            forecast.interval_method = "test_rmse_gaussian_z1"
+            # Uncertainty level from absolute RMSE (µg/m³), city-calibrated bands
+            r = float(rmse)
+            if r < 12:
+                level, reason = "Low", f"selected-model test RMSE {r:.1f} µg/m³ (<12)"
+            elif r < 22:
+                level, reason = "Medium", f"selected-model test RMSE {r:.1f} µg/m³ (12–22)"
+            else:
+                level, reason = "High", f"selected-model test RMSE {r:.1f} µg/m³ (>22)"
+            forecast.prediction_uncertainty_level = level
+            forecast.prediction_uncertainty_reason = reason
         forecasts.append(forecast)
 
     return MultiStationForecastResponse(

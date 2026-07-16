@@ -115,7 +115,9 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
 
   // Backend priority_score is 0–1; display as 0–10 for officer-friendly scale
   const priority01 = Number(hex.priority_score ?? 0);
+  const risk01 = Number(hex.risk_adjusted_score ?? priority01);
   const score10 = Math.round(Math.min(1, Math.max(0, priority01)) * 100) / 10;
+  const riskAdjustedScore10 = Math.round(Math.min(1, Math.max(0, risk01)) * 100) / 10;
 
   // Action tier from score + exposure (not just actionability weight)
   let actionTier: PriorityHex['actionTier'] = 'ROUTINE';
@@ -130,6 +132,11 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
   // rather than synthetic sin-based change values.
   const changeVal = Number(((hex.scoring_breakdown?.attributable_magnitude || 0) * 5).toFixed(1));
 
+  const attrConf =
+    hex.attribution_confidence_score != null
+      ? Number(hex.attribution_confidence_score)
+      : Math.round((hex.scoring_breakdown?.actionability_weight ?? 0.5) * 100);
+
   return {
     id: hex.h3_cell,
     name: _resolveName(
@@ -140,11 +147,27 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
     ),
     score10,
     priorityScore: priority01,
+    riskAdjustedScore: risk01,
+    riskAdjustedScore10,
+    baseRank: hex.base_rank != null ? Number(hex.base_rank) : Number(hex.rank ?? index + 1),
     rank: Number(hex.rank ?? index + 1),
     changeVal,
     exposure,
     magnitude,
-    confidence: Math.round((hex.scoring_breakdown?.actionability_weight ?? 0.5) * 100),
+    confidence: attrConf,
+    attributionConfidence: attrConf,
+    attributionConfidenceLevel: hex.attribution_confidence_level ?? undefined,
+    confidenceExplanation: hex.confidence_explanation ?? undefined,
+    confidenceFlags: hex.confidence_flags ?? undefined,
+    riskConfidenceFactor:
+      hex.risk_confidence_factor != null
+        ? Number(hex.risk_confidence_factor)
+        : hex.scoring_breakdown?.risk_confidence_factor != null
+          ? Number(hex.scoring_breakdown.risk_confidence_factor)
+          : undefined,
+    nearestStationDistanceM:
+      hex.nearest_station_distance_m != null ? Number(hex.nearest_station_distance_m) : null,
+    attributionMethod: hex.method ?? undefined,
     actionability: actionTier,
     actionTier,
     pm25: Math.round(hex.fused_pm25 || hex.predicted_pm25 || 0),
@@ -171,6 +194,8 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
           exposure_weight: hex.scoring_breakdown.exposure_weight,
           attributable_magnitude: hex.scoring_breakdown.attributable_magnitude,
           actionability_weight: hex.scoring_breakdown.actionability_weight,
+          risk_confidence_factor: hex.scoring_breakdown.risk_confidence_factor,
+          attribution_confidence_score: hex.scoring_breakdown.attribution_confidence_score,
         }
       : undefined,
   };
@@ -207,9 +232,15 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
     burning: 'Waste Burning',
   };
 
-  const fusion = fusionMap[attr.h3_cell];
-  const fusedPm25 = fusion?.fused_pm25;
+  const fusion = fusionMap[attr.h3_cell] || {};
+  const fusedPm25 = fusion?.fused_pm25 ?? attr.fused_pm25;
   const fusedPm25Num = fusedPm25 != null ? Math.round(fusedPm25) : 0;
+  const attrConf =
+    attr.attribution_confidence_score != null
+      ? Number(attr.attribution_confidence_score)
+      : fusion.attribution_confidence_score != null
+        ? Number(fusion.attribution_confidence_score)
+        : 0;
 
   const score10 = Math.min(10, Math.round(fusedPm25Num / 20));
   return {
@@ -221,7 +252,15 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
     changeVal: 0,
     exposure: 'Medium',
     magnitude: 0,
-    confidence: 0,
+    confidence: attrConf,
+    attributionConfidence: attrConf,
+    attributionConfidenceLevel:
+      attr.attribution_confidence_level || fusion.attribution_confidence_level,
+    confidenceExplanation: attr.confidence_explanation || fusion.confidence_explanation,
+    confidenceFlags: attr.confidence_flags || fusion.confidence_flags,
+    nearestStationDistanceM:
+      attr.nearest_station_distance_m ?? fusion.nearest_station_distance_m ?? null,
+    attributionMethod: attr.method,
     actionability: 'MONITOR',
     actionTier: 'MONITOR',
     pm25: fusedPm25Num,
@@ -270,18 +309,35 @@ export const ENFORCEMENT_MAX_TOP_K = 100;
 export function enforcementPrioritiesQueryKey(
   topK: number = ENFORCEMENT_DEFAULT_TOP_K,
   simulatedHour: number | null = null,
+  riskAdjusted: boolean = false,
+  constructionScale: number | null = null,
 ) {
-  return ['enforcement-priorities', 'bengaluru', simulatedHour, topK] as const;
+  return [
+    'enforcement-priorities',
+    'bengaluru',
+    simulatedHour,
+    topK,
+    riskAdjusted,
+    constructionScale,
+  ] as const;
 }
 
 export async function fetchEnforcementPriorities(
   topK: number = ENFORCEMENT_DEFAULT_TOP_K,
   simulatedHour: number | null = null,
+  riskAdjusted: boolean = false,
+  constructionScale: number | null = null,
 ): Promise<PriorityHex[]> {
   const k = Math.min(ENFORCEMENT_MAX_TOP_K, Math.max(1, topK));
   const params = new URLSearchParams({ top_k: String(k) });
   if (simulatedHour != null) {
     params.set('simulated_hour', String(simulatedHour));
+  }
+  if (riskAdjusted) {
+    params.set('risk_adjusted', 'true');
+  }
+  if (constructionScale != null && constructionScale !== 1) {
+    params.set('construction_scale', String(constructionScale));
   }
   const { data } = await apiClient.get(
     `/enforcement/priority/bengaluru?${params.toString()}`,
@@ -311,10 +367,18 @@ export async function fetchEnforcementPriorities(
 export function usePriorities(
   topK: number = ENFORCEMENT_DEFAULT_TOP_K,
   simulatedHour: number | null = null,
+  riskAdjusted: boolean = false,
+  constructionScale: number | null = null,
 ) {
   return useQuery<PriorityHex[]>({
-    queryKey: enforcementPrioritiesQueryKey(topK, simulatedHour),
-    queryFn: () => fetchEnforcementPriorities(topK, simulatedHour),
+    queryKey: enforcementPrioritiesQueryKey(
+      topK,
+      simulatedHour,
+      riskAdjusted,
+      constructionScale,
+    ),
+    queryFn: () =>
+      fetchEnforcementPriorities(topK, simulatedHour, riskAdjusted, constructionScale),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     placeholderData: (previousData) => previousData,
@@ -325,8 +389,10 @@ export function usePriorities(
 export function useEnforcementPriorities(
   simulatedHour: number | null = null,
   topK: number = ENFORCEMENT_DEFAULT_TOP_K,
+  riskAdjusted: boolean = false,
+  constructionScale: number | null = null,
 ) {
-  return usePriorities(topK, simulatedHour);
+  return usePriorities(topK, simulatedHour, riskAdjusted, constructionScale);
 }
 
 export function useAttributionGrid() {
@@ -363,6 +429,23 @@ export async function fetchCityExtremes(n: number = CITY_EXTREMES_FETCH_N) {
   const mapExtreme = (h: any): PriorityHex => {
     const pm = Math.round(h.fused_pm25 || 0);
     const score10 = Math.min(10, Math.round(pm / 20));
+    const attrConf =
+      h.attribution_confidence_score != null ? Number(h.attribution_confidence_score) : 0;
+    const sa = h.source_attribution || {};
+    let maxSource = 'traffic';
+    let maxVal = 0;
+    for (const [key, value] of Object.entries(sa)) {
+      if ((value as number) > maxVal) {
+        maxVal = value as number;
+        maxSource = key;
+      }
+    }
+    const sourceTypeMap: Record<string, PriorityHex['sourceType']> = {
+      traffic: 'Traffic Hub',
+      industrial: 'Heavy Ind.',
+      construction: 'Construction',
+      burning: 'Waste Burning',
+    };
     return {
       id: h.h3_cell,
       name: _resolveName(h.h3_cell, h.center_lat, h.center_lon, h.location_name || h.name),
@@ -372,18 +455,25 @@ export async function fetchCityExtremes(n: number = CITY_EXTREMES_FETCH_N) {
       changeVal: 0,
       exposure: 'Medium',
       magnitude: 0,
-      confidence: 0,
+      confidence: attrConf,
+      attributionConfidence: attrConf,
+      attributionConfidenceLevel: h.attribution_confidence_level,
+      confidenceExplanation: h.confidence_explanation,
+      confidenceFlags: h.confidence_flags,
+      riskConfidenceFactor: h.risk_confidence_factor,
+      nearestStationDistanceM: h.nearest_station_distance_m ?? null,
+      attributionMethod: h.method,
       actionability: 'MONITOR',
       actionTier: 'MONITOR',
       pm25: pm,
-      primarySource: '',
-      primarySourceKey: 'traffic',
-      sourceType: 'Heavy Ind.',
+      primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
+      primarySourceKey: maxSource as PriorityHex['primarySourceKey'],
+      sourceType: sourceTypeMap[maxSource] || 'Heavy Ind.',
       sourceAttribution: {
-        traffic: h.source_attribution?.traffic ?? 0,
-        industrial: h.source_attribution?.industrial ?? 0,
-        construction: h.source_attribution?.construction ?? 0,
-        burning: h.source_attribution?.burning ?? 0,
+        traffic: sa.traffic ?? 0,
+        industrial: sa.industrial ?? 0,
+        construction: sa.construction ?? 0,
+        burning: sa.burning ?? 0,
       },
       lat: h.center_lat,
       lng: h.center_lon,

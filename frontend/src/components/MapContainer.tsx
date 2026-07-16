@@ -8,7 +8,7 @@ interface MapContainerProps {
   selectedHex: PriorityHex | null;
   onSelectHex: (hex: PriorityHex) => void;
   allHexes: PriorityHex[];
-  viewMode: 'aqi' | 'enforcement';
+  viewMode: 'aqi' | 'enforcement' | 'confidence';
   /** Smaller map labels when showing many polluted hexes (30–100). */
   compactLabels?: boolean;
 }
@@ -54,9 +54,20 @@ function MapStyleController({ enabled }: { enabled: boolean }) {
   return null;
 }
 
-function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement'): string {
+function confidenceColor(score: number | undefined): string {
+  const s = score ?? 0;
+  if (s >= 80) return '#34C759'; // High
+  if (s >= 55) return '#0A84FF'; // Medium
+  if (s >= 30) return '#FF9F0A'; // Low
+  return '#ff453a'; // Very Low
+}
+
+function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement' | 'confidence'): string {
   if (viewMode === 'enforcement') {
     return actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
+  }
+  if (viewMode === 'confidence') {
+    return confidenceColor(hex.attributionConfidence ?? hex.confidence);
   }
   const pm = hex.pm25;
   if (pm <= 50) return '#34C759';
@@ -244,7 +255,7 @@ function MapContainer({
                         borderColor: color,
                         boxShadow: isSelected ? `0 0 0 2px ${color}` : undefined,
                       }}
-                      title={`${label} · ${hex.pm25} µg/m³ · ${hex.id}`}
+                      title={`${label} · ${hex.pm25} µg/m³ · conf ${hex.attributionConfidence ?? hex.confidence ?? '—'}% · ${hex.id}`}
                     >
                       <span className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[76px]' : ''}`}>
                         {compactLabels && label.length > 12 ? `${label.slice(0, 11)}…` : label}
@@ -252,7 +263,9 @@ function MapContainer({
                       <div className="text-right font-bold mt-0.5" style={{ color }}>
                         {viewMode === 'enforcement'
                           ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
-                          : `${hex.pm25} µg/m³`}
+                          : viewMode === 'confidence'
+                            ? `${hex.attributionConfidence ?? hex.confidence ?? '—'}% conf`
+                            : `${hex.pm25} µg/m³`}
                       </div>
                     </div>
                   </AdvancedMarker>
@@ -312,7 +325,9 @@ function MapContainer({
                   >
                     {viewMode === 'enforcement'
                       ? `${hex.score10?.toFixed?.(1) ?? '—'} / ${hex.pm25 || '—'}µg`
-                      : `${hex.pm25} µg/m³`}
+                      : viewMode === 'confidence'
+                        ? `${hex.attributionConfidence ?? hex.confidence ?? '—'}%`
+                        : `${hex.pm25} µg/m³`}
                   </text>
                 </g>
               );

@@ -49,6 +49,25 @@ class MultiStationStationForecast(BaseModel):
     predicted_pm25: float = Field(ge=0)
     risk_category: str
     model_rmse_on_test: float | None = None
+    # Uncertainty (from held-out test RMSE; approximate Gaussian band)
+    selected_model: str | None = Field(
+        default=None,
+        description="Model selected for serving at eval time (lightgbm|persistence)",
+    )
+    interval_low_pm25: float | None = Field(
+        default=None, description="Approx. lower bound: max(0, pred − 1·RMSE)"
+    )
+    interval_high_pm25: float | None = Field(
+        default=None, description="Approx. upper bound: pred + 1·RMSE"
+    )
+    interval_method: str | None = Field(
+        default=None,
+        description="e.g. test_rmse_gaussian_z1 (~68% if residuals ~N(0,RMSE²))",
+    )
+    prediction_uncertainty_level: str | None = Field(
+        default=None, description="High|Medium|Low model-error uncertainty from RMSE"
+    )
+    prediction_uncertainty_reason: str | None = None
 
 
 class MultiStationForecastResponse(BaseModel):

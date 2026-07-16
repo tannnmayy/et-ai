@@ -9,6 +9,14 @@ class ScoringBreakdown(BaseModel):
     exposure_weight: float = Field(description="Population/vulnerability exposure weight")
     attributable_magnitude: float = Field(description="Pollution magnitude attributable to actionable sources")
     actionability_weight: float = Field(description="How directly enforceable the dominant source category is")
+    risk_confidence_factor: float | None = Field(
+        default=None,
+        description="0.35–1.0 factor from attribution confidence used in risk-adjusted score",
+    )
+    attribution_confidence_score: int | None = Field(
+        default=None,
+        description="0–100 attribution reliability score",
+    )
 
 
 class Explanation(BaseModel):
@@ -26,6 +34,14 @@ class RankedHexagon(BaseModel):
     center_lat: float | None = None
     center_lon: float | None = None
     priority_score: float
+    risk_adjusted_score: float | None = Field(
+        default=None,
+        description="base_priority × confidence_factor (risk-adjusted)",
+    )
+    base_rank: int | None = Field(
+        default=None,
+        description="Rank under unadjusted priority_score (for comparison)",
+    )
     rank: int
     scoring_breakdown: ScoringBreakdown
     fused_pm25: float | None = None
@@ -43,6 +59,13 @@ class RankedHexagon(BaseModel):
     is_peak_hour: bool | None = Field(default=None)
     traffic_hour_local: int | None = Field(default=None)
     traffic_corridor_applied: bool | None = Field(default=None)
+    # Attribution confidence / reliability
+    attribution_confidence_score: int | None = None
+    attribution_confidence_level: str | None = None
+    confidence_explanation: str | None = None
+    confidence_flags: list[str] | None = None
+    risk_confidence_factor: float | None = None
+    nearest_station_distance_m: float | None = None
 
 
 class EnforcementPriorityResponse(BaseModel):
@@ -55,3 +78,6 @@ class EnforcementPriorityResponse(BaseModel):
     is_peak_hour: bool | None = None
     traffic_hour_local: int | None = None
     traffic_corridor_applied: bool | None = None
+    risk_adjusted_ranking: bool | None = None
+    risk_adjustment_formula: str | None = None
+    counterfactual_construction_scale: float | None = None

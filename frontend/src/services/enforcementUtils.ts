@@ -23,6 +23,82 @@ export function toScore10(priorityScore01: number): number {
 }
 
 /**
+ * Bounded what-if: scale construction share, renormalize, recompute priority
+ * using the same E×M×A×L ingredients available on the hex (client-side preview).
+ * Does not re-run fusion or city-wide ranking — scoped to the selected hex.
+ */
+export function simulateConstructionCounterfactual(
+  hex: PriorityHex,
+  constructionScale: number,
+): {
+  scale: number;
+  sourceAttribution: PriorityHex['sourceAttribution'];
+  priorityScore: number;
+  score10: number;
+  riskAdjustedScore: number;
+  riskAdjustedScore10: number;
+  magnitude: number;
+  actionabilityWeight: number;
+  assumptions: string[];
+} {
+  const scale = Math.min(2, Math.max(0, constructionScale));
+  const sa = hex.sourceAttribution;
+  const c = sa.construction * scale;
+  const t = sa.traffic;
+  const i = sa.industrial;
+  const b = sa.burning;
+  const total = t + i + c + b || 1;
+  const sourceAttribution = {
+    traffic: t / total,
+    industrial: i / total,
+    construction: c / total,
+    burning: b / total,
+  };
+
+  const E = hex.scoringBreakdown?.exposure_weight ?? 0.5;
+  const corridor = hex.trafficCorridorScore ?? 0;
+  const TRAFFIC_ACT = 0.28 + 0.17 * corridor;
+  const A =
+    sourceAttribution.traffic * TRAFFIC_ACT +
+    sourceAttribution.industrial * 1 +
+    sourceAttribution.construction * 1 +
+    sourceAttribution.burning * 1;
+  const magFrac = Math.min(
+    1.5,
+    sourceAttribution.industrial +
+      sourceAttribution.construction +
+      sourceAttribution.burning +
+      sourceAttribution.traffic * corridor * 0.75,
+  );
+  const M = Math.min(1, Math.max(0, ((hex.pm25 || 0) * magFrac) / 300));
+  const L = 1 + 0.4 * corridor * sourceAttribution.traffic;
+  const priorityScore = E * M * A * L;
+  const confFactor =
+    hex.riskConfidenceFactor ??
+    (hex.attributionConfidence != null
+      ? 0.35 + 0.65 * (hex.attributionConfidence / 100)
+      : 0.85);
+  const riskAdjustedScore = priorityScore * confFactor;
+
+  return {
+    scale,
+    sourceAttribution,
+    priorityScore,
+    score10: toScore10(priorityScore),
+    riskAdjustedScore,
+    riskAdjustedScore10: toScore10(riskAdjustedScore),
+    magnitude: Math.round(M * 100),
+    actionabilityWeight: A,
+    assumptions: [
+      'Fused PM2.5 held constant (no re-fusion).',
+      'Only construction intensity scaled; other channels re-normalized.',
+      'Uses same E×M×A×corridor-lift formula as enforcement ranking.',
+      'City-wide ranks are not recomputed in this panel preview.',
+    ],
+  };
+}
+
+/**
  * Action tier rules (score is 0–10 scale):
  *  ≥9 + High/Critical exposure → IMMEDIATE
  *  7–8.9 → HIGH PRIORITY

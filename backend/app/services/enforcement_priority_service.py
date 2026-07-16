@@ -377,7 +377,21 @@ def compute_enforcement_priorities(
     city: str = "bengaluru",
     top_k: int = 10,
     simulated_hour: int | None = None,
+    *,
+    risk_adjusted: bool = False,
+    construction_scale: float | None = None,
 ) -> dict[str, Any]:
+    """Rank hexagons by enforcement priority.
+
+    Parameters
+    ----------
+    risk_adjusted:
+        When True, sort by ``risk_adjusted_score = base × confidence_factor``
+        so low-reliability attributions are deprioritised.
+    construction_scale:
+        Optional counterfactual multiplier for construction channel intensity
+        (1.0 = baseline). Values in [0, 2] are accepted; fractions re-normalised.
+    """
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
 
@@ -395,6 +409,38 @@ def compute_enforcement_priorities(
     attr_df, traffic_meta = _compute_attribution_vectors(
         hex_df, simulated_hour=simulated_hour
     )
+
+    # Bounded counterfactual: scale construction raw channel, re-normalise
+    if construction_scale is not None:
+        try:
+            scale = float(construction_scale)
+        except (TypeError, ValueError):
+            scale = 1.0
+        scale = max(0.0, min(2.0, scale))
+        if abs(scale - 1.0) > 1e-6:
+            # Recover approximate raw proportions by re-weighting construction
+            c = attr_df["construction"].to_numpy() * scale
+            t = attr_df["traffic"].to_numpy()
+            i = attr_df["industrial"].to_numpy()
+            b = attr_df["burning"].to_numpy()
+            # Keep non-construction mass, scale construction, renormalize
+            others = t + i + b
+            # When scale reduces construction, free mass redistributes to others proportionally
+            total = others + c
+            total = np.where(total <= 0, 1.0, total)
+            attr_df = pd.DataFrame(
+                {
+                    "traffic": t / total,
+                    "industrial": i / total,
+                    "construction": c / total,
+                    "burning": b / total,
+                },
+                index=attr_df.index,
+            )
+            traffic_meta = {
+                **traffic_meta,
+                "counterfactual_construction_scale": scale,
+            }
 
     corridor_score = (
         hex_df["traffic_corridor_score"].fillna(0.0).to_numpy()
@@ -482,12 +528,74 @@ def compute_enforcement_priorities(
         1.0 + CORRIDOR_RANK_LIFT * corridor_score * attr_df["traffic"].to_numpy()
     )
 
+    # -----------------------------------------------------------------------
+    # 7. Attribution confidence decay + risk-adjusted score
+    #    confidence from distance-to-station + wind + fusion availability
+    #    risk_adjusted = base_priority × (0.35 + 0.65 × confidence/100)
+    # -----------------------------------------------------------------------
+    from backend.app.services.attribution_confidence_service import (
+        compute_attribution_confidence,
+        nearest_station_distances_m,
+    )
+
+    st_lats: list[float] = []
+    st_lons: list[float] = []
+    for station in get_registry_stations():
+        if (
+            getattr(station, "forecast_eligible", True)
+            and station.latitude is not None
+            and station.longitude is not None
+        ):
+            st_lats.append(float(station.latitude))
+            st_lons.append(float(station.longitude))
+
+    nearest_d, _ = nearest_station_distances_m(
+        hex_df["center_lat"].to_numpy(),
+        hex_df["center_lon"].to_numpy(),
+        st_lats,
+        st_lons,
+    )
+    # Cap for fusion range
+    nearest_d = np.where(nearest_d > FUSION_STATION_RANGE_METERS, np.nan, nearest_d)
+
+    conf_scores = np.zeros(len(hex_df), dtype=float)
+    conf_factors = np.zeros(len(hex_df), dtype=float)
+    conf_levels: list[str] = []
+    conf_explanations: list[str] = []
+    conf_flags_list: list[list[str]] = []
+    ws = wind_data.get("speed_kmh")
+    for i in range(len(hex_df)):
+        nd = nearest_d[i]
+        fused_i = fused_pm25_arr[i]
+        conf = compute_attribution_confidence(
+            nearest_station_distance_m=None if np.isnan(nd) else float(nd),
+            stations_contributing=0 if np.isnan(fused_i) else 1,
+            method="vectorised_feature_proxy",
+            wind_speed_kmh=float(ws) if ws is not None else None,
+            source_hexagons_contributing=None,
+            fusion_available=not np.isnan(fused_i),
+            fused_pm25=None if np.isnan(fused_i) else float(fused_i),
+        )
+        conf_scores[i] = conf["attribution_confidence_score"]
+        conf_factors[i] = conf["risk_confidence_factor"]
+        conf_levels.append(conf["attribution_confidence_level"])
+        conf_explanations.append(conf["confidence_explanation"])
+        conf_flags_list.append(list(conf["confidence_flags"]))
+
+    risk_adjusted_score = np.round(priority_score * conf_factors, 4)
+
     result_df = pd.DataFrame(
         {
             "h3_cell": hex_df["h3_cell"].values,
             "center_lat": hex_df["center_lat"].values,
             "center_lon": hex_df["center_lon"].values,
             "priority_score": np.round(priority_score, 4),
+            "risk_adjusted_score": risk_adjusted_score,
+            "attribution_confidence_score": conf_scores.astype(int),
+            "risk_confidence_factor": np.round(conf_factors, 4),
+            "nearest_station_distance_m": np.where(
+                np.isnan(nearest_d), None, np.round(nearest_d, 1)
+            ),
             "exposure_weight": np.round(exposure_weight_s.to_numpy(), 4),
             "attributable_magnitude": np.round(attributable_magnitude, 4),
             "actionability_weight": np.round(actionability, 4),
@@ -501,11 +609,23 @@ def compute_enforcement_priorities(
             "is_traffic_corridor": is_traffic_corridor,
         }
     )
+    result_df["attribution_confidence_level"] = conf_levels
+    result_df["confidence_explanation"] = conf_explanations
+    result_df["confidence_flags"] = conf_flags_list
 
+    sort_col = "risk_adjusted_score" if risk_adjusted else "priority_score"
     result_df = result_df.sort_values(
-        ["priority_score", "h3_cell"], ascending=[False, True]
+        [sort_col, "h3_cell"], ascending=[False, True]
     ).reset_index(drop=True)
     result_df.insert(0, "rank", result_df.index + 1)
+    # Also keep base rank for comparison when risk-adjusted sorting is on
+    base_order = (
+        result_df.sort_values(["priority_score", "h3_cell"], ascending=[False, True])
+        .reset_index(drop=True)
+    )
+    base_rank_map = {
+        str(r["h3_cell"]): i + 1 for i, r in base_order.iterrows()
+    }
 
     top = result_df.head(top_k)
 
@@ -527,6 +647,8 @@ def compute_enforcement_priorities(
             "exposure_weight": float(row["exposure_weight"]),
             "attributable_magnitude": float(row["attributable_magnitude"]),
             "actionability_weight": float(row["actionability_weight"]),
+            "risk_confidence_factor": float(row["risk_confidence_factor"]),
+            "attribution_confidence_score": int(row["attribution_confidence_score"]),
         }
         fused = None if row["fused_pm25"] is None else float(row["fused_pm25"])
         explanation = _template_enforcement_guidance(source_attr, fused)
@@ -535,9 +657,12 @@ def compute_enforcement_priorities(
             float(row["center_lon"]),
             h3_cell=str(row["h3_cell"]),
         )
+        nd = row["nearest_station_distance_m"]
         ranked_hexagons.append({
             "h3_cell": row["h3_cell"],
-            "priority_score": row["priority_score"],
+            "priority_score": float(row["priority_score"]),
+            "risk_adjusted_score": float(row["risk_adjusted_score"]),
+            "base_rank": int(base_rank_map.get(str(row["h3_cell"]), int(row["rank"]))),
             "rank": int(row["rank"]),
             "scoring_breakdown": scoring,
             "fused_pm25": fused,
@@ -550,12 +675,17 @@ def compute_enforcement_priorities(
             "center_lon": float(row["center_lon"]),
             "traffic_corridor_score": float(row["traffic_corridor_score"]),
             "is_major_road_corridor": bool(row["is_major_road_corridor"]),
-            # Explicit product flag for UI filters / badges (score > 0.4 or major-road flag)
             "is_traffic_corridor": bool(row["is_traffic_corridor"]),
             "traffic_time_multiplier": traffic_meta.get("traffic_time_multiplier"),
             "is_peak_hour": traffic_meta.get("is_peak_hour"),
             "traffic_hour_local": traffic_meta.get("traffic_hour_local"),
             "traffic_corridor_applied": traffic_meta.get("traffic_corridor_applied"),
+            "attribution_confidence_score": int(row["attribution_confidence_score"]),
+            "attribution_confidence_level": str(row["attribution_confidence_level"]),
+            "confidence_explanation": str(row["confidence_explanation"]),
+            "confidence_flags": list(row["confidence_flags"]) if row["confidence_flags"] is not None else [],
+            "risk_confidence_factor": float(row["risk_confidence_factor"]),
+            "nearest_station_distance_m": None if nd is None or (isinstance(nd, float) and np.isnan(nd)) else float(nd),
         })
 
     return {
@@ -570,6 +700,9 @@ def compute_enforcement_priorities(
         "is_peak_hour": traffic_meta.get("is_peak_hour"),
         "traffic_hour_local": traffic_meta.get("traffic_hour_local"),
         "traffic_corridor_applied": traffic_meta.get("traffic_corridor_applied"),
+        "risk_adjusted_ranking": bool(risk_adjusted),
+        "risk_adjustment_formula": "risk_adjusted = base_priority × (0.35 + 0.65 × confidence/100)",
+        "counterfactual_construction_scale": traffic_meta.get("counterfactual_construction_scale"),
     }
 
 

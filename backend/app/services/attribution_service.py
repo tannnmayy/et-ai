@@ -537,6 +537,8 @@ def get_single_hexagon_attribution(
         "computed_at": datetime.now(tz=timezone.utc).isoformat(),
         "city": city,
     }
+    # Confidence attached after fusion merge below when include_fusion=True;
+    # baseline attach here so partial responses still carry reliability.
 
     if include_fusion:
         fusion = compute_fusion_for_hexagon(
@@ -547,6 +549,11 @@ def get_single_hexagon_attribution(
         result.update(fusion)
         result["computed_at"] = datetime.now(tz=timezone.utc).isoformat()
 
+    from backend.app.services.attribution_confidence_service import attach_confidence_to_hex_payload
+
+    attach_confidence_to_hex_payload(
+        result, wind_speed_kmh=wind_data.get("speed_kmh")
+    )
     return result
 
 
@@ -678,28 +685,60 @@ def get_city_extremes(
 
     fused_arr = _estimate_fused_pm25_for_grid(hex_df)
 
+    # Pre-compute nearest eligible station distance for confidence decay
+    from backend.app.services.attribution_confidence_service import (
+        attach_confidence_to_hex_payload,
+        nearest_station_distances_m,
+    )
+
+    st_lats: list[float] = []
+    st_lons: list[float] = []
+    st_ids: list[str] = []
+    for station in BENGALURU_STATIONS:
+        if not station.forecast_eligible or station.latitude is None or station.longitude is None:
+            continue
+        st_lats.append(float(station.latitude))
+        st_lons.append(float(station.longitude))
+        st_ids.append(station.station_id)
+    nearest_d, nearest_i = nearest_station_distances_m(
+        hex_df["center_lat"].to_numpy(),
+        hex_df["center_lon"].to_numpy(),
+        st_lats,
+        st_lons,
+    )
+
     hexagon_results: list[dict[str, Any]] = []
-    for idx, row in hex_df.iterrows():
+    # fused_arr is aligned to hex_df row order (0..n-1)
+    for pos, (_, row) in enumerate(hex_df.iterrows()):
         h3_cell = row["h3_cell"]
         attr = compute_attribution_for_hexagon(
             h3_cell, hex_df, wind_data,
             firms_lookup=firms_lookup, no2_lookup=no2_lookup,
             simulated_hour=simulated_hour,
         )
-        fusion_val = fused_arr[idx]
+        fusion_val = float(fused_arr[pos]) if pos < len(fused_arr) else float("nan")
+        nd = float(nearest_d[pos]) if pos < len(nearest_d) else float("nan")
+        ni = int(nearest_i[pos]) if pos < len(nearest_i) else -1
+        # Cap distance for "in range" messaging using fusion range
+        in_range = not np.isnan(nd) and nd <= FUSION_STATION_RANGE_METERS
         entry = {
             **attr,
             "h3_cell": h3_cell,
             "center_lat": row["center_lat"],
             "center_lon": row["center_lon"],
-            "fused_pm25": None if np.isnan(fusion_val) else round(float(fusion_val), 2),
+            "fused_pm25": None if np.isnan(fusion_val) else round(fusion_val, 2),
             "baseline_pm25": None,
             "residual_correction": None,
-            "stations_contributing": 0,
-            "nearest_station_id": None,
-            "nearest_station_distance_m": None,
+            "stations_contributing": 1 if (not np.isnan(fusion_val) and in_range) else 0,
+            "nearest_station_id": (
+                st_ids[ni] if in_range and 0 <= ni < len(st_ids) else None
+            ),
+            "nearest_station_distance_m": round(nd, 1) if in_range else None,
             "fusion_method": "idw_nearest_station" if not np.isnan(fusion_val) else "unavailable",
         }
+        attach_confidence_to_hex_payload(
+            entry, wind_speed_kmh=wind_data.get("speed_kmh")
+        )
         hexagon_results.append(entry)
 
     scored = [h for h in hexagon_results if h.get("fused_pm25") is not None]
@@ -707,20 +746,22 @@ def get_city_extremes(
     best = scored[:n]
     worst = list(reversed(scored[-n:]))
 
-    # Geocode only the entries returned to the client, never the full city grid.
-    from backend.app.services.google_maps_client import reverse_geocode
+    # Prefer locality registry names (fast) over reverse-geocode for every extreme
+    from backend.app.services.locality_naming import resolve_location_name
 
     def _add_names(hexagons: list[dict[str, Any]]) -> None:
         for hexagon in hexagons:
             try:
-                result = reverse_geocode(hexagon["center_lat"], hexagon["center_lon"])
-                hexagon["name"] = result.get("data", {}).get("label") or None
+                hexagon["name"] = resolve_location_name(
+                    float(hexagon["center_lat"]),
+                    float(hexagon["center_lon"]),
+                    h3_cell=str(hexagon.get("h3_cell") or ""),
+                )
+                hexagon["location_name"] = hexagon["name"]
             except Exception as exc:
-                logger.debug("Could not reverse geocode %s: %s", hexagon["h3_cell"], exc)
+                logger.debug("Could not name %s: %s", hexagon["h3_cell"], exc)
                 hexagon["name"] = None
 
-    _add_names(best)
-    _add_names(worst)
 
     return {
         "city": city,

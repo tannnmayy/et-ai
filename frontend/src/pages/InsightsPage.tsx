@@ -31,7 +31,9 @@ import {
 } from 'recharts';
 import { useCityInsights } from '../api/client';
 import type {
+  AblationStudiesInsight,
   BeforeAfterInsight,
+  FailureModesInsight,
   PredictabilityMapInsight,
   RentVsAirInsight,
   RushHourFlipInsight,
@@ -674,6 +676,131 @@ function RentVsAirCard({ data }: { data: RentVsAirInsight }) {
 }
 
 /* ─── Insight 6: Before / After ─── */
+function FailureModesCard({ data }: { data?: FailureModesInsight }) {
+  if (!data?.available || !data.modes?.length) {
+    return data?.reason ? (
+      <UnavailableCard title="Failure Mode Taxonomy" reason={data.reason} />
+    ) : null;
+  }
+  return (
+    <GlassCard className="p-6 md:p-7">
+      <InsightBadge n={7} label="Honesty layer · Known limitations" />
+      <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
+        {data.headline || 'Formal Failure Mode Taxonomy'}
+      </h2>
+      <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
+        {data.finding}
+      </p>
+      <div className="mt-5 space-y-3">
+        {data.modes.map((m) => (
+          <div
+            key={m.id}
+            className="rounded-2xl bg-white/[0.03] border border-white/10 p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-white">{m.name}</h3>
+              {m.status_flag && (
+                <span className="text-[10px] font-mono text-brand-orange bg-brand-orange/10 border border-brand-orange/25 px-2 py-0.5 rounded-full">
+                  {m.status_flag}
+                </span>
+              )}
+            </div>
+            <dl className="mt-2 space-y-1.5 text-[11px] leading-relaxed">
+              <div>
+                <dt className="text-apple-secondary font-mono uppercase tracking-wider text-[9px]">
+                  Detected by
+                </dt>
+                <dd className="text-white/80">{m.detected_by}</dd>
+              </div>
+              <div>
+                <dt className="text-apple-secondary font-mono uppercase tracking-wider text-[9px]">
+                  Graceful degradation
+                </dt>
+                <dd className="text-white/80">{m.degradation}</dd>
+              </div>
+              <div>
+                <dt className="text-apple-secondary font-mono uppercase tracking-wider text-[9px]">
+                  Live example
+                </dt>
+                <dd className="text-brand-blue font-medium">{m.live_example}</dd>
+              </div>
+            </dl>
+          </div>
+        ))}
+      </div>
+      <MethodNote text={data.method_note} />
+    </GlassCard>
+  );
+}
+
+function AblationStudiesCard({ data }: { data?: AblationStudiesInsight }) {
+  if (!data?.available) {
+    return data?.reason ? (
+      <UnavailableCard title="Ablation Studies" reason={data.reason} />
+    ) : null;
+  }
+  const wind = data.wind_vs_distance;
+  const fus = data.fusion_vs_no_fusion;
+  return (
+    <GlassCard className="p-6 md:p-7">
+      <InsightBadge n={8} label="Evaluation rigor · Controlled ablations" />
+      <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
+        {data.headline || 'Focused Ablation Studies'}
+      </h2>
+      <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
+        {data.finding}
+      </p>
+      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {wind && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="text-sm font-bold text-white">Wind-weighted vs pure distance</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <StatPill
+                label="Dominant flips"
+                value={`${wind.dominant_source_change_pct}%`}
+                accent="text-brand-blue"
+              />
+              <StatPill
+                label="|Δ traffic|"
+                value={`${wind.mean_abs_traffic_fraction_delta_pp} pp`}
+                accent="text-brand-orange"
+              />
+            </div>
+            <p className="text-[11px] text-apple-secondary mt-3 leading-snug">
+              n={wind.sample_size} corridor hexes · {wind.dominant_source_changes} dominant
+              source changes
+            </p>
+            <p className="text-[11px] text-white/70 mt-2 leading-snug">{wind.interpretation}</p>
+          </div>
+        )}
+        {fus && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="text-sm font-bold text-white">Fusion vs no-fusion (city median)</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <StatPill
+                label={`Top-${fus.top_k} overlap`}
+                value={`${fus.top_k_overlap_pct}%`}
+                accent="text-brand-red"
+              />
+              <StatPill
+                label="Spearman ρ"
+                value={String(fus.spearman_rank_correlation)}
+                accent="text-brand-green"
+              />
+            </div>
+            <p className="text-[11px] text-apple-secondary mt-3 leading-snug">
+              Fill = {fus.no_fusion_fill} ({fus.city_median_pm25_used} µg/m³) ·{' '}
+              {fus.scored_hexes_with_fusion.toLocaleString()} fused hexes
+            </p>
+            <p className="text-[11px] text-white/70 mt-2 leading-snug">{fus.interpretation}</p>
+          </div>
+        )}
+      </div>
+      <MethodNote text={data.method_note} />
+    </GlassCard>
+  );
+}
+
 function BeforeAfterCard({ data }: { data: BeforeAfterInsight }) {
   if (!data.available || !data.before || !data.after) {
     return <UnavailableCard title="Before AQI Sentinel / After" reason={data.reason} />;
@@ -759,7 +886,7 @@ export default function InsightsPage() {
   const insights = data?.insights;
   const availableCount = useMemo(() => {
     if (!insights) return 0;
-    return Object.values(insights).filter((i) => i?.available).length;
+    return Object.values(insights).filter((i) => i && (i as { available?: boolean }).available).length;
   }, [insights]);
 
   return (
@@ -790,7 +917,7 @@ export default function InsightsPage() {
                 )}
                 <span className="inline-flex items-center gap-1.5 text-brand-green">
                   <Sparkles size={12} />
-                  {availableCount}/6 insights live
+                  {availableCount} insights live
                 </span>
               </div>
             )}
@@ -870,6 +997,12 @@ export default function InsightsPage() {
 
             {/* 6 — Before / After */}
             <BeforeAfterCard data={insights.before_after} />
+
+            {/* 7 — Failure modes (honesty) */}
+            <FailureModesCard data={insights.failure_modes} />
+
+            {/* 8 — Ablations */}
+            <AblationStudiesCard data={insights.ablation_studies} />
 
             <footer className="pt-2 pb-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-apple-secondary">
               <span className="inline-flex items-center gap-1.5">

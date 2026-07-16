@@ -34,9 +34,23 @@ def enforcement_priority(
         le=23,
         description="Optional Bengaluru local hour for traffic time-of-day simulation",
     ),
+    risk_adjusted: bool = Query(
+        default=False,
+        description="When true, rank by risk-adjusted score (base × confidence factor)",
+    ),
+    construction_scale: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Optional counterfactual: scale construction intensity (1.0 = baseline)",
+    ),
 ) -> EnforcementPriorityResponse:
     result = compute_enforcement_priorities(
-        city=city, top_k=top_k, simulated_hour=simulated_hour
+        city=city,
+        top_k=top_k,
+        simulated_hour=simulated_hour,
+        risk_adjusted=risk_adjusted,
+        construction_scale=construction_scale,
     )
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])

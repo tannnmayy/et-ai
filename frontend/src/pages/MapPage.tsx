@@ -10,6 +10,9 @@ import { Shield, AlertTriangle, ArrowRight, MapPin, ChevronDown, BarChart3 } fro
 /** Map view mode: cleanest-only, both, or most-polluted with selectable depth. */
 type ExtremeMode = 'best' | 'both' | 'worst';
 
+/** Visual layer: PM2.5 AQI vs attribution confidence reliability. */
+type MapLayerMode = 'aqi' | 'confidence';
+
 /** How many most-polluted hexes to show (client-side slice of fetched top-100). */
 type PollutedDepth = 15 | 30 | 50 | 100;
 
@@ -32,6 +35,7 @@ export default function MapPage() {
   const [extremeMode, setExtremeMode] = useState<ExtremeMode>('both');
   /** Demo-friendly default: Top 30 most polluted when viewing polluted set */
   const [pollutedDepth, setPollutedDepth] = useState<PollutedDepth>(30);
+  const [mapLayer, setMapLayer] = useState<MapLayerMode>('aqi');
 
   if (extremesLoading || stationsLoading) {
     return (
@@ -108,16 +112,58 @@ export default function MapPage() {
           selectedHex={activeHex}
           onSelectHex={(hex) => setSelectedHex(hex)}
           allHexes={allHexes}
-          viewMode="aqi"
+          viewMode={mapLayer}
           compactLabels={compactLabels}
         />
+
+        {/* Layer toggle */}
+        <div className="absolute top-6 left-6 z-10 flex gap-1 bg-apple-card/90 border border-apple-border backdrop-blur-md p-1 rounded-xl shadow-xl">
+          {(
+            [
+              { id: 'aqi' as const, label: 'PM2.5' },
+              { id: 'confidence' as const, label: 'Attribution Confidence' },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setMapLayer(opt.id)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors ${
+                mapLayer === opt.id
+                  ? 'bg-brand-blue text-white'
+                  : 'text-apple-secondary hover:text-white'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
 
         {/* Legend Overlay (Floating at bottom-left) */}
         <div className="absolute bottom-6 left-6 z-10 bg-apple-card/90 border border-apple-border backdrop-blur-md p-4 rounded-2xl max-w-[220px] shadow-2xl">
           <div className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest mb-3">
-            PM2.5 Levels (µg/m³)
+            {mapLayer === 'confidence' ? 'Attribution confidence' : 'PM2.5 Levels (µg/m³)'}
           </div>
           <div className="flex flex-col gap-2">
+            {mapLayer === 'confidence' ? (
+              <>
+                {[
+                  { c: '#34C759', r: '80–100', l: 'High' },
+                  { c: '#0A84FF', r: '55–79', l: 'Medium' },
+                  { c: '#FF9F0A', r: '30–54', l: 'Low' },
+                  { c: '#ff453a', r: '0–29', l: 'Very Low' },
+                ].map((row) => (
+                  <div key={row.l} className="flex items-center justify-between text-xs font-semibold">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: row.c, boxShadow: `0 0 6px ${row.c}` }} />
+                      <span className="font-mono text-white">{row.r}</span>
+                    </div>
+                    <span className="text-apple-secondary text-[10px] font-medium">{row.l}</span>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
             <div className="flex items-center justify-between text-xs font-semibold">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#34C759] shadow-[0_0_6px_#34C759]" />
@@ -146,6 +192,8 @@ export default function MapPage() {
               </div>
               <span className="text-apple-secondary text-[10px] font-medium">Severe</span>
             </div>
+              </>
+            )}
           </div>
 
           {/* Honesty note about data coverage */}
@@ -296,9 +344,10 @@ export default function MapPage() {
                   <span>Source Attribution</span>
                   {activeHex.sourceAttribution && (() => {
                     const total = activeHex.sourceAttribution.traffic + activeHex.sourceAttribution.industrial + activeHex.sourceAttribution.construction + activeHex.sourceAttribution.burning;
+                    const method = (activeHex.attributionMethod || 'wind_weighted').toUpperCase();
                     return total > 0 ? (
                       <span className="text-brand-blue flex items-center gap-1 bg-brand-blue/10 px-2 py-0.5 rounded-full font-bold">
-                        WIND_WEIGHTED
+                        {method}
                       </span>
                     ) : (
                       <span className="text-apple-secondary flex items-center gap-1 bg-apple-border/20 px-2 py-0.5 rounded-full font-bold">
@@ -307,6 +356,34 @@ export default function MapPage() {
                     );
                   })()}
                 </div>
+
+                {/* Attribution confidence */}
+                {(activeHex.attributionConfidence != null || activeHex.confidence > 0) && (
+                  <div className="mt-2 rounded-xl bg-white/[0.04] border border-white/10 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-apple-secondary">
+                        Attribution confidence
+                      </span>
+                      <span className="text-sm font-mono font-bold text-white">
+                        {activeHex.attributionConfidence ?? activeHex.confidence}%
+                        {activeHex.attributionConfidenceLevel
+                          ? ` · ${activeHex.attributionConfidenceLevel}`
+                          : ''}
+                      </span>
+                    </div>
+                    {activeHex.confidenceExplanation && (
+                      <p className="text-[11px] text-apple-secondary mt-1.5 leading-snug">
+                        {activeHex.confidenceExplanation}
+                      </p>
+                    )}
+                    {activeHex.nearestStationDistanceM != null && (
+                      <p className="text-[10px] font-mono text-white/40 mt-1">
+                        Nearest station {(activeHex.nearestStationDistanceM / 1000).toFixed(1)} km
+                      </p>
+                    )}
+                  </div>
+                )}
+
 
                 {(() => {
                   const attr = activeHex.sourceAttribution;

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
 import {
   ShieldAlert,
   Shield,
@@ -8,6 +8,8 @@ import {
   FileText,
   Clock,
   Database,
+  Gauge,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { PriorityHex } from '../../types';
 import SourceIcon from '../SourceIcon';
@@ -17,6 +19,7 @@ import {
   buildRecommendations,
   formatHexIdSubtitle,
   formatLocationName,
+  simulateConstructionCounterfactual,
 } from '../../services/enforcementUtils';
 
 // Recharts is heavy — only load when the detail panel is open (this file is
@@ -37,9 +40,17 @@ export default function EnforcementDetailPanel({
   onDispatch,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  /** 100 = baseline construction intensity */
+  const [constructionPct, setConstructionPct] = useState(100);
   const tierStyle = actionTierStyles(hex.actionTier);
   const recs = buildRecommendations(hex);
   const location = formatLocationName(hex);
+
+  const counterfactual = useMemo(
+    () => simulateConstructionCounterfactual(hex, constructionPct / 100),
+    [hex, constructionPct],
+  );
+  const confPct = hex.attributionConfidence ?? hex.confidence;
 
   const copyReport = async () => {
     const lines = [
@@ -99,6 +110,9 @@ export default function EnforcementDetailPanel({
                 title={formatHexIdSubtitle(hex)}
               >
                 Score {hex.score10}/10 · Rank #{String(hex.rank).padStart(2, '0')}
+                {hex.riskAdjustedScore10 != null && (
+                  <> · Risk-adj {hex.riskAdjustedScore10}/10</>
+                )}
               </p>
               <p className="text-[9px] font-mono text-apple-secondary/50 mt-0.5 truncate" title={hex.id}>
                 H3 {hex.id.slice(0, 8)}…{hex.id.slice(-4)}
@@ -169,6 +183,105 @@ export default function EnforcementDetailPanel({
             )}
           </div>
         )}
+
+        {/* Attribution confidence */}
+        <div className="rounded-xl bg-white/[0.04] border border-white/10 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-apple-secondary mb-1">
+            <Gauge size={12} className="text-brand-blue" />
+            Attribution confidence
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-lg font-mono font-bold text-white">
+              {confPct != null ? `${confPct}%` : '—'}
+              {hex.attributionConfidenceLevel ? (
+                <span className="text-xs font-sans font-semibold text-apple-secondary ml-2">
+                  {hex.attributionConfidenceLevel}
+                </span>
+              ) : null}
+            </span>
+            {hex.riskConfidenceFactor != null && (
+              <span className="text-[10px] font-mono text-brand-blue">
+                risk ×{hex.riskConfidenceFactor.toFixed(2)}
+              </span>
+            )}
+          </div>
+          {hex.confidenceExplanation && (
+            <p className="text-[11px] text-apple-secondary mt-1.5 leading-snug">
+              {hex.confidenceExplanation}
+            </p>
+          )}
+          {hex.nearestStationDistanceM != null && (
+            <p className="text-[10px] font-mono text-white/40 mt-1">
+              Nearest station {(hex.nearestStationDistanceM / 1000).toFixed(1)} km
+            </p>
+          )}
+          {(hex.priorityScore != null || hex.riskAdjustedScore != null) && (
+            <p className="text-[10px] text-apple-secondary mt-1.5">
+              Base score {hex.score10}/10
+              {hex.riskAdjustedScore10 != null && (
+                <> → risk-adjusted {hex.riskAdjustedScore10}/10</>
+              )}
+              {hex.baseRank != null && hex.baseRank !== hex.rank && (
+                <> · base rank #{hex.baseRank}</>
+              )}
+            </p>
+          )}
+        </div>
+
+        {/* Bounded what-if: construction intensity */}
+        <div className="rounded-xl bg-apple-card/60 border border-apple-border p-3 space-y-2">
+          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-brand-blue">
+            <SlidersHorizontal size={12} />
+            What-if · Construction activity
+          </div>
+          <p className="text-[11px] text-apple-secondary leading-snug">
+            Adjust construction intensity on this hex only. Score uses fixed fused PM2.5 —
+            not a causal emissions model.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={0}
+              max={200}
+              step={10}
+              value={constructionPct}
+              onChange={(e) => setConstructionPct(Number(e.target.value))}
+              className="flex-1 accent-brand-blue"
+              aria-label="Construction activity scale percent"
+            />
+            <span className="font-mono text-sm font-bold text-white w-12 text-right">
+              {constructionPct}%
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="rounded-lg bg-black/30 border border-white/8 px-2.5 py-2">
+              <div className="text-[9px] font-mono uppercase text-apple-secondary">Baseline</div>
+              <div className="font-mono font-bold text-white">{hex.score10}/10</div>
+            </div>
+            <div className="rounded-lg bg-brand-blue/10 border border-brand-blue/25 px-2.5 py-2">
+              <div className="text-[9px] font-mono uppercase text-brand-blue">What-if</div>
+              <div className="font-mono font-bold text-white">
+                {counterfactual.score10}/10
+                <span className="text-apple-secondary font-normal text-[10px] ml-1">
+                  ({counterfactual.score10 >= hex.score10 ? '+' : ''}
+                  {(counterfactual.score10 - hex.score10).toFixed(1)})
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-apple-secondary">
+            Construction share → {(counterfactual.sourceAttribution.construction * 100).toFixed(0)}%
+            · Mag {counterfactual.magnitude}
+          </p>
+          <details className="text-[10px] text-apple-secondary/80">
+            <summary className="cursor-pointer text-white/60 hover:text-white">Assumptions</summary>
+            <ul className="mt-1 list-disc pl-4 space-y-0.5">
+              {counterfactual.assumptions.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          </details>
+        </div>
 
         {/* Attribution chart — full 4-source mix always shown */}
         <div className="bg-apple-card/60 border border-apple-border rounded-xl p-4">
