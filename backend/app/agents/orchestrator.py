@@ -14,13 +14,18 @@ Legacy keyword routing is NOT used for free-text anymore.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from typing import Any
 
 from backend.app.agents.audit import AuditTrail
 from backend.app.agents.citizen_advisory_agent import run_citizen_advisory_agent
 from backend.app.agents.city_briefing_agent import run_city_briefing_agent
-from backend.app.agents.conversation_fallback import infer_station_id
+from backend.app.agents.conversation_fallback import (
+    infer_station_id,
+    is_compound_query,
+    is_follow_up_query,
+)
 from backend.app.agents.enforcement_planning_agent import run_enforcement_planning_agent
 from backend.app.agents.forecast_evidence_agent import run_forecast_evidence_agent
 from backend.app.agents.grounded_tool_agent import run_grounded_tool_agent
@@ -35,6 +40,9 @@ from backend.app.config import (
 from backend.app.services.artifact_adapter import UnknownStationError, _validate_station
 
 logger = logging.getLogger(__name__)
+
+# Re-export for callers/tests that import is_compound_query from orchestrator
+__all__ = ["run_orchestrator", "is_compound_query", "_is_simple_station_query", "_detect_intent"]
 
 
 def _is_simple_station_query(query: str) -> bool:
@@ -96,6 +104,8 @@ def _is_simple_station_query(query: str) -> bool:
         "drop by",
     )
     if any(w in q for w in deny):
+        return False
+    if is_compound_query(q):
         return False
 
     # Allow only clear forecast / confidence phrasing
@@ -214,7 +224,8 @@ def run_orchestrator(
         language = "en"
 
     # --- Cache (exact + semantic) ---
-    # Multi-turn answers are context-dependent — skip response cache when history present
+    # Skip cache only for genuine follow-ups (not merely because history array is non-empty).
+    # Standalone questions remain cache-eligible even when the client sends prior turns.
     ckey: str | None = None
     skey: str | None = None
     try:
@@ -225,7 +236,8 @@ def run_orchestrator(
             set_cached_response,
         )
 
-        if not history:
+        follow_up = bool(history) and is_follow_up_query(query, history)
+        if not follow_up:
             ckey = cache_key(
                 query,
                 city=city,

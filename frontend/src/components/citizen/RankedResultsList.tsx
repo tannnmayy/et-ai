@@ -26,33 +26,34 @@ export default function RankedResultsList({
   };
 
   // Helper to get AQI text and styling
-  const getAQIStyle = (aqi: number) => {
-    if (aqi <= 50) {
+  const getAQIStyle = (aqi: number | null | undefined) => {
+    const v = Number(aqi);
+    if (!Number.isFinite(v) || v <= 50) {
       return {
         text: 'Good',
         bgColor: 'bg-brand-green/10',
         textColor: 'text-brand-green',
-        borderColor: 'border-brand-green/30'
+        borderColor: 'border-brand-green/30',
       };
-    } else if (aqi <= 100) {
+    }
+    if (v <= 100) {
       return {
         text: 'Moderate',
         bgColor: 'bg-brand-orange/10',
         textColor: 'text-brand-orange',
-        borderColor: 'border-brand-orange/30'
-      };
-    } else {
-      return {
-        text: 'Unhealthy',
-        bgColor: 'bg-brand-red/10',
-        textColor: 'text-brand-red',
-        borderColor: 'border-brand-red/30'
+        borderColor: 'border-brand-orange/30',
       };
     }
+    return {
+      text: 'Unhealthy',
+      bgColor: 'bg-brand-red/10',
+      textColor: 'text-brand-red',
+      borderColor: 'border-brand-red/30',
+    };
   };
 
   // Handle empty match states or very few results
-  if (matches.length === 0) {
+  if (!matches || matches.length === 0) {
     return (
       <div id="empty-matches-state" className="flex flex-col items-center justify-center p-8 bg-apple-card border border-apple-border rounded-2xl text-center space-y-6">
         <div className="w-16 h-16 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange">
@@ -115,13 +116,16 @@ export default function RankedResultsList({
       {/* Main ranked cards list */}
       <div className="space-y-4">
         {matches.map((match, idx) => {
-          const aqiStyle = getAQIStyle(match.featureVector.aqi);
-          const isOverBudget = match.featureVector.avgRentForBudgetBHK > profile.rentBudget;
-          const isOverCommute = match.featureVector.commuteMinutesToOffice > profile.maxCommuteMinutes;
+          const fv = match.featureVector;
+          if (!fv) return null;
+          const aqiStyle = getAQIStyle(fv.aqi);
+          const isOverBudget = Number(fv.avgRentForBudgetBHK) > profile.rentBudget;
+          const isOverCommute = Number(fv.commuteMinutesToOffice) > profile.maxCommuteMinutes;
+          const reasons = Array.isArray(match.reasons) ? match.reasons : [];
 
           return (
             <div
-              key={match.name}
+              key={`${match.name}-${match.rank}-${idx}`}
               id={`ranked-match-${idx + 1}`}
               onClick={() => onSelectNeighbourhood(match)}
               className="group ui-glass ui-glass-subtle hover:border-brand-blue/40 rounded-2xl p-6 cursor-pointer transition-colors duration-200 relative overflow-hidden active:scale-[0.99] select-none"
@@ -150,10 +154,13 @@ export default function RankedResultsList({
 
               {/* Reasons list (reasons bullet items with border accent) */}
               <ul className="space-y-2.5 mb-5 pl-1">
-                {match.reasons.map((reason, rIdx) => {
+                {reasons.map((reason, rIdx) => {
                   // If it's a warning reason (rent exceeds, commute longer, etc.)
-                  const isRentWarning = reason.toLowerCase().includes('exceeds') || isOverBudget && reason.toLowerCase().includes('budget');
-                  const isCommuteWarning = reason.toLowerCase().includes('longer') || isOverCommute && reason.toLowerCase().includes('commute');
+                  const lower = reason.toLowerCase();
+                  const isRentWarning =
+                    lower.includes('exceeds') || (isOverBudget && lower.includes('budget'));
+                  const isCommuteWarning =
+                    lower.includes('longer') || (isOverCommute && lower.includes('commute'));
                   const isWarning = isRentWarning || isCommuteWarning;
 
                   return (
@@ -186,9 +193,9 @@ export default function RankedResultsList({
                   </span>
                   <div className="flex items-center space-x-2">
                     <span className={`px-2 py-0.5 rounded font-mono font-bold ${aqiStyle.textColor} ${aqiStyle.bgColor} border ${aqiStyle.borderColor}`}>
-                      {match.featureVector.aqi}
+                      {fv.aqi}
                     </span>
-                    {match.featureVector.aqiIsEstimated && (
+                    {fv.aqiIsEstimated && (
                       <span className="text-[9px] px-1 bg-apple-border border border-apple-border rounded text-apple-secondary select-none font-sans font-medium">
                         EST
                       </span>
@@ -203,9 +210,9 @@ export default function RankedResultsList({
                   </span>
                   <div className="flex items-center space-x-1">
                     <span className="text-white font-mono font-bold">
-                      {formatCurrency(match.featureVector.avgRentForBudgetBHK)}
+                      {formatCurrency(fv.avgRentForBudgetBHK)}
                     </span>
-                    {match.featureVector.rentIsEstimated && (
+                    {fv.rentIsEstimated && (
                       <span className="text-[9px] px-1 bg-apple-border border border-apple-border rounded text-apple-secondary select-none font-sans font-medium">
                         EST
                       </span>
@@ -219,7 +226,7 @@ export default function RankedResultsList({
                     COMMUTE TIME
                   </span>
                   <span className="text-white font-mono font-bold">
-                    {match.featureVector.commuteMinutesToOffice}m
+                    {fv.commuteMinutesToOffice}m
                   </span>
                 </div>
 

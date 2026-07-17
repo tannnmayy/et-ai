@@ -396,12 +396,20 @@ class LLMProvider:
 
         for provider in order:
             if _circuit_open(provider):
+                logger.info("chat_with_tools: skip %s (circuit open)", provider)
                 continue
             if provider == "groq" and self._groq_keys:
                 result = self._chat_tools_groq(messages, tools, temperature, max_tokens)
                 if result:
                     self.last_provider = "groq"
                     return result
+                self.last_fallback_note = (
+                    self.last_fallback_note or "groq_tools_exhausted_try_next_provider"
+                )
+                logger.warning(
+                    "chat_with_tools: Groq path exhausted — trying next provider (%s)",
+                    self.last_fallback_note,
+                )
             elif provider == "openrouter" and self._keys.get("openrouter"):
                 result = self._chat_tools_openai_compatible(
                     api_key=self._keys["openrouter"],
@@ -415,11 +423,15 @@ class LLMProvider:
                 )
                 if result:
                     self.last_provider = "openrouter"
+                    self.last_fallback_note = "openrouter_tools_ok_after_prior_fail"
                     return result
+                self.last_fallback_note = "openrouter_tools_failed_try_next_provider"
             elif provider == "gemini" and self._gemini_keys:
-                # Gemini: use OpenAI-compatible endpoint when available, else skip tools
-                # Fall through to text-only is handled by agent fallback
+                # Gemini native tools not used here — skip to next / heuristic
+                logger.info("chat_with_tools: Gemini has no tool path; skipping")
                 continue
+        self.last_fallback_note = "all_tool_providers_exhausted_heuristic"
+        logger.warning("chat_with_tools: all providers failed — agent should use heuristic fallback")
         return None
 
     def _call_gemini_with_key_fallback(
@@ -433,31 +445,52 @@ class LLMProvider:
             return None
 
         for key_index, api_key in enumerate(self._gemini_keys, start=1):
-            for attempt in range(1, _MAX_RETRIES + 1):
-                result, rate_limited = self._call_gemini_once(
+            # 429: never retry/backoff on the same key — move to next key immediately
+            result, rate_limited = self._call_gemini_once(
+                api_key=api_key,
+                prompt=prompt,
+                structured_data=structured_data,
+                system_prompt=system_prompt,
+            )
+            if result:
+                self.last_gemini_key_index = key_index
+                logger.info("Gemini success with key #%d", key_index)
+                return result
+            if rate_limited:
+                logger.warning(
+                    "Gemini 429 on key #%d — skipping key immediately (no backoff); trying next key",
+                    key_index,
+                )
+                self.last_fallback_note = f"429_gemini_key_{key_index}_to_next_key"
+                continue
+            # Non-rate-limit: one quick retry only for transient errors
+            for attempt in range(2, _MAX_RETRIES + 1):
+                result2, rate_limited2 = self._call_gemini_once(
                     api_key=api_key,
                     prompt=prompt,
                     structured_data=structured_data,
                     system_prompt=system_prompt,
                 )
-                if result:
+                if result2:
                     self.last_gemini_key_index = key_index
-                    logger.info("Gemini success with key #%d (attempt %d)", key_index, attempt)
-                    return result
-                if rate_limited and attempt < _MAX_RETRIES:
-                    delay = _BACKOFF_BASE * (2 ** (attempt - 1))
+                    return result2
+                if rate_limited2:
                     logger.warning(
-                        "Gemini key #%d rate-limited (attempt %d/%d); backoff %.1fs",
-                        key_index, attempt, _MAX_RETRIES, delay,
+                        "Gemini 429 on key #%d mid-retry — next key (no backoff)",
+                        key_index,
                     )
-                    time.sleep(delay)
-                    continue
-                if rate_limited:
-                    logger.warning("Gemini key #%d exhausted after %d attempts; trying next key", key_index, _MAX_RETRIES)
+                    self.last_fallback_note = f"429_gemini_key_{key_index}_to_next_key"
                     break
-                # Non-rate-limit failure — try next key sooner
+                delay = _BACKOFF_BASE * (2 ** (attempt - 2))
+                logger.warning(
+                    "Gemini key #%d non-429 fail attempt %d; backoff %.1fs",
+                    key_index,
+                    attempt,
+                    delay,
+                )
+                time.sleep(delay)
+            else:
                 logger.warning("Gemini key #%d failed (non-rate-limit); trying next key", key_index)
-                break
         return None
 
     def _call_gemini_once(
@@ -641,8 +674,14 @@ class LLMProvider:
                 }
             except Exception as exc:
                 msg = str(exc).lower()
-                if "429" in msg or "rate" in msg or "quota" in msg:
-                    _trip_circuit(f"groq:{key_index}", "rate_limit")
+                # 429: never backoff/retry same key — trip circuit and next key immediately
+                if "429" in msg or "rate_limit" in msg or "rate limit" in msg or "quota" in msg:
+                    _trip_circuit(f"groq:{key_index}", "rate_limit_429")
+                    self.last_fallback_note = f"429_groq_key_{key_index}_to_next_key"
+                    logger.warning(
+                        "Groq tools 429 on key #%d — no backoff; next key/provider",
+                        key_index,
+                    )
                     continue
                 # Project-level model blocks — try lighter fallback model once
                 if "blocked" in msg or "permission" in msg or "403" in msg:

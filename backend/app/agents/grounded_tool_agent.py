@@ -2,10 +2,12 @@
 
 Flow:
   1. Seed messages with system prompt + user query (+ optional context)
-  2. Loop (max MAX_STEPS): native chat_with_tools → execute tools → append results
-  3. When model returns final text (no tool_calls), run grounding check
-  4. If grounding fails, retry once with stronger instruction OR deterministic summary
-  5. If all LLM providers fail, run heuristic multi-tool deterministic plan
+  2. Loop (max MAX_STEPS / map-context tool-call caps): chat_with_tools → execute tools
+  3. Append **trimmed** tool summaries to LLM messages; keep full results for grounding/map/audit
+  4. When model returns final text (no tool_calls), run grounding check
+  5. If grounding fails, retry once with stronger instruction OR deterministic summary
+  6. If all LLM providers fail, run heuristic multi-tool deterministic plan
+  7. On tool-call cap without final text: best-effort prose + partial_response
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import re
 from typing import Any
 
 from backend.app.agents.audit import AuditTrail
+from backend.app.agents.conversation_fallback import is_compound_query, is_follow_up_query
 from backend.app.agents.grounding import (
     check_answer_grounding,
     deterministic_summary_from_tools,
@@ -30,24 +33,287 @@ from backend.app.agents.state import AgentState, Intent
 
 logger = logging.getLogger(__name__)
 
+# Default loop ceiling without map context (LLM turns, each may call tools)
 MAX_TOOL_STEPS = 6
+# Map-context tool-call budgets (actual tool executions, not LLM turns)
+MAP_CTX_SIMPLE_TOOL_CALLS = 2
+MAP_CTX_COMPOUND_TOOL_CALLS = 4
 
 
-def _truncate_tool_result(result: dict[str, Any], max_chars: int = 6000) -> str:
-    text = json.dumps(result, default=str)
-    if len(text) <= max_chars:
+def summarize_tool_result_for_llm(tool_name: str, result: dict[str, Any]) -> str:
+    """Minimal but narrative-capable tool summary for the LLM conversation history.
+
+    Full ``result`` is still kept for grounding, map_actions, and audit.
+    Summaries keep short labels next to numbers so the model can write specific prose.
+    """
+    if not isinstance(result, dict):
+        return json.dumps({"tool": tool_name, "value": result}, default=str)[:2000]
+
+    if result.get("_tool_error"):
+        return json.dumps(
+            {
+                "tool": tool_name,
+                "error": result.get("_tool_error"),
+                "error_type": result.get("_error_type"),
+            },
+            default=str,
+        )
+
+    name = tool_name
+    out: dict[str, Any] = {"tool": name}
+
+    if name == "resolve_location":
+        for k in (
+            "station_id",
+            "nearest_station_id",
+            "h3_cell",
+            "h3",
+            "latitude",
+            "lat",
+            "longitude",
+            "lon",
+            "lng",
+            "resolved_name",
+            "display_name",
+            "locality",
+            "resolution_method",
+            "note",
+        ):
+            if result.get(k) is not None:
+                out[k] = result[k]
+        return json.dumps(out, default=str)
+
+    if name in ("get_enforcement_priority", "tool_get_enforcement_priority"):
+        ranked = result.get("ranked_hexagons") or result.get("hexagons") or []
+        tops: list[dict[str, Any]] = []
+        for h in ranked[:5]:
+            if not isinstance(h, dict):
+                continue
+            sa = h.get("source_attribution") or {}
+            dom = None
+            if isinstance(sa, dict) and sa:
+                try:
+                    dom = max(sa, key=lambda k: float(sa.get(k) or 0))
+                except Exception:
+                    dom = None
+            tops.append(
+                {
+                    "rank": h.get("rank") or len(tops) + 1,
+                    "location": h.get("location_name") or h.get("name") or h.get("h3_cell"),
+                    "h3_cell": h.get("h3_cell") or h.get("id"),
+                    "priority_score": h.get("priority_score"),
+                    "fused_pm25": h.get("fused_pm25") or h.get("pm25"),
+                    "dominant_source": dom or h.get("primary_source") or h.get("sourceType"),
+                    "action_tier": h.get("action_tier") or h.get("actionTier"),
+                }
+            )
+        out["top_targets"] = tops
+        out["note"] = f"Showing top {len(tops)} of {len(ranked)} ranked hexes"
+        return json.dumps(out, default=str)
+
+    if name in ("get_attribution", "get_causal_explanation", "run_whatif_scenario"):
+        for k in (
+            "h3_cell",
+            "station_id",
+            "nearest_station_id",
+            "location_name",
+            "location_label",
+            "fused_pm25",
+            "method",
+            "text",
+            "explanation",
+            "summary",
+            "is_simulation",
+            "disclaimer",
+            "baseline_pm25",
+            "simulated_pm25",
+            "pm25_delta",
+            "uncertainty_band",
+        ):
+            if result.get(k) is not None:
+                out[k] = result[k]
+        sa = result.get("source_attribution") or (result.get("attribution") or {}).get(
+            "source_attribution"
+        )
+        if isinstance(sa, dict) and sa:
+            # Keep labeled shares (not bare floats) for prose
+            out["source_mix"] = {
+                k: f"{float(v) * 100:.0f}%" if float(v) <= 1.01 else f"{float(v):.0f}%"
+                for k, v in sa.items()
+                if v is not None
+            }
+        conf = result.get("attribution_confidence_score") or result.get("confidence")
+        if conf is not None:
+            out["attribution_confidence"] = conf
+        if name == "run_whatif_scenario":
+            for k in ("scenario_text", "scales_applied", "source_mix_after", "enforcement_delta"):
+                if result.get(k) is not None:
+                    out[k] = result[k]
+        return json.dumps(out, default=str)
+
+    if name in ("get_forecast", "get_forecast_confidence"):
+        for k in (
+            "station_id",
+            "station_name",
+            "display_name",
+            "predicted_pm25",
+            "risk_category",
+            "forecast_engine",
+            "confidence",
+            "confidence_level",
+            "confidence_score",
+            "horizon_hours",
+            "model_selected",
+            "persistence_rmse",
+            "lightgbm_rmse",
+            "interpretation",
+        ):
+            if result.get(k) is not None:
+                out[k] = result[k]
+        # Keep a short forecast series sample if present
+        series = result.get("forecast") or result.get("series") or result.get("predictions")
+        if isinstance(series, list) and series:
+            out["forecast_sample"] = series[:4]
+        return json.dumps(out, default=str)
+
+    if name == "search_policy_guidance":
+        hits = result.get("results") or result.get("chunks") or []
+        slim_hits = []
+        for h in hits[:4]:
+            if not isinstance(h, dict):
+                continue
+            slim_hits.append(
+                {
+                    "title": h.get("title") or h.get("source") or h.get("doc_id"),
+                    "excerpt": (h.get("text") or h.get("content") or h.get("chunk") or "")[:400],
+                    "source": h.get("source") or h.get("filename"),
+                }
+            )
+        out["results"] = slim_hits
+        out["retrieval_backend"] = result.get("retrieval_backend")
+        return json.dumps(out, default=str)
+
+    if name in ("get_city_briefing", "get_weather", "get_travel_readiness"):
+        # Keep top-level scalars and small nested dicts; drop huge lists
+        for k, v in result.items():
+            if k.startswith("_"):
+                continue
+            if isinstance(v, list):
+                out[k] = v[:5]
+            elif isinstance(v, dict):
+                # Flatten one level of scalars
+                nested = {
+                    nk: nv
+                    for nk, nv in list(v.items())[:12]
+                    if not isinstance(nv, (list, dict)) or (isinstance(nv, list) and len(nv) <= 3)
+                }
+                out[k] = nested
+            else:
+                out[k] = v
+        text = json.dumps(out, default=str)
+        if len(text) > 2500:
+            return text[:2480] + '..."truncated"}'
         return text
-    # Prefer trimming large lists
-    slim = dict(result)
-    for k, v in list(slim.items()):
-        if isinstance(v, list) and len(v) > 12:
-            slim[k] = v[:12] + [{"_truncated": f"{len(v) - 12} more items"}]
-        if k in ("hexagons", "ranked_hexagons") and isinstance(v, list) and len(v) > 8:
-            slim[k] = v[:8]
-    text = json.dumps(slim, default=str)
-    if len(text) > max_chars:
-        return text[: max_chars - 20] + '..."truncated"}'
+
+    # Generic: drop bulky/debug keys, cap lists
+    skip_keys = {
+        "debug",
+        "timestamps",
+        "raw",
+        "hexagons",
+        "all_hexagons",
+        "grid",
+        "full_payload",
+        "traceback",
+        "_from_tool_cache",
+    }
+    for k, v in result.items():
+        if k in skip_keys or k.startswith("_"):
+            continue
+        if isinstance(v, list):
+            out[k] = v[:5]
+        elif isinstance(v, dict):
+            out[k] = {
+                nk: nv
+                for nk, nv in list(v.items())[:15]
+                if not isinstance(nv, (list, dict))
+            }
+        else:
+            out[k] = v
+    text = json.dumps(out, default=str)
+    if len(text) > 2800:
+        return text[:2760] + '..."truncated"}'
     return text
+
+
+def _tools_for_state(state: AgentState) -> list[dict[str, Any]]:
+    """Drop resolve_location from the schema when Map context supplies location."""
+    if state.map_context_provided and (state.station_id or state.h3_cell):
+        filtered = [
+            t
+            for t in OPENAI_TOOLS
+            if (t.get("function") or {}).get("name") != "resolve_location"
+        ]
+        return filtered
+    return OPENAI_TOOLS
+
+
+def _max_tool_calls_for_state(state: AgentState) -> int | None:
+    """Map-context tiered tool-call budget; None = use MAX_TOOL_STEPS turns only."""
+    if not (state.map_context_provided and (state.station_id or state.h3_cell)):
+        return None
+    if is_compound_query(state.user_query or ""):
+        return MAP_CTX_COMPOUND_TOOL_CALLS
+    return MAP_CTX_SIMPLE_TOOL_CALLS
+
+
+def _compose_partial_answer(
+    state: AgentState,
+    audit: AuditTrail,
+    llm: Any,
+    tool_results: dict[str, Any],
+    *,
+    reason: str,
+) -> str:
+    """Best-effort natural-language answer when the tool-call cap is hit (no final model text)."""
+    audit.mark_partial_response(reason)
+    lang = _normalize_language(state.language)
+    lang_name = {"en": "English", "hi": "Hindi", "kn": "Kannada"}.get(lang, "English")
+    # Prefer a final LLM composition from **trimmed** evidence for prose quality
+    slim_for_compose = {
+        k: json.loads(summarize_tool_result_for_llm(k, v))
+        if isinstance(v, dict)
+        else v
+        for k, v in tool_results.items()
+    }
+    summary = None
+    if llm is not None and getattr(llm, "is_available", False):
+        summary = llm.summarize(
+            (
+                "You have a limited set of tool results (the tool budget was reached). "
+                f"Write a coherent natural-language answer in {lang_name} (language={lang}) "
+                f"to the user query: {state.user_query!r}. "
+                "Use only the provided tool data. Do not invent numbers. "
+                "Write 2–5 short paragraphs or clear sentences — not raw JSON or a data dump. "
+                "If evidence is incomplete, say what you found and what is missing. "
+                "Keep PM2.5, AQI, CPCB, station IDs, and H3 IDs in English."
+            ),
+            {"tool_results": slim_for_compose, "language": lang, "partial": True},
+            system_prompt=AGENT_SYSTEM_PROMPT,
+        )
+    if summary and summary.strip():
+        return summary.strip()
+    # Deterministic prose from full tool results (still natural language)
+    prose = deterministic_summary_from_tools(
+        state.user_query, tool_results, language=state.language
+    )
+    if prose and prose.strip():
+        return prose.strip()
+    return (
+        "I gathered some location-aware air-quality evidence for this area but could not "
+        "complete a full multi-tool analysis within the time budget. "
+        "Please try a more specific question (for example: source mix, forecast, or enforcement priorities)."
+    )
 
 
 def _execute_tool(
@@ -402,7 +668,7 @@ def _run_heuristic_fallback(state: AgentState, audit: AuditTrail) -> None:
     grounding = check_answer_grounding(answer, tool_results)
     state.response = answer
     state.structured_data = {
-        "tool_results": tool_results,
+        "tool_results": tool_results,  # FULL results for map_actions / audit consumers
         "grounding": grounding,
         "path": "heuristic_fallback",
         "language": lang,
@@ -444,15 +710,45 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
         _run_heuristic_fallback(state, audit)
         return
 
-    # Multi-turn: inject prior conversation (max 6 messages)
-    history = list(state.conversation_history or [])[-6:]
+    raw_history = list(state.conversation_history or [])[-6:]
+    # Conditional history: only inject when follow-up detection says so (ambiguous → include)
+    include_history = bool(raw_history) and is_follow_up_query(
+        state.user_query or "", raw_history
+    )
+    history = raw_history if include_history else []
     if history and not audit.memory_turns_used:
         audit.set_memory_turns(len(history))
+    elif raw_history and not include_history:
+        audit.record_reasoning(
+            "memory",
+            "Prior turns present but query treated as standalone — history not injected",
+            turns_available=len(raw_history),
+        )
+
+    tools = _tools_for_state(state)
+    max_tool_calls = _max_tool_calls_for_state(state)
+    if max_tool_calls is not None:
+        audit.record_reasoning(
+            "plan",
+            f"Map-context tool-call budget: max {max_tool_calls} "
+            f"({'compound' if is_compound_query(state.user_query or '') else 'simple'})",
+            max_tool_calls=max_tool_calls,
+        )
+        if state.map_context_provided:
+            audit.record_reasoning(
+                "route",
+                "resolve_location removed from tool schema (map context active)",
+            )
 
     user_bits = [state.user_query]
     ctx = _build_context_block(state)
     if ctx:
         user_bits.append(ctx)
+    if state.map_context_provided and (state.station_id or state.h3_cell):
+        user_bits.append(
+            "Use the provided Map context station_id/h3_cell directly for location tools. "
+            "Do not call resolve_location for this place."
+        )
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": AGENT_SYSTEM_PROMPT},
@@ -464,25 +760,38 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
             continue
         if role not in ("user", "assistant"):
             role = "user" if role != "assistant" else "assistant"
-        # Cap each prior turn for context window
         if len(content) > 1200:
             content = content[:1180] + "…"
         messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": "\n".join(user_bits)})
 
-    tool_results: dict[str, Any] = {}
+    tool_results: dict[str, Any] = {}  # FULL results (grounding / map_actions)
+    tool_calls_executed = 0
     final_text: str | None = None
+    hit_tool_cap = False
 
     for step in range(1, MAX_TOOL_STEPS + 1):
-        audit.record_reasoning("plan", f"Tool-calling step {step}/{MAX_TOOL_STEPS}")
-        turn = llm.chat_with_tools(messages, OPENAI_TOOLS)
+        budget_note = (
+            f", tool_calls={tool_calls_executed}/{max_tool_calls}"
+            if max_tool_calls is not None
+            else ""
+        )
+        audit.record_reasoning(
+            "plan", f"Tool-calling step {step}/{MAX_TOOL_STEPS}{budget_note}"
+        )
+        turn = llm.chat_with_tools(messages, tools)
         audit.set_llm_meta(
             getattr(llm, "last_provider", None),
             getattr(llm, "last_gemini_key_index", None)
             or getattr(llm, "last_groq_key_index", None),
         )
+        if getattr(llm, "last_fallback_note", None):
+            audit.record_reasoning("llm", str(llm.last_fallback_note))
+
         if turn is None:
-            audit.record_reasoning("llm_error", "chat_with_tools returned None — heuristic fallback")
+            audit.record_reasoning(
+                "llm_error", "chat_with_tools returned None — heuristic fallback"
+            )
             _run_heuristic_fallback(state, audit)
             return
 
@@ -513,63 +822,68 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
         messages.append(assistant_msg)
 
         for tc in tool_calls:
-            name = tc["name"]
-            args = tc.get("arguments") or {}
+            # Enforce map-context tool-call budget before executing more tools
+            if max_tool_calls is not None and tool_calls_executed >= max_tool_calls:
+                hit_tool_cap = True
+                audit.record_reasoning(
+                    "plan",
+                    f"Tool-call budget {max_tool_calls} reached — stopping further tools",
+                )
+                break
 
-            # Map context: skip unnecessary resolve when client already provided location
+            name = tc["name"]
+            args = dict(tc.get("arguments") or {})
+
+            # Hard block resolve_location when map context active (schema already filtered)
             if (
                 name == "resolve_location"
                 and state.map_context_provided
                 and (state.station_id or state.h3_cell)
             ):
-                # Allow resolve only if the model is clearly asking about a different place
-                q_arg = str(args.get("query") or "").lower().strip()
-                known = (state.station_id or "").lower().replace("cpcb_", "").replace("kspcb_", "")
-                if not q_arg or known in q_arg or (state.station_id and state.station_id in q_arg):
-                    synthetic = {
-                        "success": True,
-                        "station_id": state.station_id or None,
-                        "h3_cell": state.h3_cell,
-                        "resolution_method": "map_context",
-                        "note": "Used client-provided Map context; resolve_location skipped",
+                synthetic = {
+                    "success": True,
+                    "station_id": state.station_id or None,
+                    "h3_cell": state.h3_cell,
+                    "resolution_method": "map_context",
+                    "note": "Map context active; resolve_location not available — using provided ids",
+                }
+                audit.record_tool_call(name, {**args, "_skipped": "map_context"}, True)
+                tool_results[name] = synthetic
+                tool_calls_executed += 1
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": summarize_tool_result_for_llm(name, synthetic),
                     }
-                    audit.record_tool_call(name, {**args, "_skipped": "map_context"}, True)
-                    tool_results[name] = synthetic
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": _truncate_tool_result(synthetic),
-                        }
-                    )
-                    continue
+                )
+                continue
 
-            # Inject city default
             if "city" not in args and name not in ("resolve_location", "search_policy_guidance"):
                 args = {**args, "city": state.city or "bengaluru"}
-            # Fill location from Map context when model omitted it
             args = _inject_map_context_args(name, args, state)
-            # Clamp top_k
             if "top_k" in args:
                 try:
                     args["top_k"] = max(1, min(20, int(args["top_k"])))
                 except (TypeError, ValueError):
                     args["top_k"] = 10
-            # What-if: pass scenario text if missing
             if name == "run_whatif_scenario" and not args.get("scenario_text"):
                 args["scenario_text"] = state.user_query
 
             res = _execute_tool(name, args, use_cache=name != "run_whatif_scenario")
+            if not isinstance(res, dict):
+                res = {"result": res}
             success = "_tool_error" not in res
-            from_cache = bool(isinstance(res, dict) and res.get("_from_tool_cache"))
+            from_cache = bool(res.get("_from_tool_cache"))
             audit.record_tool_call(name, args, success)
+            tool_calls_executed += 1
             if from_cache:
                 audit.record_reasoning("cache", f"Tool result cache hit: {name}")
             if name == "run_whatif_scenario" and success:
                 audit.mark_whatif()
+            # FULL result for grounding / map_actions
             tool_results[name] = res
 
-            # Capture station/location for state
             if name == "resolve_location" and success:
                 sid = res.get("station_id") or res.get("nearest_station_id")
                 if sid:
@@ -578,13 +892,30 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
                 if h3:
                     state.h3_cell = h3
 
+            # TRIMMED summary for LLM history only
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": tc["id"],
-                    "content": _truncate_tool_result(res if isinstance(res, dict) else {"result": res}),
+                    "content": summarize_tool_result_for_llm(name, res),
                 }
             )
+
+        if hit_tool_cap or (
+            max_tool_calls is not None and tool_calls_executed >= max_tool_calls
+        ):
+            hit_tool_cap = True
+            final_text = _compose_partial_answer(
+                state,
+                audit,
+                llm,
+                tool_results,
+                reason=(
+                    f"Map-context tool-call budget ({max_tool_calls}) reached after "
+                    f"{tool_calls_executed} tool call(s); best-effort answer composed"
+                ),
+            )
+            break
 
         if step >= MAX_TOOL_STEPS:
             audit.record_reasoning(
@@ -596,39 +927,57 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
                     "role": "user",
                     "content": (
                         "You have reached the tool step limit. Produce your final natural-language "
-                        "answer NOW using only the tool results above. Do not invent numbers."
+                        "answer NOW using only the tool results above. Do not invent numbers. "
+                        "Write coherent prose, not a JSON dump."
                     ),
                 }
             )
-            # Force final prose without more tools
             lang = _normalize_language(state.language)
             lang_name = {"en": "English", "hi": "Hindi", "kn": "Kannada"}.get(lang, "English")
+            slim = {
+                k: json.loads(summarize_tool_result_for_llm(k, v))
+                if isinstance(v, dict)
+                else v
+                for k, v in tool_results.items()
+            }
             summary = llm.summarize(
                 "Using only the tool data provided, write the final natural-language answer "
                 f"to the user query: {state.user_query!r}. Do not invent numbers. "
                 f"Write the answer in {lang_name} (language={lang}). "
-                "Keep PM2.5, AQI, CPCB, station IDs, and H3 IDs in English.",
-                {"tool_results": tool_results, "language": lang},
+                "Keep PM2.5, AQI, CPCB, station IDs, and H3 IDs in English. "
+                "Write coherent prose, not raw JSON.",
+                {"tool_results": slim, "language": lang},
                 system_prompt=AGENT_SYSTEM_PROMPT,
             )
             if summary:
                 final_text = summary.strip()
+                audit.mark_partial_response(
+                    f"LLM step cap {MAX_TOOL_STEPS} — composed final answer from gathered tools"
+                )
             elif content:
                 final_text = content.strip()
+                audit.mark_partial_response(f"LLM step cap {MAX_TOOL_STEPS} — used last content")
             else:
-                final_text = deterministic_summary_from_tools(
-                    state.user_query, tool_results, language=state.language
+                final_text = _compose_partial_answer(
+                    state,
+                    audit,
+                    llm,
+                    tool_results,
+                    reason=f"LLM step cap {MAX_TOOL_STEPS} without final text",
                 )
             break
 
     if not final_text:
-        # Last turn still wanted tools but no text
-        final_text = deterministic_summary_from_tools(
-            state.user_query, tool_results, language=state.language
+        final_text = _compose_partial_answer(
+            state,
+            audit,
+            llm,
+            tool_results,
+            reason="No final model text after tool loop — best-effort composition",
         )
-        audit.record_reasoning("fallback", "No final model text — deterministic tool summary")
+        audit.record_reasoning("fallback", "No final model text — partial/deterministic composition")
 
-    # Grounding check
+    # Grounding check uses FULL tool_results (not trimmed)
     grounding = check_answer_grounding(final_text, tool_results)
     audit.record_reasoning(
         "grounding",
@@ -638,7 +987,6 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
     )
 
     if not grounding.get("passed"):
-        # One retry with hard constraint
         audit.record_reasoning("grounding", "Retry: strict ground-only instruction")
         messages.append({"role": "assistant", "content": final_text})
         messages.append(
@@ -648,17 +996,23 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
                     "GROUNDING FAILURE: your previous answer used numbers not present in tool data "
                     f"(unverified: {grounding.get('unverified')}). "
                     "Rewrite using ONLY numbers that appear in the tool results. "
-                    "If you cannot, summarize the tool results factually."
+                    "Write natural-language prose. If you cannot, summarize the tool results factually."
                 ),
             }
         )
+        slim = {
+            k: json.loads(summarize_tool_result_for_llm(k, v))
+            if isinstance(v, dict)
+            else v
+            for k, v in tool_results.items()
+        }
         retry_text = llm.summarize(
             (
                 "GROUNDING FAILURE: rewrite the answer using ONLY numbers present in tool_results. "
                 f"Unverified tokens were: {grounding.get('unverified')}. "
-                f"User query: {state.user_query!r}"
+                f"User query: {state.user_query!r}. Write coherent natural-language prose."
             ),
-            {"tool_results": tool_results, "previous_answer": final_text},
+            {"tool_results": slim, "previous_answer": final_text},
             system_prompt=AGENT_SYSTEM_PROMPT,
         )
         if retry_text:
@@ -690,11 +1044,13 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
 
     state.response = final_text
     state.structured_data = {
-        "tool_results": tool_results,
+        "tool_results": tool_results,  # FULL for map_actions extractors
         "grounding": grounding,
         "path": "native_tool_agent",
         "language": state.language,
         "provider": getattr(llm, "last_provider", None),
+        "tool_calls_executed": tool_calls_executed,
+        "partial_response": audit.partial_response,
         "map_context": {
             "station_id": state.station_id or None,
             "h3_cell": state.h3_cell,

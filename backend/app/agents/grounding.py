@@ -225,18 +225,30 @@ def deterministic_summary_from_tools(
     )
     if isinstance(enf, dict) and enf.get("ranked_hexagons"):
         top = enf["ranked_hexagons"][:5]
-        lines = []
+        prose_bits = []
         for i, h in enumerate(top, 1):
             name = h.get("location_name") or h.get("name") or h.get("h3_cell")
             score = h.get("priority_score")
             sa = h.get("source_attribution") or {}
-            dom = max(sa, key=sa.get) if sa else "mixed"
+            try:
+                dom = max(sa, key=sa.get) if sa else "mixed"
+            except Exception:
+                dom = "mixed"
             pm = h.get("fused_pm25")
-            lines.append(
-                f"{i}. {name}: priority {score}, dominant {dom}"
-                + (f", PM2.5 ≈ {pm} µg/m³" if pm is not None else "")
+            bit = f"{name} (rank {i}"
+            if score is not None:
+                bit += f", priority {score}"
+            bit += f", dominant source {dom}"
+            if pm is not None:
+                bit += f", fused PM2.5 about {pm} µg/m³"
+            bit += ")"
+            prose_bits.append(bit)
+        if prose_bits:
+            parts.append(
+                "Based on current enforcement ranking, the leading targets include "
+                + "; ".join(prose_bits)
+                + "."
             )
-        parts.append("Top enforcement targets (hex-level):\n" + "\n".join(lines))
 
     for key, val in tool_results.items():
         if not isinstance(val, dict) or val.get("_tool_error"):
@@ -258,13 +270,14 @@ def deterministic_summary_from_tools(
         )
         if isinstance(sa, dict) and sa:
             bits = ", ".join(
-                f"{k} {float(v) * 100:.0f}%" for k, v in sa.items() if v is not None
+                f"{k} about {float(v) * 100:.0f}%" for k, v in sa.items() if v is not None
             )
             fused = val.get("fused_pm25")
-            parts.append(
-                f"Source mix: {bits}."
-                + (f" Fused PM2.5 ≈ {fused} µg/m³." if fused is not None else "")
-            )
+            loc = val.get("location_name") or val.get("h3_cell") or "this area"
+            sentence = f"For {loc}, the estimated source mix is {bits}."
+            if fused is not None:
+                sentence += f" Fused PM2.5 is approximately {fused} µg/m³."
+            parts.append(sentence)
             break
 
     pol = tool_results.get("search_policy_guidance") or tool_results.get(

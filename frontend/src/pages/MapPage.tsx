@@ -153,18 +153,37 @@ export default function MapPage() {
   const activeHex = selectedHex || allHexes[0] || null;
   const hasMapCtx = Boolean(mapCtxStation || mapCtxH3);
   const hasCopilotHighlights = highlightedHexIds.length > 0;
-  if (extremesLoading || stationsLoading) {
+
+  // Progressive paint: never full-black when we already have stations or any hexes.
+  // Mode switches (Global ↔ Local Peaks) use keepPreviousData so extremes stays painted.
+  const stationsReady = !stationsLoading && stations.length > 0;
+  const extremesReady = Boolean(extremes?.best || extremes?.worst);
+  const hasAnyHexes = allHexes.length > 0;
+  // Only block the whole page on first cold load with nothing to show
+  const stillBootstrapping =
+    !hasAnyHexes &&
+    !stationsReady &&
+    (stationsLoading || extremesLoading) &&
+    !extremesError &&
+    !stationsError;
+
+  if (stillBootstrapping) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4">
           <div className="w-8 h-8 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs font-mono uppercase tracking-widest text-apple-secondary">Loading sensor data...</span>
+          <span className="text-xs font-mono uppercase tracking-widest text-apple-secondary">
+            Loading map data…
+          </span>
+          <span className="text-[10px] text-apple-secondary/70 max-w-xs text-center">
+            Prefetched from Landing when available — first open after a short wait is much faster.
+          </span>
         </div>
       </div>
     );
   }
 
-  if (extremesError && stationsError) {
+  if (extremesError && stationsError && !hasAnyHexes && !stationsReady) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
@@ -180,6 +199,12 @@ export default function MapPage() {
       </div>
     );
   }
+
+  // Mode switch / refetch: keep map painted; show a chip, never a black full-page wipe
+  const rankingsLoading = Boolean(extremesFetching || (extremesLoading && !extremesReady));
+  const modeSwitchPending = Boolean(
+    extremesFetching && extremes && extremes.mode !== rankingMode,
+  );
 
   const handleDispatch = (hex: PriorityHex) => {
     setDispatchedUnits((prev) => ({ ...prev, [hex.id]: true }));
@@ -209,6 +234,17 @@ export default function MapPage() {
 
   const topFive = (priorities || []).slice(0, 5);
 
+  /** Polluted hexes shown under Local Peaks mode get a distinct Peak badge on the map. */
+  const localPeakHexIds = useMemo(() => {
+    if (rankingMode !== 'local_peaks') return [] as string[];
+    if (extremeMode === 'best') return [] as string[];
+    return pollutedShown.map((h) => h.id).filter(Boolean);
+  }, [rankingMode, extremeMode, pollutedShown]);
+
+  const activeIsLocalPeak = Boolean(
+    activeHex && localPeakHexIds.includes(activeHex.id),
+  );
+
   return (
     <div className="w-full h-full flex flex-col bg-black overflow-y-auto">
       {/* Upper Section: Map Area + Float Overlay */}
@@ -223,10 +259,11 @@ export default function MapPage() {
           focusCenter={focusCenter}
           stations={stations}
           samplePool={samplePool}
+          localPeakHexIds={localPeakHexIds}
         />
 
-        {/* Left: layer toggle only */}
-        <div className="absolute top-4 left-4 z-20">
+        {/* Left: layer toggle + optional rankings-loading chip */}
+        <div className="absolute top-4 left-4 z-20 flex flex-col gap-2 items-start">
           <div className="flex ui-glass ui-glass-floating rounded-full p-1 shadow-xl">
             {(
               [
@@ -248,6 +285,25 @@ export default function MapPage() {
               </button>
             ))}
           </div>
+          {rankingsLoading && (
+            <div className="ui-glass ui-glass-floating rounded-full px-3 py-1.5 border border-brand-blue/30 flex items-center gap-2 shadow-lg">
+              <div className="w-3 h-3 border-2 border-brand-blue/40 border-t-brand-blue rounded-full animate-spin" />
+              <span className="text-[10px] font-mono text-brand-blue uppercase tracking-wider">
+                {modeSwitchPending
+                  ? rankingMode === 'local_peaks'
+                    ? 'Switching to Local peaks…'
+                    : 'Switching to Global highest…'
+                  : 'Loading hex rankings…'}
+              </span>
+            </div>
+          )}
+          {extremesError && !rankingsLoading && (
+            <div className="ui-glass rounded-full px-3 py-1.5 border border-brand-orange/30 text-[10px] text-brand-orange max-w-[220px]">
+              {rankingMode === 'local_peaks'
+                ? 'Local peaks failed — try Global or retry'
+                : 'Rankings unavailable — sensors only'}
+            </div>
+          )}
         </div>
 
         {/* Legend — bottom-left, compact, no glow dots */}
@@ -295,16 +351,26 @@ export default function MapPage() {
           <div className="mt-3 pt-2.5 border-t border-white/10 space-y-1.5">
             <div className="flex items-center gap-2 text-[10px] text-white/85">
               <span className="relative w-3.5 h-3.5 shrink-0">
-                <span className="absolute inset-0 rotate-45 rounded-[1px] bg-[#0A84FF] border border-white/80" />
+                <span className="absolute inset-0 rotate-45 rounded-[2px] bg-[#FF9F0A]" />
+                <span className="absolute inset-[3px] rotate-45 rounded-[1px] bg-[#0A84FF] border border-white/90" />
               </span>
-              <span>Official CPCB/KSPCB sensor</span>
+              <span>Official sensor (diamond)</span>
             </div>
             <div className="flex items-center gap-2 text-[10px] text-white/85">
-              <span className="inline-flex items-center rounded-full bg-black/60 border border-white/20 px-1 py-0.5 text-[8px] font-mono font-bold text-white">
+              <span className="inline-flex items-center gap-1 rounded-md bg-black/60 border border-white/20 px-1 py-0.5 text-[8px] font-mono font-bold text-white">
+                <span className="w-1.5 h-1.5 rotate-45 bg-[#FFCC00]" />
                 42
               </span>
-              <span>Nearby fused AQI (µg/m³)</span>
+              <span>Nearby fused AQI</span>
             </div>
+            {rankingMode === 'local_peaks' && (extremeMode === 'worst' || extremeMode === 'both') && (
+              <div className="flex items-center gap-2 text-[10px] text-white/85">
+                <span className="text-[8px] font-bold uppercase tracking-wider text-brand-blue border border-brand-blue/40 px-1 py-0.5 rounded">
+                  Peak
+                </span>
+                <span>Station-catchment dirty hex</span>
+              </div>
+            )}
             <p className="text-[8px] text-apple-secondary/80 leading-snug">
               Nearby samples = real fused hexes within ~4.5 km of a station — not synthetic.
             </p>
@@ -529,11 +595,24 @@ export default function MapPage() {
                   <X size={14} />
                 </button>
               </div>
-              <h2 className="text-base font-bold text-white tracking-tight leading-snug mt-1">
-                Area detail
-              </h2>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <h2 className="text-base font-bold text-white tracking-tight leading-snug">
+                  Area detail
+                </h2>
+                {activeIsLocalPeak && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-brand-blue bg-brand-blue/15 border border-brand-blue/35 px-2 py-0.5 rounded-full">
+                    Local peak
+                  </span>
+                )}
+              </div>
+              {activeIsLocalPeak && (
+                <p className="text-[10px] text-apple-secondary leading-snug mt-1">
+                  Dirty pocket near an official station catchment — Local Peaks ranking, not
+                  global absolute #1.
+                </p>
+              )}
               <span
-                className="text-[10px] text-apple-secondary font-mono truncate"
+                className="text-[10px] text-apple-secondary font-mono truncate mt-0.5"
                 title={activeHex.id}
               >
                 {activeHex.id}

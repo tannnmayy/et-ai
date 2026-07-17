@@ -144,12 +144,14 @@ class TestMultiTurnMemory:
             "audit_trail"
         ].get("memory_turns_used") == 2
 
-    def test_history_skips_response_cache(self):
+    def test_follow_up_skips_response_cache(self):
+        """Genuine follow-ups must not be served from response cache."""
         class Fake:
             is_available = False
             last_provider = None
             last_gemini_key_index = None
             last_groq_key_index = None
+            last_fallback_note = None
 
             def chat_with_tools(self, *a, **k):
                 return None
@@ -162,19 +164,22 @@ class TestMultiTurnMemory:
         ), patch(
             "backend.app.agents.orchestrator.get_llm_provider", return_value=Fake()
         ):
-            q = "Show me the top enforcement priorities in Bengaluru right now"
-            first = run_orchestrator(query=q, city="bengaluru")
+            first = run_orchestrator(
+                query="Show me the top enforcement priorities in Bengaluru right now",
+                city="bengaluru",
+            )
+            # Deictic follow-up → not cache-eligible
             second = run_orchestrator(
-                query=q,
+                query="what about construction there?",
                 city="bengaluru",
                 conversation_history=[
-                    {"role": "user", "content": "hello"},
-                    {"role": "assistant", "content": "hi"},
+                    {"role": "user", "content": "Show me the top enforcement priorities in Bengaluru right now"},
+                    {"role": "assistant", "content": first.get("answer") or "priorities listed"},
                 ],
             )
         assert first.get("answer")
-        # With history, should not be a cache hit of the first answer path
-        assert second.get("cache_hit") is not True or second["audit_trail"].get("memory_turns_used")
+        assert second.get("cache_hit") is not True
+        # Standalone repeat with non-follow-up history may still cache — that is intentional
 
 
 class TestFastPathExcludesWhatIf:

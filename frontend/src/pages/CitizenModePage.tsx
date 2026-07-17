@@ -229,11 +229,13 @@ export default function CitizenModePage() {
                       </div>
                     </Glass>
                   )}
-                  {!isLoading && (activeMatches.length > 0 || useLocalMockData) && (
+                  {/* Results (or empty-state UI inside list) once loading finishes */}
+                  {!isLoading && profile && (useLocalMockData || !isError) && (
                     <RankedResultsList
                       matches={activeMatches}
-                      onSelect={handleSelectNeighbourhood}
-                      selectedId={selectedNeighbourhood?.id}
+                      profile={profile}
+                      onSelectNeighbourhood={handleSelectNeighbourhood}
+                      onBackToProfile={() => setActiveView('profile')}
                     />
                   )}
                 </motion.div>
@@ -249,6 +251,7 @@ export default function CitizenModePage() {
                   <NeighbourhoodDetailPanel
                     match={selectedNeighbourhood}
                     profile={profile}
+                    onBack={() => setActiveView('results')}
                   />
                 </motion.div>
               )}

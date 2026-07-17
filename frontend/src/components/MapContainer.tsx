@@ -42,6 +42,11 @@ interface MapContainerProps {
    * samples around each station (not all drawn as hex labels).
    */
   samplePool?: PriorityHex[];
+  /**
+   * When Local Peaks ranking is active, these hex ids get a distinct "Peak" badge
+   * (station-catchment dirty pockets — not global absolute ties).
+   */
+  localPeakHexIds?: string[];
 }
 
 const API_KEY = String(
@@ -217,7 +222,7 @@ export function buildNearbySamples(
   return out;
 }
 
-/** Official station diamond — clean, no glow. */
+/** Official station diamond — distinct from hex cards; AQI-tinted edge, no neon glow. */
 function StationDiamondIcon({
   name,
   aqi,
@@ -230,41 +235,63 @@ function StationDiamondIcon({
   showLabel?: boolean;
 }) {
   const label = shortStationLabel(name, '');
+  const edge = aqiColor(aqi);
   return (
     <div
-      className="flex flex-col items-center pointer-events-auto select-none"
-      title={`${name} · ${aqi} µg/m³ · ${status}`}
+      className="flex flex-col items-center pointer-events-auto select-none -translate-y-1"
+      title={`Official sensor · ${name} · ${aqi} µg/m³ · ${status}`}
     >
-      {/* Diamond: outer blue, inner white — distinct from hex cards */}
-      <div className="relative w-5 h-5 flex items-center justify-center">
+      <div className="relative w-6 h-6 flex items-center justify-center">
+        {/* Soft drop only — no bloom */}
         <div
-          className="absolute inset-0 rotate-45 rounded-[2px] border-[2.5px] border-[#0A84FF] bg-[#0A84FF]"
-          style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.45)' }}
+          className="absolute inset-0 rotate-45 rounded-[3px]"
+          style={{
+            background: edge,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.55)',
+          }}
         />
-        <div className="absolute inset-[4px] rotate-45 rounded-[1px] bg-white" />
+        <div
+          className="absolute inset-[3px] rotate-45 rounded-[2px] bg-[#0A84FF]"
+          style={{ border: '1.5px solid rgba(255,255,255,0.95)' }}
+        />
+        <div className="absolute inset-[7px] rotate-45 rounded-[1px] bg-white" />
       </div>
       {showLabel && (
-        <span className="mt-1.5 max-w-[88px] truncate text-[8px] font-bold tracking-wide text-white bg-black/85 border border-[#0A84FF]/50 px-1.5 py-0.5 rounded-md leading-none">
-          {label}
-        </span>
+        <div className="mt-1.5 flex flex-col items-center gap-0.5 max-w-[100px]">
+          <span className="text-[7px] font-mono font-bold uppercase tracking-[0.12em] text-[#0A84FF] bg-black/90 border border-[#0A84FF]/45 px-1.5 py-0.5 rounded leading-none">
+            Sensor
+          </span>
+          <span className="max-w-[100px] truncate text-[9px] font-bold tracking-wide text-white bg-black/90 border border-white/15 px-1.5 py-0.5 rounded-md leading-none">
+            {label}
+          </span>
+          <span
+            className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded leading-none border border-white/20 bg-black/85"
+            style={{ color: edge }}
+          >
+            {Math.round(aqi)} µg
+          </span>
+        </div>
       )}
-      <span className="mt-0.5 text-[8px] font-mono font-bold text-[#0A84FF] bg-black/70 px-1 rounded leading-none">
-        {aqi}
-      </span>
     </div>
   );
 }
 
-/** Small AQI chip for nearby real hex samples */
+/** Small AQI chip for nearby real hex samples around a sensor */
 function NearbyAqiChip({ aqi, title }: { aqi: number; title: string }) {
   const color = aqiColor(aqi);
   return (
     <div
-      className="flex items-center gap-1 rounded-full bg-black/80 border border-white/15 px-1.5 py-0.5 shadow-sm"
+      className="flex items-center gap-1 rounded-md bg-black/88 border px-1.5 py-0.5"
+      style={{ borderColor: `${color}66` }}
       title={title}
     >
-      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
-      <span className="text-[8px] font-mono font-bold text-white leading-none">{aqi}</span>
+      <span
+        className="w-1.5 h-1.5 rounded-sm rotate-45 shrink-0"
+        style={{ background: color }}
+      />
+      <span className="text-[8px] font-mono font-bold text-white leading-none tabular-nums">
+        {aqi}
+      </span>
     </div>
   );
 }
@@ -279,10 +306,12 @@ function MapContainer({
   focusCenter = null,
   stations = [],
   samplePool,
+  localPeakHexIds = [],
 }: MapContainerProps) {
   const [showRealMap, setShowRealMap] = useState(isRealKey);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const highlightSet = useMemo(() => new Set(highlightedHexIds || []), [highlightedHexIds]);
+  const peakSet = useMemo(() => new Set(localPeakHexIds || []), [localPeakHexIds]);
 
   const pool = useMemo(() => {
     if (samplePool && samplePool.length > 0) return samplePool;
@@ -349,7 +378,8 @@ function MapContainer({
     [minLat, maxLat, minLng, maxLng],
   );
 
-  if (!allHexes || allHexes.length === 0) {
+  // Allow stations-only shell while hex rankings are still loading (Landing warm path)
+  if ((!allHexes || allHexes.length === 0) && stations.length === 0) {
     return (
       <div className="w-full h-full bg-black flex items-center justify-center flex-col gap-3">
         <div className="w-8 h-8 rounded-full border-2 border-brand-blue/30 border-t-brand-blue animate-spin" />
@@ -458,52 +488,68 @@ function MapContainer({
                 </AdvancedMarker>
               ))}
 
-              {/* Hex labels — no glow layers */}
+              {/* Hex labels — peak mode uses a compact station-catchment card */}
               {allHexes.map((hex) => {
                 const color = hexColor(hex, viewMode);
                 const label = formatLocationName(hex);
                 const isSelected = selectedHex?.id === hex.id;
                 const isCopilotHighlight = highlightSet.has(hex.id);
+                const isLocalPeak = peakSet.has(hex.id);
                 const confScore = hex.attributionConfidence ?? hex.confidence;
-                const borderColor = isCopilotHighlight ? '#BF5AF2' : color;
-                const borderW = isCopilotHighlight ? 2.5 : isSelected ? 2 : 1.5;
+                const borderColor = isCopilotHighlight
+                  ? '#BF5AF2'
+                  : isLocalPeak
+                    ? '#0A84FF'
+                    : color;
+                const borderW = isCopilotHighlight ? 2.5 : isLocalPeak || isSelected ? 2 : 1.5;
                 return (
                   <AdvancedMarker
                     key={hex.id}
                     position={{ lat: hex.lat, lng: hex.lng }}
                     onClick={() => onSelectHex(hex)}
-                    zIndex={isSelected || isCopilotHighlight ? 30 : 5}
+                    zIndex={isSelected || isCopilotHighlight || isLocalPeak ? 30 : 5}
                   >
                     <div
-                      className={`cursor-pointer rounded-lg bg-black/88 font-mono text-white transition-transform hover:scale-105 ${
-                        compactLabels ? 'p-1.5 text-[8px] max-w-[88px]' : 'p-2 text-[10px]'
-                      } ${isCopilotHighlight ? 'ring-1 ring-fuchsia-400/70' : ''}`}
+                      className={`cursor-pointer rounded-lg bg-black/90 font-mono text-white transition-transform hover:scale-105 ${
+                        compactLabels ? 'p-1.5 text-[8px] max-w-[92px]' : 'p-2 text-[10px]'
+                      } ${isCopilotHighlight ? 'ring-1 ring-fuchsia-400/70' : ''} ${
+                        isLocalPeak && !isCopilotHighlight ? 'ring-1 ring-brand-blue/35' : ''
+                      }`}
                       style={{
                         borderStyle: 'solid',
                         borderWidth: borderW,
                         borderColor,
-                        // Selection outline only — no coloured glow / plume bloom
+                        borderTopWidth: isLocalPeak && !isCopilotHighlight ? 3 : borderW,
+                        borderTopColor: isLocalPeak && !isCopilotHighlight ? '#0A84FF' : borderColor,
                         boxShadow: isSelected
                           ? `0 0 0 1px ${color}66`
                           : isCopilotHighlight
                             ? '0 0 0 1px #BF5AF266'
-                            : '0 1px 4px rgba(0,0,0,0.35)',
+                            : isLocalPeak
+                              ? '0 2px 8px rgba(10,132,255,0.18)'
+                              : '0 1px 4px rgba(0,0,0,0.35)',
                       }}
-                      title={`${label} · ${hex.pm25} µg/m³ · conf ${confScore ?? '—'}% · ${hex.id}${isCopilotHighlight ? ' · Copilot highlight' : ''}`}
+                      title={`${label} · ${hex.pm25} µg/m³ · conf ${confScore ?? '—'}%${isLocalPeak ? ' · Local peak (station catchment)' : ''}${isCopilotHighlight ? ' · Copilot highlight' : ''}`}
                     >
-                      {isCopilotHighlight && (
-                        <span className="text-[7px] uppercase tracking-wider text-fuchsia-300 font-bold block mb-0.5">
-                          Copilot
+                      {(isLocalPeak || isCopilotHighlight) && (
+                        <span
+                          className={`text-[7px] uppercase tracking-wider font-bold block mb-0.5 ${
+                            isCopilotHighlight ? 'text-fuchsia-300' : 'text-brand-blue'
+                          }`}
+                        >
+                          {isCopilotHighlight ? 'Copilot' : 'Local peak'}
                         </span>
                       )}
                       <span
-                        className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[76px]' : ''}`}
+                        className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[80px]' : ''}`}
                       >
                         {compactLabels && label.length > 12 ? `${label.slice(0, 11)}…` : label}
                       </span>
                       <div
-                        className="text-right font-bold mt-0.5"
-                        style={{ color: isCopilotHighlight ? '#BF5AF2' : color }}
+                        className="text-right font-bold mt-0.5 tabular-nums"
+                        style={{
+                          color: isCopilotHighlight ? '#BF5AF2' : isLocalPeak ? '#0A84FF' : color,
+                        }}
                       >
                         {viewMode === 'enforcement'
                           ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
@@ -532,10 +578,16 @@ function MapContainer({
               const color = hexColor(hex, viewMode);
               const isSelected = selectedHex?.id === hex.id;
               const isCopilotHighlight = highlightSet.has(hex.id);
+              const isLocalPeak = peakSet.has(hex.id);
               const label = formatLocationName(hex);
               const confScore = hex.attributionConfidence ?? hex.confidence;
-              const strokeColor = isCopilotHighlight ? '#BF5AF2' : color;
-              const strokeW = isCopilotHighlight ? 2.5 : isSelected ? 2 : 1.2;
+              const strokeColor = isCopilotHighlight
+                ? '#BF5AF2'
+                : isLocalPeak
+                  ? '#0A84FF'
+                  : color;
+              const strokeW = isCopilotHighlight ? 2.5 : isLocalPeak || isSelected ? 2 : 1.2;
+              const r = compactLabels ? 28 : 42;
               return (
                 <g
                   key={hex.id}
@@ -544,29 +596,54 @@ function MapContainer({
                 >
                   {isCopilotHighlight && (
                     <polygon
-                      points={getHexPoints(x, y, (compactLabels ? 28 : 42) + 6)}
+                      points={getHexPoints(x, y, r + 6)}
                       fill="none"
                       stroke="#BF5AF2"
                       strokeWidth={1.5}
                       opacity={0.5}
                     />
                   )}
+                  {isLocalPeak && !isCopilotHighlight && (
+                    <polygon
+                      points={getHexPoints(x, y, r + 4)}
+                      fill="none"
+                      stroke="#0A84FF"
+                      strokeWidth={1}
+                      opacity={0.4}
+                      strokeDasharray="3 2"
+                    />
+                  )}
                   <polygon
-                    points={getHexPoints(x, y, compactLabels ? 28 : 42)}
+                    points={getHexPoints(x, y, r)}
                     fill={
                       isCopilotHighlight
                         ? '#BF5AF228'
-                        : isSelected
-                          ? `${color}35`
-                          : `${color}18`
+                        : isLocalPeak
+                          ? '#0A84FF22'
+                          : isSelected
+                            ? `${color}35`
+                            : `${color}18`
                     }
                     stroke={strokeColor}
                     strokeWidth={strokeW}
                     className="transition-all duration-200 hover:fill-white/10"
                   />
+                  {isLocalPeak && (
+                    <text
+                      x={x}
+                      y={y - (compactLabels ? 12 : 14)}
+                      fill="#0A84FF"
+                      fontSize="6"
+                      fontFamily="Inter, sans-serif"
+                      textAnchor="middle"
+                      className="font-bold pointer-events-none select-none"
+                    >
+                      PEAK
+                    </text>
+                  )}
                   <text
                     x={x}
-                    y={y - 4}
+                    y={y - 2}
                     fill="#fff"
                     fontSize={compactLabels ? '7' : '9'}
                     fontFamily="Inter, sans-serif"
@@ -579,8 +656,8 @@ function MapContainer({
                   </text>
                   <text
                     x={x}
-                    y={y + 8}
-                    fill={isCopilotHighlight ? '#BF5AF2' : color}
+                    y={y + 10}
+                    fill={isCopilotHighlight ? '#BF5AF2' : isLocalPeak ? '#0A84FF' : color}
                     fontSize={compactLabels ? '6' : '8'}
                     fontFamily="monospace"
                     textAnchor="middle"
@@ -602,9 +679,20 @@ function MapContainer({
               const c = aqiColor(r.aqi);
               return (
                 <g key={r.key}>
-                  <circle cx={x} cy={y} r={3} fill={c} stroke="#fff" strokeWidth={0.8} opacity={0.9} />
+                  <rect
+                    x={x - 3}
+                    y={y - 3}
+                    width={6}
+                    height={6}
+                    fill={c}
+                    stroke="#fff"
+                    strokeWidth={0.8}
+                    transform={`rotate(45 ${x} ${y})`}
+                    rx={0.5}
+                    opacity={0.95}
+                  />
                   <text
-                    x={x + 6}
+                    x={x + 7}
                     y={y + 3}
                     fill="#fff"
                     fontSize="7"
@@ -621,30 +709,52 @@ function MapContainer({
             {stations.map((s) => {
               const { x, y } = project(s.lat, s.lng);
               const label = shortStationLabel(s.name, s.id);
+              const edge = aqiColor(s.aqi);
               return (
                 <g key={`st-${s.id}`}>
                   <rect
-                    x={x - 6}
-                    y={y - 6}
-                    width={12}
-                    height={12}
+                    x={x - 7}
+                    y={y - 7}
+                    width={14}
+                    height={14}
+                    fill={edge}
+                    transform={`rotate(45 ${x} ${y})`}
+                    rx={1.5}
+                    opacity={0.95}
+                  />
+                  <rect
+                    x={x - 5}
+                    y={y - 5}
+                    width={10}
+                    height={10}
                     fill="#0A84FF"
                     stroke="#fff"
-                    strokeWidth={1.5}
+                    strokeWidth={1.2}
                     transform={`rotate(45 ${x} ${y})`}
                     rx={1}
                   />
                   <rect
-                    x={x - 2.5}
-                    y={y - 2.5}
-                    width={5}
-                    height={5}
+                    x={x - 2}
+                    y={y - 2}
+                    width={4}
+                    height={4}
                     fill="#fff"
                     transform={`rotate(45 ${x} ${y})`}
                   />
                   <text
                     x={x}
                     y={y + 18}
+                    fill="#8ECAFF"
+                    fontSize="6"
+                    fontFamily="monospace"
+                    textAnchor="middle"
+                    className="font-bold"
+                  >
+                    SENSOR
+                  </text>
+                  <text
+                    x={x}
+                    y={y + 28}
                     fill="#fff"
                     fontSize="8"
                     fontFamily="Inter, sans-serif"
@@ -655,14 +765,14 @@ function MapContainer({
                   </text>
                   <text
                     x={x}
-                    y={y + 28}
-                    fill="#0A84FF"
+                    y={y + 38}
+                    fill={edge}
                     fontSize="7"
                     fontFamily="monospace"
                     textAnchor="middle"
                     className="font-bold"
                   >
-                    {s.aqi}
+                    {Math.round(s.aqi)} µg
                   </text>
                 </g>
               );

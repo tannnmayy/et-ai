@@ -1,5 +1,5 @@
 import { cellToLatLng } from 'h3-js';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/axiosClient';
 import { PriorityHex } from '../types';
 import { BENGALURU_LOCALITIES } from '../data/bengaluruLocalities';
@@ -456,8 +456,23 @@ export interface CityExtremesResult {
   rankingNote?: string | null;
 }
 
-function mapExtremeHex(h: any): PriorityHex {
-  const pm = Math.round(h.fused_pm25 || 0);
+const SOURCE_KEYS_SAFE = ['traffic', 'industrial', 'construction', 'burning'] as const;
+
+function mapExtremeHex(h: any): PriorityHex | null {
+  if (!h || !h.h3_cell) return null;
+  let lat = Number(h.center_lat);
+  let lng = Number(h.center_lon ?? h.center_lng);
+  // Recover coordinates from H3 when API omits them (prevents blank map / marker crashes)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    try {
+      const [la, ln] = cellToLatLng(String(h.h3_cell));
+      lat = la;
+      lng = ln;
+    } catch {
+      return null;
+    }
+  }
+  const pm = Math.round(Number(h.fused_pm25) || 0);
   const score10 = Math.min(10, Math.round(pm / 20));
   const attrConf =
     h.attribution_confidence_score != null ? Number(h.attribution_confidence_score) : 0;
@@ -476,17 +491,20 @@ function mapExtremeHex(h: any): PriorityHex {
     construction: 'Construction',
     burning: 'Waste Burning',
   };
+  const sourceKey = (
+    (SOURCE_KEYS_SAFE as readonly string[]).includes(maxSource) ? maxSource : 'traffic'
+  ) as PriorityHex['primarySourceKey'];
   return {
-    id: h.h3_cell,
-    name: _resolveName(h.h3_cell, h.center_lat, h.center_lon, h.location_name || h.name),
+    id: String(h.h3_cell),
+    name: _resolveName(String(h.h3_cell), lat, lng, h.location_name || h.name),
     score10,
     priorityScore: score10 / 10,
     rank: 0,
     changeVal: 0,
     exposure: 'Medium',
     magnitude: 0,
-    confidence: attrConf,
-    attributionConfidence: attrConf,
+    confidence: Number.isFinite(attrConf) ? attrConf : 0,
+    attributionConfidence: Number.isFinite(attrConf) ? attrConf : 0,
     attributionConfidenceLevel: h.attribution_confidence_level,
     confidenceExplanation: h.confidence_explanation,
     confidenceFlags: h.confidence_flags,
@@ -496,17 +514,17 @@ function mapExtremeHex(h: any): PriorityHex {
     actionability: 'MONITOR',
     actionTier: 'MONITOR',
     pm25: pm,
-    primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
-    primarySourceKey: maxSource as PriorityHex['primarySourceKey'],
-    sourceType: sourceTypeMap[maxSource] || 'Heavy Ind.',
+    primarySource: sourceKey.charAt(0).toUpperCase() + sourceKey.slice(1),
+    primarySourceKey: sourceKey,
+    sourceType: sourceTypeMap[sourceKey] || 'Heavy Ind.',
     sourceAttribution: {
-      traffic: sa.traffic ?? 0,
-      industrial: sa.industrial ?? 0,
-      construction: sa.construction ?? 0,
-      burning: sa.burning ?? 0,
+      traffic: Number(sa.traffic) || 0,
+      industrial: Number(sa.industrial) || 0,
+      construction: Number(sa.construction) || 0,
+      burning: Number(sa.burning) || 0,
     },
-    lat: h.center_lat,
-    lng: h.center_lon,
+    lat,
+    lng,
   };
 }
 
@@ -519,16 +537,20 @@ export async function fetchCityExtremes(
   const { data } = await apiClient.get(
     `/attribution/city/bengaluru/extremes?n=${capped}&mode=${modeParam}`,
   );
-  if (!data || !data.best || !data.worst) {
+  if (!data || !Array.isArray(data.best) || !Array.isArray(data.worst)) {
     throw new Error('No extremes data returned from API');
   }
-  const best = data.best.map(mapExtremeHex);
-  const worst = data.worst.map(mapExtremeHex);
+  const best = data.best
+    .map(mapExtremeHex)
+    .filter((h: PriorityHex | null): h is PriorityHex => h != null);
+  const worst = data.worst
+    .map(mapExtremeHex)
+    .filter((h: PriorityHex | null): h is PriorityHex => h != null);
   return {
     best,
     worst,
-    totalWithData: data.total_hexagons_with_data,
-    totalInGrid: data.total_hexagons_in_grid,
+    totalWithData: Number(data.total_hexagons_with_data) || best.length + worst.length,
+    totalInGrid: Number(data.total_hexagons_in_grid) || 0,
     fetchedN: capped,
     mode: (data.mode === 'local_peaks' ? 'local_peaks' : 'global') as ExtremesRankingMode,
     modeDescription: data.mode_description ?? undefined,
@@ -546,7 +568,10 @@ export function useCityExtremes(mode: ExtremesRankingMode = 'global') {
     // Include N + mode so global and local_peaks cache separately
     queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N, mode],
     queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N, mode),
-    staleTime: 60_000,
+    staleTime: 90_000,
+    // Critical: switching Global ↔ Local Peaks must NOT blank the map.
+    // keepPreviousData shows last mode's hexes until the new mode arrives.
+    placeholderData: keepPreviousData,
   });
 }
 

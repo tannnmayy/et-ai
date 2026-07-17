@@ -1,8 +1,13 @@
-"""Query-aware deterministic answers when hosted planning is unavailable."""
+"""Query-aware deterministic answers when hosted planning is unavailable.
+
+Also hosts follow-up detection used by the orchestrator cache gate and
+grounded tool agent history injection (Requirements: conditional history / cache).
+"""
 
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from backend.app.agents.audit import AuditTrail
 from backend.app.agents.state import AgentState
@@ -51,6 +56,140 @@ def infer_station_id(query: str) -> str | None:
             if candidate and candidate in normalized:
                 return station.station_id
     return None
+
+
+# Pronouns / deictic phrases that usually refer to prior turns
+_FOLLOWUP_PRONOUNS = (
+    r"\bit\b",
+    r"\bthere\b",
+    r"\bthat\b",
+    r"\bthis\b",
+    r"\bthose\b",
+    r"\bthese\b",
+    r"\bsame\b",
+    r"\bearlier\b",
+    r"\bprevious\b",
+    r"\babove\b",
+)
+_FOLLOWUP_PHRASES = (
+    "compare",
+    "versus",
+    " vs ",
+    "what about",
+    "how about",
+    "and what",
+    "also ",
+    "as well",
+    "same place",
+    "same area",
+    "that area",
+    "this area",
+    "there?",
+    "there.",
+    "follow up",
+    "follow-up",
+    "you said",
+    "you mentioned",
+)
+
+
+# Multi-clause markers shared with orchestrator simple-query deny list
+_COMPOUND_MARKERS = (
+    " and ",
+    " also ",
+    " vs ",
+    "versus",
+    "compare",
+    " as well ",
+    " plus ",
+    "what should",
+    "how should",
+    "and what",
+    "and why",
+    "and how",
+    "then what",
+    " as well as ",
+)
+
+
+def is_compound_query(query: str) -> bool:
+    """True when the query asks for multiple intents (map-context tool-loop caps).
+
+    Mirrors multi-clause markers used by the orchestrator simple-query gate.
+    """
+    q = (query or "").lower().strip()
+    if not q:
+        return False
+    if q.count("?") >= 2:
+        return True
+    if any(m in q for m in _COMPOUND_MARKERS):
+        return True
+    if re.search(r"\bwhy\b.+\b(and|also)\b", q):
+        return True
+    return False
+
+
+def is_follow_up_query(
+    query: str,
+    conversation_history: list[dict[str, Any]] | None = None,
+) -> bool:
+    """Return True if the query likely depends on prior turns.
+
+    **Default when ambiguous: True** (include history). A false positive only
+    costs tokens; a false negative breaks genuine follow-ups.
+    """
+    history = conversation_history or []
+    if not history:
+        return False
+
+    q = (query or "").strip()
+    if not q:
+        # Empty/odd — treat as follow-up if history exists (safe default)
+        return True
+
+    ql = q.lower()
+
+    # Explicit standalone signals → not a follow-up
+    standalone_starts = (
+        "what is the forecast for ",
+        "show me the top",
+        "where should officers",
+        "what does cpcb",
+        "give me a summary of ncap",
+        "what if construction activity reduces",
+        "what if we reduce traffic",
+    )
+    # New proper place name without deictics often means a fresh question
+    has_deictic = any(re.search(p, ql) for p in _FOLLOWUP_PRONOUNS)
+    has_phrase = any(p in ql for p in _FOLLOWUP_PHRASES)
+    starts_with_and = ql.startswith("and ") or ql.startswith("also ")
+    short_query = len(ql.split()) <= 6
+
+    if has_deictic or has_phrase or starts_with_and:
+        return True
+
+    # Very short replies after a prior turn are almost always follow-ups
+    if short_query and len(history) >= 1:
+        # Unless it's a clearly self-contained named-place question
+        if any(name in ql for name in _LOCALITY_CENTRES) and not has_deictic:
+            # Ambiguous: named place alone can be new OR continuation — include history
+            return True
+        return True
+
+    # Starts with compare / vs patterns already covered; check trailing "and...?"
+    if re.search(r"\band\s+\w+.*\?$", ql):
+        return True
+
+    # Clear self-contained long questions with a place name and no deictics
+    if len(ql.split()) >= 8 and any(name in ql for name in _LOCALITY_CENTRES):
+        if not has_deictic and not has_phrase:
+            return False
+
+    if any(ql.startswith(s) for s in standalone_starts) and not has_deictic:
+        return False
+
+    # Ambiguous → include history
+    return True
 
 
 def run_query_aware_fallback(state: AgentState, audit: AuditTrail, *, deep: bool = False) -> None:

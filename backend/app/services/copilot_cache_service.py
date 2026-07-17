@@ -27,10 +27,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # TTL configuration (seconds)
 # ---------------------------------------------------------------------------
-_TTL_DEFAULT = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL", str(3 * 60)))  # 3 min
-_TTL_POLICY = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL_POLICY", str(10 * 60)))
-_TTL_LIVE = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL_LIVE", str(90)))  # 90s
-_TTL_TOOL = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL_TOOL", str(60)))  # tool results
+# Live AQI / enforcement / attribution answers track ~15-minute environmental
+# refresh cadence (weather OSM snapshots are 30m; we stay stricter at 15m so
+# cached answers are never presented as fresher than the underlying data).
+_TTL_DEFAULT = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL", str(15 * 60)))  # 15 min
+_TTL_POLICY = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL_POLICY", str(30 * 60)))  # policy slower-changing
+_TTL_LIVE = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL_LIVE", str(15 * 60)))  # 15 min live data
+_TTL_TOOL = int(os.getenv("AQI_SENTINEL_COPILOT_CACHE_TTL_TOOL", str(90)))  # tool results short
 _SEMANTIC_ENABLED = os.getenv("AQI_SENTINEL_COPILOT_SEMANTIC_CACHE", "1").strip().lower() not in (
     "0",
     "false",

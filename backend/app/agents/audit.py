@@ -27,6 +27,8 @@ class AuditTrail:
         self.response_mode: str | None = None  # tool_agent | heuristic_fallback | fast_path
         self.memory_turns_used: int = 0
         self.whatif_used: bool = False
+        # True when tool-loop cap forced a best-effort answer from partial tool results
+        self.partial_response: bool = False
 
     def record_tool_call(self, tool_name: str, arguments: dict[str, Any], success: bool) -> None:
         event = {
@@ -120,6 +122,11 @@ class AuditTrail:
         self.whatif_used = True
         self.record_reasoning("whatif", "What-if / counterfactual simulation tool used")
 
+    def mark_partial_response(self, detail: str = "Tool-loop cap reached; best-effort answer") -> None:
+        self.partial_response = True
+        self.warnings.append("partial_response")
+        self.record_reasoning("partial", detail, partial_response=True)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "request_id": self.request_id,
@@ -141,4 +148,5 @@ class AuditTrail:
             "response_mode": self.response_mode,
             "memory_turns_used": self.memory_turns_used,
             "whatif_used": self.whatif_used,
+            "partial_response": self.partial_response,
         }

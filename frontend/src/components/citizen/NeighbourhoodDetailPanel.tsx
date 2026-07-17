@@ -204,7 +204,14 @@ export default function NeighbourhoodDetailPanel({ match, profile, onBack }: Nei
               <div className="h-1.5 w-full bg-apple-border rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${rentAffordabilityBarColor}`}
-                  style={{ width: `${Math.min(100, (profile.rentBudget / featureVector.avgRentForBudgetBHK) * 100)}%` }}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      featureVector.avgRentForBudgetBHK > 0
+                        ? (profile.rentBudget / featureVector.avgRentForBudgetBHK) * 100
+                        : 0,
+                    )}%`,
+                  }}
                 />
               </div>
             </div>
@@ -337,7 +344,20 @@ export default function NeighbourhoodDetailPanel({ match, profile, onBack }: Nei
               </div>
             </div>
             <div className="h-2 w-full bg-apple-border rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${rentAffordabilityBarColor}`} style={{ width: `${Math.max(15, Math.min(100, (profile.rentBudget / featureVector.avgRentForBudgetBHK) * 100))}%` }} />
+              <div
+                className={`h-full rounded-full ${rentAffordabilityBarColor}`}
+                style={{
+                  width: `${Math.max(
+                    15,
+                    Math.min(
+                      100,
+                      featureVector.avgRentForBudgetBHK > 0
+                        ? (profile.rentBudget / featureVector.avgRentForBudgetBHK) * 100
+                        : 15,
+                    ),
+                  )}%`,
+                }}
+              />
             </div>
           </div>
 

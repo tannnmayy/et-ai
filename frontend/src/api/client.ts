@@ -27,4 +27,8 @@ export {
   mirrorSession,
 } from '../services/persistenceService';
 export type { DispatchRecord, DispatchStatus } from '../services/persistenceService';
-export { warmAppFromLanding, prefetchMapAndEnforcementData } from '../services/prefetchService';
+export {
+  warmAppFromLanding,
+  ensureMapWarm,
+  prefetchMapAndEnforcementData,
+} from '../services/prefetchService';

@@ -27,7 +27,7 @@ import {
   type UserRole,
   defaultPathForRole,
 } from '../context/SessionContext';
-import { warmAppFromLanding } from '../services/prefetchService';
+import { ensureMapWarm, warmAppFromLanding } from '../services/prefetchService';
 import { useT } from '../i18n/useT';
 import type { TranslateParams } from '../i18n/translate';
 
@@ -176,7 +176,7 @@ export default function LandingPage() {
   const DATA_SOURCES = useMemo(() => buildDataSources(t), [t]);
   const ROLES = useMemo(() => buildRoles(t), [t]);
 
-  // Warm Map + Enforcement API caches and start Google Maps JS while user reads landing.
+  // Warm Map data + Google Maps JS as soon as Landing mounts (prioritized phases).
   useEffect(() => {
     warmAppFromLanding(queryClient);
   }, [queryClient]);
@@ -225,8 +225,8 @@ export default function LandingPage() {
       acceptedTerms: true,
     });
 
-    // Ensure caches are warm before / while entering the app
-    void warmAppFromLanding(queryClient);
+    // Kick / continue Map warm (in-flight prefetch or RQ cache) before navigate
+    ensureMapWarm(queryClient);
 
     // Short deliberate pause so the transition feels intentional
     window.setTimeout(() => {
@@ -237,6 +237,7 @@ export default function LandingPage() {
 
   const resume = () => {
     if (session) {
+      ensureMapWarm(queryClient);
       navigate(defaultPathForRole(session.role), { replace: true });
     }
   };

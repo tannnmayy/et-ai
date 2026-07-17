@@ -87,6 +87,8 @@ class CopilotAuditTrail(BaseModel):
     # Final phase
     memory_turns_used: int = 0
     whatif_used: bool = False
+    # Tool-loop cap forced a best-effort answer from partial tool results
+    partial_response: bool = False
 
 
 class AgentErrorResponse(BaseModel):

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import time
 from datetime import datetime, timezone
 from math import asin, cos, radians, sin, sqrt
 from typing import Any
@@ -762,6 +764,36 @@ def _select_local_peaks_worst(
     return merged[:n]
 
 
+# Short TTL cache: landing warm-up + Map open often hit within 1–2 min.
+# Keyed by (city, n, mode, peak_k, simulated_hour).
+_EXTREMES_CACHE: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+_EXTREMES_CACHE_TTL_S = float(os.getenv("AQI_SENTINEL_EXTREMES_CACHE_TTL", "120"))
+_EXTREMES_CACHE_MAX = 24
+
+
+def _extremes_cache_get(key: tuple[Any, ...]) -> dict[str, Any] | None:
+    hit = _EXTREMES_CACHE.get(key)
+    if not hit:
+        return None
+    ts, payload = hit
+    if time.time() - ts > _EXTREMES_CACHE_TTL_S:
+        _EXTREMES_CACHE.pop(key, None)
+        return None
+    # Shallow copy top-level so callers can mutate without poisoning cache
+    return dict(payload)
+
+
+def _extremes_cache_set(key: tuple[Any, ...], payload: dict[str, Any]) -> None:
+    if "error" in payload:
+        return
+    _EXTREMES_CACHE[key] = (time.time(), dict(payload))
+    if len(_EXTREMES_CACHE) > _EXTREMES_CACHE_MAX:
+        # Drop oldest
+        oldest = sorted(_EXTREMES_CACHE.items(), key=lambda kv: kv[1][0])[:8]
+        for k, _ in oldest:
+            _EXTREMES_CACHE.pop(k, None)
+
+
 def get_city_extremes(
     city: str = "bengaluru",
     n: int = 15,
@@ -784,6 +816,12 @@ def get_city_extremes(
         }
 
     peak_k = max(1, min(20, int(peak_k or LOCAL_PEAKS_PER_STATION_K)))
+    cache_key = (city.lower().strip(), int(n), mode_norm, int(peak_k), simulated_hour)
+    cached = _extremes_cache_get(cache_key)
+    if cached is not None:
+        cached = dict(cached)
+        cached["cache_hit"] = True
+        return cached
 
     hex_df = _load_hexagon_features()
     if hex_df.empty:
@@ -908,7 +946,7 @@ def get_city_extremes(
         if counts:
             max_station_id = max(counts, key=counts.get)
 
-    return {
+    payload = {
         "city": city,
         "computed_at": datetime.now(tz=timezone.utc).isoformat(),
         "mode": mode_norm,
@@ -926,4 +964,7 @@ def get_city_extremes(
             "Only hexes with real fused PM2.5 (station in range) are ranked. "
             "Uncovered grid cells are not scored as clean — they are unmeasured."
         ),
+        "cache_hit": False,
     }
+    _extremes_cache_set(cache_key, payload)
+    return payload
