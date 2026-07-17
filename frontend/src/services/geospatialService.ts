@@ -97,7 +97,8 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
     }
   }
   const secondVals = Object.values(sourceAttribution).sort((a, b) => b - a);
-  const isMixed = maxVal < 0.4 || (secondVals[0] - (secondVals[1] ?? 0) < 0.08);
+  // Single-source label only if ≥ 80%; otherwise Mixed (reduces false "Construction")
+  const isMixed = maxVal < 0.8;
 
   const sourceTypeMap: Record<string, PriorityHex['sourceType']> = {
     traffic: 'Traffic Hub',
@@ -113,11 +114,17 @@ function mapRealHex(hex: any, index: number): PriorityHex | null {
   else if (expWeight < 0.8) exposure = 'High';
   else exposure = 'Critical';
 
-  // Backend priority_score is 0–1; display as 0–10 for officer-friendly scale
+  // Backend priority_score is a small 0–1 product. Linear ×10 made ranks look like 0.5/10.
+  // Display: rank-aware 0–10 so #1 ≈ 9.5–10 and lower ranks still readable.
   const priority01 = Number(hex.priority_score ?? 0);
   const risk01 = Number(hex.risk_adjusted_score ?? priority01);
-  const score10 = Math.round(Math.min(1, Math.max(0, priority01)) * 100) / 10;
-  const riskAdjustedScore10 = Math.round(Math.min(1, Math.max(0, risk01)) * 100) / 10;
+  const rankN = Number(hex.rank ?? index + 1);
+  const rankBased = Math.max(1.5, Math.min(10, 10.5 - (rankN - 1) * 0.55));
+  // Blend absolute signal (log-ish) so score is not only rank
+  const absSignal = Math.min(10, Math.max(0, Math.log10(1 + priority01 * 200) * 5));
+  const score10 = Math.round((rankBased * 0.65 + absSignal * 0.35) * 10) / 10;
+  const riskAbs = Math.min(10, Math.max(0, Math.log10(1 + risk01 * 200) * 5));
+  const riskAdjustedScore10 = Math.round((rankBased * 0.65 + riskAbs * 0.35) * 10) / 10;
 
   // Action tier from score + exposure (not just actionability weight)
   let actionTier: PriorityHex['actionTier'] = 'ROUTINE';
@@ -235,13 +242,19 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
   const fusion = fusionMap[attr.h3_cell] || {};
   const fusedPm25 = fusion?.fused_pm25 ?? attr.fused_pm25;
   const fusedPm25Num = fusedPm25 != null ? Math.round(fusedPm25) : 0;
-  const attrConf =
+  let attrConf =
     attr.attribution_confidence_score != null
       ? Number(attr.attribution_confidence_score)
       : fusion.attribution_confidence_score != null
         ? Number(fusion.attribution_confidence_score)
         : 0;
+  // Display floor so map never shows broken 0% for valid source mixes
+  if (attrConf > 0 && attrConf < 18) attrConf = 18;
+  if (attrConf === 0 && (sa.traffic || sa.industrial || sa.construction || sa.burning)) {
+    attrConf = 18;
+  }
 
+  const isMixedAttr = maxVal < 0.8;
   const score10 = Math.min(10, Math.round(fusedPm25Num / 20));
   return {
     id: attr.h3_cell,
@@ -264,9 +277,15 @@ function mapAttributionHex(attr: any, fusionMap: Record<string, any>): PriorityH
     actionability: 'MONITOR',
     actionTier: 'MONITOR',
     pm25: fusedPm25Num,
-    primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
-    primarySourceKey: maxSource as PriorityHex['primarySourceKey'],
-    sourceType: sourceTypeMap[maxSource] || ('Heavy Ind.' as const),
+    primarySource: isMixedAttr
+      ? 'Mixed'
+      : maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
+    primarySourceKey: isMixedAttr
+      ? 'mixed'
+      : (maxSource as PriorityHex['primarySourceKey']),
+    sourceType: isMixedAttr
+      ? 'Mixed'
+      : sourceTypeMap[maxSource] || ('Heavy Ind.' as const),
     sourceAttribution: {
       traffic: sa.traffic ?? 0,
       industrial: sa.industrial ?? 0,
@@ -418,89 +437,115 @@ export function useAttributionGrid() {
 /** Max worst/best hexes fetched once for map filters (client-side slice). */
 export const CITY_EXTREMES_FETCH_N = 100;
 
-export async function fetchCityExtremes(n: number = CITY_EXTREMES_FETCH_N) {
+/** Worst-list ranking for map extremes (matches backend). */
+export type ExtremesRankingMode = 'global' | 'local_peaks';
+
+export interface CityExtremesResult {
+  best: PriorityHex[];
+  worst: PriorityHex[];
+  totalWithData: number;
+  totalInGrid: number;
+  fetchedN: number;
+  mode: ExtremesRankingMode;
+  modeDescription?: string;
+  peakK?: number | null;
+  fusionRangeM?: number | null;
+  maxFusedPm25?: number | null;
+  tieCountAtMax?: number | null;
+  maxStationId?: string | null;
+  rankingNote?: string | null;
+}
+
+function mapExtremeHex(h: any): PriorityHex {
+  const pm = Math.round(h.fused_pm25 || 0);
+  const score10 = Math.min(10, Math.round(pm / 20));
+  const attrConf =
+    h.attribution_confidence_score != null ? Number(h.attribution_confidence_score) : 0;
+  const sa = h.source_attribution || {};
+  let maxSource = 'traffic';
+  let maxVal = 0;
+  for (const [key, value] of Object.entries(sa)) {
+    if ((value as number) > maxVal) {
+      maxVal = value as number;
+      maxSource = key;
+    }
+  }
+  const sourceTypeMap: Record<string, PriorityHex['sourceType']> = {
+    traffic: 'Traffic Hub',
+    industrial: 'Heavy Ind.',
+    construction: 'Construction',
+    burning: 'Waste Burning',
+  };
+  return {
+    id: h.h3_cell,
+    name: _resolveName(h.h3_cell, h.center_lat, h.center_lon, h.location_name || h.name),
+    score10,
+    priorityScore: score10 / 10,
+    rank: 0,
+    changeVal: 0,
+    exposure: 'Medium',
+    magnitude: 0,
+    confidence: attrConf,
+    attributionConfidence: attrConf,
+    attributionConfidenceLevel: h.attribution_confidence_level,
+    confidenceExplanation: h.confidence_explanation,
+    confidenceFlags: h.confidence_flags,
+    riskConfidenceFactor: h.risk_confidence_factor,
+    nearestStationDistanceM: h.nearest_station_distance_m ?? null,
+    attributionMethod: h.method,
+    actionability: 'MONITOR',
+    actionTier: 'MONITOR',
+    pm25: pm,
+    primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
+    primarySourceKey: maxSource as PriorityHex['primarySourceKey'],
+    sourceType: sourceTypeMap[maxSource] || 'Heavy Ind.',
+    sourceAttribution: {
+      traffic: sa.traffic ?? 0,
+      industrial: sa.industrial ?? 0,
+      construction: sa.construction ?? 0,
+      burning: sa.burning ?? 0,
+    },
+    lat: h.center_lat,
+    lng: h.center_lon,
+  };
+}
+
+export async function fetchCityExtremes(
+  n: number = CITY_EXTREMES_FETCH_N,
+  mode: ExtremesRankingMode = 'global',
+): Promise<CityExtremesResult> {
   const capped = Math.min(100, Math.max(1, n));
+  const modeParam = mode === 'local_peaks' ? 'local_peaks' : 'global';
   const { data } = await apiClient.get(
-    `/attribution/city/bengaluru/extremes?n=${capped}`,
+    `/attribution/city/bengaluru/extremes?n=${capped}&mode=${modeParam}`,
   );
   if (!data || !data.best || !data.worst) {
     throw new Error('No extremes data returned from API');
   }
-  const mapExtreme = (h: any): PriorityHex => {
-    const pm = Math.round(h.fused_pm25 || 0);
-    const score10 = Math.min(10, Math.round(pm / 20));
-    const attrConf =
-      h.attribution_confidence_score != null ? Number(h.attribution_confidence_score) : 0;
-    const sa = h.source_attribution || {};
-    let maxSource = 'traffic';
-    let maxVal = 0;
-    for (const [key, value] of Object.entries(sa)) {
-      if ((value as number) > maxVal) {
-        maxVal = value as number;
-        maxSource = key;
-      }
-    }
-    const sourceTypeMap: Record<string, PriorityHex['sourceType']> = {
-      traffic: 'Traffic Hub',
-      industrial: 'Heavy Ind.',
-      construction: 'Construction',
-      burning: 'Waste Burning',
-    };
-    return {
-      id: h.h3_cell,
-      name: _resolveName(h.h3_cell, h.center_lat, h.center_lon, h.location_name || h.name),
-      score10,
-      priorityScore: score10 / 10,
-      rank: 0,
-      changeVal: 0,
-      exposure: 'Medium',
-      magnitude: 0,
-      confidence: attrConf,
-      attributionConfidence: attrConf,
-      attributionConfidenceLevel: h.attribution_confidence_level,
-      confidenceExplanation: h.confidence_explanation,
-      confidenceFlags: h.confidence_flags,
-      riskConfidenceFactor: h.risk_confidence_factor,
-      nearestStationDistanceM: h.nearest_station_distance_m ?? null,
-      attributionMethod: h.method,
-      actionability: 'MONITOR',
-      actionTier: 'MONITOR',
-      pm25: pm,
-      primarySource: maxSource.charAt(0).toUpperCase() + maxSource.slice(1),
-      primarySourceKey: maxSource as PriorityHex['primarySourceKey'],
-      sourceType: sourceTypeMap[maxSource] || 'Heavy Ind.',
-      sourceAttribution: {
-        traffic: sa.traffic ?? 0,
-        industrial: sa.industrial ?? 0,
-        construction: sa.construction ?? 0,
-        burning: sa.burning ?? 0,
-      },
-      lat: h.center_lat,
-      lng: h.center_lon,
-    };
-  };
-  const best = data.best.map(mapExtreme);
-  const worst = data.worst.map(mapExtreme);
+  const best = data.best.map(mapExtremeHex);
+  const worst = data.worst.map(mapExtremeHex);
   return {
     best,
     worst,
     totalWithData: data.total_hexagons_with_data,
     totalInGrid: data.total_hexagons_in_grid,
     fetchedN: capped,
+    mode: (data.mode === 'local_peaks' ? 'local_peaks' : 'global') as ExtremesRankingMode,
+    modeDescription: data.mode_description ?? undefined,
+    peakK: data.peak_k ?? null,
+    fusionRangeM: data.fusion_range_m ?? null,
+    maxFusedPm25: data.max_fused_pm25 ?? null,
+    tieCountAtMax: data.tie_count_at_max ?? null,
+    maxStationId: data.max_station_id ?? null,
+    rankingNote: data.ranking_note ?? null,
   };
 }
 
-export function useCityExtremes() {
-  return useQuery<{
-    best: PriorityHex[];
-    worst: PriorityHex[];
-    totalWithData: number;
-    totalInGrid: number;
-    fetchedN: number;
-  }>({
-    // Include N so we don't reuse an older top-15 cache from earlier builds
-    queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N],
-    queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N),
+export function useCityExtremes(mode: ExtremesRankingMode = 'global') {
+  return useQuery<CityExtremesResult>({
+    // Include N + mode so global and local_peaks cache separately
+    queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N, mode],
+    queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N, mode),
     staleTime: 60_000,
   });
 }

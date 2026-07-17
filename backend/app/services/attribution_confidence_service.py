@@ -52,12 +52,12 @@ def compute_attribution_confidence(
     flags: list[str] = []
     reasons: list[str] = []
 
-    # --- Distance to nearest station ---
+    # --- Distance to nearest station (softer penalties — avoid mass 0% on the map) ---
     dist = nearest_station_distance_m
     if dist is None or (isinstance(dist, float) and dist != dist):  # NaN
-        score -= 50
+        score -= 32
         flags.append("no_station_anchor")
-        reasons.append("no monitoring station within fusion range")
+        reasons.append("no monitoring station within fusion range — attribution is feature-proxy only")
         dist_note = "no station in range"
     else:
         dist = float(dist)
@@ -72,7 +72,7 @@ def compute_attribution_confidence(
                 applied = True
                 break
         if not applied:
-            score -= 55
+            score -= 40
             flags.append("beyond_fusion_range")
             reasons.append(f"nearest station {dist / 1000:.1f} km (beyond typical fusion range)")
             dist_note = f"{dist / 1000:.1f} km from nearest station"
@@ -80,20 +80,20 @@ def compute_attribution_confidence(
     # --- Wind / method ---
     method_norm = (method or "").lower()
     if method_norm == "calm_fallback":
-        score -= 20
+        score -= 15
         flags.append("calm_fallback")
         reasons.append("calm / unusable wind → pure distance weighting (directional uncertainty)")
     elif method_norm == "unavailable":
-        score -= 35
+        score -= 30
         flags.append("attribution_unavailable")
         reasons.append("attribution method unavailable")
     elif method_norm == "vectorised_feature_proxy":
         # Enforcement fast path — still usable but not full wind plume physics
-        score -= 8
+        score -= 5
         flags.append("feature_proxy_attribution")
         reasons.append("feature-proxy attribution (not full wind-plume transfer)")
     elif wind_speed_kmh is not None and wind_speed_kmh <= 1.0:
-        score -= 18
+        score -= 12
         flags.append("calm_wind")
         reasons.append(f"very low wind speed ({wind_speed_kmh:.1f} km/h)")
     elif wind_speed_kmh is not None:
@@ -102,11 +102,11 @@ def compute_attribution_confidence(
     # --- Station contribution count (fusion) ---
     n_st = int(stations_contributing or 0)
     if n_st <= 0 and (fusion_available is False or fused_pm25 is None):
-        score -= 20
+        score -= 12
         flags.append("fusion_unavailable")
-        reasons.append("no fused PM2.5 anchor from stations")
+        reasons.append("no fused PM2.5 anchor from stations (source mix still computed from local features)")
     elif n_st == 1:
-        score -= 10
+        score -= 6
         flags.append("single_station_anchor")
         reasons.append("only one station contributes to fusion")
     elif n_st >= 2:
@@ -125,6 +125,12 @@ def compute_attribution_confidence(
             reasons.append(f"sparse source context ({n_src} hexes)")
 
     score = max(0, min(100, int(round(score))))
+    # Floor: if we still have a usable attribution method, never show a broken 0%
+    # (judges read 0% as "system failure" rather than "low station support").
+    if method_norm not in ("unavailable", "") and score < 18:
+        score = 18
+        flags.append("confidence_floor_applied")
+        reasons.append("minimum display floor for valid feature-based attribution")
     level = _level_for(score)
 
     # Compact narrative for UI

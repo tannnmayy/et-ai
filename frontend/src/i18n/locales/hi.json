@@ -25,9 +25,10 @@
   "nav.map": "मानचित्र",
   "nav.enforcement": "प्रवर्तन",
   "nav.copilot": "कोपायलट",
-  "nav.neighbourhoods": "पड़ोस",
+  "nav.neighbourhoods": "नागरिक",
+  "nav.citizens": "नागरिक",
   "nav.insights": "इनसाइट्स",
-  "nav.neighbourhood_finder": "पड़ोस खोजक",
+  "nav.neighbourhood_finder": "नागरिक मोड",
 
   "role.enforcement": "प्रवर्तन प्राधिकरण",
   "role.citizen": "नागरिक",

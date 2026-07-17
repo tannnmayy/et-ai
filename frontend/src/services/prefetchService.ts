@@ -64,8 +64,13 @@ export function preloadGoogleMapsScript() {
 export async function prefetchMapAndEnforcementData(queryClient: QueryClient) {
   await Promise.allSettled([
     queryClient.prefetchQuery({
-      queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N],
-      queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N),
+      queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N, 'global'],
+      queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N, 'global'),
+      staleTime: 60_000,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N, 'local_peaks'],
+      queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N, 'local_peaks'),
       staleTime: 60_000,
     }),
     queryClient.prefetchQuery({

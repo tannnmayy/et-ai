@@ -184,16 +184,25 @@ export function actionTierStyles(tier: ActionTier): {
   }
 }
 
+/**
+ * Single-source label only when that source ≥ 80%.
+ * Otherwise "Mixed" — traffic is still listed as the top contributor when it leads.
+ */
 export function dominantSource(
   attr: PriorityHex['sourceAttribution'],
-): { key: SourceKey; label: string; share: number; isMixed: boolean } {
+): { key: SourceKey | 'mixed'; label: string; share: number; isMixed: boolean } {
   const entries = SOURCE_KEYS.map((k) => ({ key: k, val: attr[k] ?? 0 }));
   entries.sort((a, b) => b.val - a.val);
   const top = entries[0];
-  const second = entries[1];
-  const isMixed = top.val < 0.4 || (second && top.val - second.val < 0.08);
+  // Strict majority: only pure labels above 80%
+  const isMixed = !top || top.val < 0.8;
   if (isMixed) {
-    return { key: top.key, label: 'Mixed', share: top.val, isMixed: true };
+    return {
+      key: 'mixed',
+      label: 'Mixed',
+      share: top?.val ?? 0,
+      isMixed: true,
+    };
   }
   return {
     key: top.key,

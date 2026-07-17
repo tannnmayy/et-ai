@@ -370,10 +370,10 @@ export default function EnforcementPage() {
             <div className="flex items-start gap-2">
               <Info size={12} className="text-brand-blue shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white">Score (0–10)</strong> = exposure × attributable
-                magnitude × actionability. Turn on{' '}
-                <strong className="text-brand-blue">Risk-Adjusted View</strong> to fold attribution
-                confidence into ranking — this changes who appears at the top.
+                <strong className="text-white">Score (0–10)</strong> blends rank position with the
+                raw priority signal (exposure × magnitude × actionability) so #1 reads ~9–10, not
+                0.5. Turn on <strong className="text-brand-blue">Risk-Adjusted View</strong> to fold
+                attribution confidence into ranking — this changes who appears at the top.
                 {(isFetching || isPlaceholderData) && (
                   <span className="ml-2 text-brand-blue animate-pulse">
                     {isPlaceholderData ? 'Loading simulation…' : 'Refreshing…'}

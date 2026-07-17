@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -13,6 +13,9 @@ import {
   AlertTriangle,
   Home,
   Layers,
+  X,
+  Expand,
+  Brain,
 } from 'lucide-react';
 import {
   Area,
@@ -41,6 +44,83 @@ import type {
   TargetedEnforcementInsight,
 } from '../services/insightsService';
 import { SpringButton } from '../components/ui';
+
+type ExpandKey = 'rush' | 'rent' | 'before' | 'predict' | null;
+
+function InsightModal({
+  open,
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/75 backdrop-blur-md"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl ui-glass ui-glass-strong border border-white/15 shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 md:px-7 py-4 border-b border-white/10 bg-black/80 backdrop-blur-xl">
+          <div className="min-w-0">
+            <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-brand-blue mb-1">
+              Expanded insight
+            </div>
+            <h2 className="text-lg md:text-xl font-bold text-white tracking-tight truncate">{title}</h2>
+            {subtitle && (
+              <p className="text-xs text-apple-secondary mt-1 leading-relaxed">{subtitle}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-apple-secondary hover:text-white hover:bg-white/10"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-5 md:px-7 py-5 pb-8 space-y-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ClickHint() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-brand-blue/90 bg-brand-blue/10 border border-brand-blue/25 px-2.5 py-1 rounded-full">
+      <Expand size={11} />
+      Click to expand
+    </span>
+  );
+}
 
 function GlassCard({
   children,
@@ -111,7 +191,13 @@ function pct(n: number, digits = 0) {
 }
 
 /* ─── Insight 1: Rush-Hour Personality Flip ─── */
-function RushHourFlipCard({ data }: { data: RushHourFlipInsight }) {
+function RushHourFlipCard({
+  data,
+  onExpand,
+}: {
+  data: RushHourFlipInsight;
+  onExpand?: () => void;
+}) {
   if (!data.available || !data.series?.length) {
     return <UnavailableCard title="The Rush-Hour Personality Flip" reason={data.reason} />;
   }
@@ -126,10 +212,27 @@ function RushHourFlipCard({ data }: { data: RushHourFlipInsight }) {
   }));
 
   return (
-    <GlassCard hero className="p-6 md:p-8">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
+    <GlassCard
+      hero
+      className={`p-6 md:p-8 ${onExpand ? 'cursor-pointer hover:border-brand-blue/40 transition-colors' : ''}`}
+    >
+      <div
+        role={onExpand ? 'button' : undefined}
+        tabIndex={onExpand ? 0 : undefined}
+        onClick={onExpand}
+        onKeyDown={(e) => {
+          if (onExpand && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onExpand();
+          }
+        }}
+        className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5 outline-none"
+      >
         <div className="max-w-2xl">
-          <InsightBadge n={1} label="Hero insight · Time-of-day attribution" />
+          <div className="flex flex-wrap items-center gap-2">
+            <InsightBadge n={1} label="Hero insight · Time-of-day attribution" />
+            {onExpand && <ClickHint />}
+          </div>
           <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight mt-3">
             {data.headline || 'The Rush-Hour Personality Flip'}
           </h2>
@@ -377,7 +480,13 @@ function uncertaintyFromRmse(rmse: number | null | undefined): {
 }
 
 /* ─── Insight 3: Predictability Map ─── */
-function PredictabilityMapCard({ data }: { data: PredictabilityMapInsight }) {
+function PredictabilityMapCard({
+  data,
+  onExpand,
+}: {
+  data: PredictabilityMapInsight;
+  onExpand?: () => void;
+}) {
   if (!data.available || !data.stations?.length) {
     return <UnavailableCard title="The Predictability Map" reason={data.reason} />;
   }
@@ -398,12 +507,30 @@ function PredictabilityMapCard({ data }: { data: PredictabilityMapInsight }) {
   const highUnc = withUncertainty.filter((s) => s.unc.level === 'High');
 
   return (
-    <GlassCard className="p-6 md:p-7 h-full">
-      <InsightBadge n={3} label="Model behaviour · LightGBM vs persistence" />
-      <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
-        {data.headline || 'The Predictability Map'}
-      </h2>
-      <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed">{data.finding}</p>
+    <GlassCard
+      className={`p-6 md:p-7 h-full ${onExpand ? 'cursor-pointer hover:border-brand-blue/40 transition-colors' : ''}`}
+    >
+      <div
+        role={onExpand ? 'button' : undefined}
+        tabIndex={onExpand ? 0 : undefined}
+        onClick={onExpand}
+        onKeyDown={(e) => {
+          if (onExpand && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onExpand();
+          }
+        }}
+        className="outline-none"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <InsightBadge n={3} label="Model behaviour · LightGBM vs persistence" />
+          {onExpand && <ClickHint />}
+        </div>
+        <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
+          {data.headline || 'The Predictability Map'}
+        </h2>
+        <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed">{data.finding}</p>
+      </div>
 
       {highUnc.length > 0 && (
         <div className="mt-3 rounded-xl border border-brand-red/30 bg-brand-red/10 px-3.5 py-2.5">
@@ -642,7 +769,13 @@ function TargetedEnforcementCard({ data }: { data: TargetedEnforcementInsight })
 }
 
 /* ─── Insight 5: Rent vs Air ─── */
-function RentVsAirCard({ data }: { data: RentVsAirInsight }) {
+function RentVsAirCard({
+  data,
+  onExpand,
+}: {
+  data: RentVsAirInsight;
+  onExpand?: () => void;
+}) {
   if (!data.available || !data.expensive_dirty || !data.affordable_clean) {
     return <UnavailableCard title="Rent vs What You Actually Breathe" reason={data.reason} />;
   }
@@ -651,14 +784,32 @@ function RentVsAirCard({ data }: { data: RentVsAirInsight }) {
   const clean = data.affordable_clean;
 
   return (
-    <GlassCard className="p-6 md:p-7">
-      <InsightBadge n={5} label="Citizen Mode bridge · Market vs lungs" />
-      <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
-        {data.headline || 'Rent vs What You Actually Breathe'}
-      </h2>
-      <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
-        {data.finding}
-      </p>
+    <GlassCard
+      className={`p-6 md:p-7 ${onExpand ? 'cursor-pointer hover:border-brand-blue/40 transition-colors' : ''}`}
+    >
+      <div
+        role={onExpand ? 'button' : undefined}
+        tabIndex={onExpand ? 0 : undefined}
+        onClick={onExpand}
+        onKeyDown={(e) => {
+          if (onExpand && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onExpand();
+          }
+        }}
+        className="outline-none"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <InsightBadge n={5} label="Citizen Mode bridge · Market vs lungs" />
+          {onExpand && <ClickHint />}
+        </div>
+        <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
+          {data.headline || 'Rent vs What You Actually Breathe'}
+        </h2>
+        <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
+          {data.finding}
+        </p>
+      </div>
 
       <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-2xl border border-brand-red/30 bg-brand-red/10 p-5">
@@ -928,20 +1079,44 @@ function AblationStudiesCard({ data }: { data?: AblationStudiesInsight }) {
   );
 }
 
-function BeforeAfterCard({ data }: { data: BeforeAfterInsight }) {
+function BeforeAfterCard({
+  data,
+  onExpand,
+}: {
+  data: BeforeAfterInsight;
+  onExpand?: () => void;
+}) {
   if (!data.available || !data.before || !data.after) {
     return <UnavailableCard title="Before AQI Sentinel / After" reason={data.reason} />;
   }
 
   return (
-    <GlassCard className="p-6 md:p-7">
-      <InsightBadge n={6} label="Problem statement · System delta" />
-      <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
-        {data.headline || 'Before AQI Sentinel / After'}
-      </h2>
-      <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
-        {data.finding}
-      </p>
+    <GlassCard
+      className={`p-6 md:p-7 ${onExpand ? 'cursor-pointer hover:border-brand-blue/40 transition-colors' : ''}`}
+    >
+      <div
+        role={onExpand ? 'button' : undefined}
+        tabIndex={onExpand ? 0 : undefined}
+        onClick={onExpand}
+        onKeyDown={(e) => {
+          if (onExpand && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onExpand();
+          }
+        }}
+        className="outline-none"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <InsightBadge n={6} label="Problem statement · System delta" />
+          {onExpand && <ClickHint />}
+        </div>
+        <h2 className="text-xl md:text-2xl font-bold text-white mt-3">
+          {data.headline || 'Before AQI Sentinel / After'}
+        </h2>
+        <p className="text-sm text-apple-secondary mt-2.5 leading-relaxed max-w-3xl">
+          {data.finding}
+        </p>
+      </div>
 
       <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5">
@@ -1009,12 +1184,31 @@ function BeforeAfterCard({ data }: { data: BeforeAfterInsight }) {
 export default function InsightsPage() {
   const navigate = useNavigate();
   const { data, isLoading, isError, error, isFetching, refetch } = useCityInsights('bengaluru');
+  const [expandKey, setExpandKey] = useState<ExpandKey>(null);
 
   const insights = data?.insights;
   const availableCount = useMemo(() => {
     if (!insights) return 0;
     return Object.values(insights).filter((i) => i && (i as { available?: boolean }).available).length;
   }, [insights]);
+
+  const rushExamples = insights?.rush_hour_flip?.related_examples?.length
+    ? insights.rush_hour_flip.related_examples
+    : insights?.rush_hour_flip?.available
+      ? [
+          {
+            location_name: insights.rush_hour_flip.location_name,
+            traffic_am_pct: insights.rush_hour_flip.traffic_am_pct,
+            traffic_night_pct: insights.rush_hour_flip.traffic_night_pct,
+            flip_pp: insights.rush_hour_flip.flip_pp,
+            dominant_am: insights.rush_hour_flip.dominant_am,
+            dominant_night: insights.rush_hour_flip.dominant_night,
+            corridor_score: insights.rush_hour_flip.corridor_score,
+            series: insights.rush_hour_flip.series,
+            h3_cell: insights.rush_hour_flip.h3_cell,
+          },
+        ]
+      : [];
 
   return (
     <div className="w-full h-full overflow-y-auto bg-black">
@@ -1031,7 +1225,7 @@ export default function InsightsPage() {
             <p className="text-sm text-apple-secondary mt-2 max-w-2xl leading-relaxed">
               Not generic dashboards — each card is a real computation from attribution,
               station CSVs, model evaluation, enforcement scores, and rental catchments.
-              Built for judges who ask “where did that number come from?”
+              Click highlighted cards to expand multi-example views for judges.
             </p>
             {data?.generated_at && (
               <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-apple-secondary">
@@ -1110,22 +1304,34 @@ export default function InsightsPage() {
         {insights && (
           <>
             {/* 1 — Hero */}
-            <RushHourFlipCard data={insights.rush_hour_flip} />
+            <RushHourFlipCard
+              data={insights.rush_hour_flip}
+              onExpand={() => setExpandKey('rush')}
+            />
 
             {/* 2 — Trust */}
             <SensorBlindSpotsCard data={insights.sensor_blind_spots} />
 
             {/* 3 + 4 — Analytical pair */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
-              <PredictabilityMapCard data={insights.predictability_map} />
+              <PredictabilityMapCard
+                data={insights.predictability_map}
+                onExpand={() => setExpandKey('predict')}
+              />
               <TargetedEnforcementCard data={insights.targeted_enforcement} />
             </div>
 
             {/* 5 — Cross-feature */}
-            <RentVsAirCard data={insights.rent_vs_air} />
+            <RentVsAirCard
+              data={insights.rent_vs_air}
+              onExpand={() => setExpandKey('rent')}
+            />
 
             {/* 6 — Before / After */}
-            <BeforeAfterCard data={insights.before_after} />
+            <BeforeAfterCard
+              data={insights.before_after}
+              onExpand={() => setExpandKey('before')}
+            />
 
             {/* 7 — Failure modes (honesty) */}
             <FailureModesCard data={insights.failure_modes} />
@@ -1150,6 +1356,349 @@ export default function InsightsPage() {
           </>
         )}
       </div>
+
+      {/* ── Expanded modals ── */}
+      <InsightModal
+        open={expandKey === 'rush'}
+        onClose={() => setExpandKey(null)}
+        title="Rush-hour personality flips across Bengaluru"
+        subtitle="Same TOD attribution engine · corridor hexes with the largest morning→night traffic drop"
+      >
+        <p className="text-sm text-apple-secondary leading-relaxed">
+          Pollution sources are not static. Peak-hour traffic multipliers make corridors look like
+          traffic hubs at 8 AM and something else at 2 AM. Below: live corridor examples ranked by
+          flip size.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {rushExamples.map((ex, i) => (
+            <div
+              key={ex.h3_cell || ex.location_name || i}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-brand-blue">
+                    Example {i + 1}
+                  </div>
+                  <h3 className="text-base font-bold text-white mt-0.5">
+                    {ex.location_name || 'Corridor hex'}
+                  </h3>
+                </div>
+                <span className="text-sm font-mono font-bold text-brand-green">
+                  {Math.abs(ex.flip_pp ?? 0).toFixed(0)} pp
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                <div className="rounded-xl bg-black/30 border border-white/8 px-2.5 py-2">
+                  <div className="text-apple-secondary uppercase tracking-wider text-[9px]">
+                    8 AM
+                  </div>
+                  <div className="text-white font-semibold mt-0.5 capitalize">
+                    {ex.dominant_am || '—'} · {pct(ex.traffic_am_pct ?? 0)} traffic
+                  </div>
+                </div>
+                <div className="rounded-xl bg-black/30 border border-white/8 px-2.5 py-2">
+                  <div className="text-apple-secondary uppercase tracking-wider text-[9px]">
+                    2 AM
+                  </div>
+                  <div className="text-white font-semibold mt-0.5 capitalize">
+                    {ex.dominant_night || '—'} · {pct(ex.traffic_night_pct ?? 0)} traffic
+                  </div>
+                </div>
+              </div>
+              {ex.series && ex.series.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {ex.series.map((s) => (
+                    <span
+                      key={s.hour}
+                      className="text-[9px] font-mono px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-apple-secondary"
+                    >
+                      {s.label}: {s.dominant}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {ex.h3_cell && (
+                <div className="mt-2 text-[9px] font-mono text-white/35 truncate">{ex.h3_cell}</div>
+              )}
+            </div>
+          ))}
+        </div>
+        {rushExamples.length === 0 && (
+          <p className="text-sm text-apple-secondary">No corridor examples available yet.</p>
+        )}
+        <div className="rounded-2xl bg-brand-blue/10 border border-brand-blue/25 px-4 py-3 text-[12px] text-white/85 leading-relaxed">
+          <strong className="text-brand-blue">Why judges care:</strong> a single daily average
+          misleads enforcement. Dispatch windows should match the dominant source at that hour —
+          traffic checks at peak, construction dust at mid-day site hours, burning at night.
+        </div>
+      </InsightModal>
+
+      <InsightModal
+        open={expandKey === 'rent'}
+        onClose={() => setExpandKey(null)}
+        title="Rent vs what you actually breathe"
+        subtitle="Premium rent is not a clean-air guarantee — multiple measured catchments"
+      >
+        <p className="text-sm text-apple-secondary leading-relaxed">
+          Citizen Mode ranks neighbourhoods on AQI, rent, commute, and amenities together. These
+          pairs show where money and clean air diverge.
+        </p>
+        {(insights?.rent_vs_air?.comparison_pairs?.length
+          ? insights.rent_vs_air.comparison_pairs
+          : insights?.rent_vs_air?.expensive_dirty && insights?.rent_vs_air?.affordable_clean
+            ? [
+                {
+                  expensive_dirty: insights.rent_vs_air.expensive_dirty,
+                  affordable_clean: insights.rent_vs_air.affordable_clean,
+                  rent_premium_inr:
+                    insights.rent_vs_air.expensive_dirty.median_rent -
+                    insights.rent_vs_air.affordable_clean.median_rent,
+                  aqi_penalty:
+                    insights.rent_vs_air.expensive_dirty.aqi -
+                    insights.rent_vs_air.affordable_clean.aqi,
+                },
+              ]
+            : []
+        ).map((pair, i) => (
+          <div
+            key={`${pair.expensive_dirty.name}-${pair.affordable_clean.name}-${i}`}
+            className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+          >
+            <div className="text-[10px] font-mono uppercase tracking-wider text-brand-blue mb-2">
+              Pair {i + 1}
+              {pair.rent_premium_inr != null && (
+                <span className="text-apple-secondary normal-case tracking-normal ml-2">
+                  · +{formatInr(pair.rent_premium_inr)} for {Number(pair.aqi_penalty ?? 0) > 0 ? 'worse' : 'different'} AQI
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="rounded-xl border border-brand-red/25 bg-brand-red/10 p-3">
+                <div className="text-[9px] uppercase tracking-wider text-brand-red font-bold">
+                  Costlier · dirtier
+                </div>
+                <div className="text-sm font-bold text-white mt-1">{pair.expensive_dirty.name}</div>
+                <div className="text-[11px] font-mono text-white/80 mt-1">
+                  {formatInr(pair.expensive_dirty.median_rent)} · AQI{' '}
+                  {Math.round(pair.expensive_dirty.aqi)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-brand-green/25 bg-brand-green/10 p-3">
+                <div className="text-[9px] uppercase tracking-wider text-brand-green font-bold">
+                  Cheaper · cleaner
+                </div>
+                <div className="text-sm font-bold text-white mt-1">{pair.affordable_clean.name}</div>
+                <div className="text-[11px] font-mono text-white/80 mt-1">
+                  {formatInr(pair.affordable_clean.median_rent)} · AQI{' '}
+                  {Math.round(pair.affordable_clean.aqi)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {insights?.rent_vs_air?.expensive_dirty_list &&
+          insights.rent_vs_air.expensive_dirty_list.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-white mb-2">
+                High-rent localities with elevated AQI
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {insights.rent_vs_air.expensive_dirty_list.slice(0, 6).map((loc) => (
+                  <span
+                    key={loc.name}
+                    className="text-[11px] px-2.5 py-1.5 rounded-full bg-brand-red/10 border border-brand-red/25 text-white/90"
+                  >
+                    {loc.name} · {formatInr(loc.median_rent)} · AQI {Math.round(loc.aqi)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        <MethodNote text={insights?.rent_vs_air?.method_note} />
+      </InsightModal>
+
+      <InsightModal
+        open={expandKey === 'before'}
+        onClose={() => setExpandKey(null)}
+        title="Before vs After AQI Sentinel"
+        subtitle="Judge-friendly system delta — from sparse stations to actionable hex intelligence"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="text-[10px] font-mono uppercase tracking-widest text-apple-secondary mb-3">
+              Before
+            </h3>
+            <ul className="space-y-3 text-sm">
+              <li className="flex justify-between gap-2">
+                <span className="text-apple-secondary">Official monitors</span>
+                <span className="font-mono font-bold text-white">
+                  {insights?.before_after?.before?.cpcb_kspcb_stations ?? '—'} stations
+                </span>
+              </li>
+              <li className="flex justify-between gap-2">
+                <span className="text-apple-secondary">Link to field dispatch</span>
+                <span className="font-mono font-bold text-brand-red">Manual / none</span>
+              </li>
+              <li className="flex justify-between gap-2">
+                <span className="text-apple-secondary">Cities with actionable protocols</span>
+                <span className="font-mono font-bold text-brand-orange">
+                  ~{insights?.before_after?.before?.actionable_protocol_share_national_pct ?? 31}%
+                </span>
+              </li>
+              <li className="text-[12px] text-apple-secondary leading-relaxed pt-1 border-t border-white/8">
+                Officers see station AQI charts — not who to inspect, which source dominates, or
+                whether confidence is high enough to act.
+              </li>
+            </ul>
+          </div>
+          <div className="rounded-2xl border border-brand-blue/30 bg-brand-blue/10 p-4">
+            <h3 className="text-[10px] font-mono uppercase tracking-widest text-brand-blue mb-3">
+              After · AQI Sentinel
+            </h3>
+            <ul className="space-y-3 text-sm">
+              <li className="flex justify-between gap-2">
+                <span className="text-apple-secondary">Live-scored H3 cells</span>
+                <span className="font-mono font-bold text-white">
+                  {insights?.before_after?.after?.h3_hexagons?.toLocaleString() ?? '—'}
+                </span>
+              </li>
+              <li className="flex justify-between gap-2">
+                <span className="text-apple-secondary">Priority = E × M × A</span>
+                <span className="font-mono font-bold text-brand-green">Decomposed</span>
+              </li>
+              <li className="flex justify-between gap-2">
+                <span className="text-apple-secondary">Context layers</span>
+                <span className="font-mono font-bold text-white text-right text-[11px]">
+                  TOD · S5P NO₂ · FIRMS · OSM
+                </span>
+              </li>
+              <li className="text-[12px] text-white/80 leading-relaxed pt-1 border-t border-brand-blue/20">
+                Map + Enforcement + Dispatch + Copilot + Citizen Mode share one evidence stack —
+                investigation signals with confidence, not black-box rankings.
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-2">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Sparkles size={14} className="text-brand-blue" />
+            What changes for an officer or citizen
+          </h3>
+          <ol className="list-decimal pl-4 space-y-1.5 text-[12px] text-apple-secondary leading-relaxed">
+            <li>
+              <strong className="text-white">Where:</strong> hex-level hotspots, not only 12 station
+              dots.
+            </li>
+            <li>
+              <strong className="text-white">Why:</strong> source mix (traffic / construction /
+              industrial / burning) with ≥80% purity for single labels, else Mixed.
+            </li>
+            <li>
+              <strong className="text-white">Trust:</strong> attribution confidence so far-from-station
+              hexes never look like certain evidence.
+            </li>
+            <li>
+              <strong className="text-white">Act:</strong> ranked dispatch sheet → field order PDF,
+              with risk-adjusted re-ranking when confidence is low.
+            </li>
+          </ol>
+        </div>
+        <MethodNote text={insights?.before_after?.method_note} />
+      </InsightModal>
+
+      <InsightModal
+        open={expandKey === 'predict'}
+        onClose={() => setExpandKey(null)}
+        title="LightGBM vs persistence — what it means"
+        subtitle="When the model beats “yesterday = today”, pollution is episodic; when persistence wins, it is structural"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-brand-blue/30 bg-brand-blue/10 p-4">
+            <div className="flex items-center gap-2 text-brand-blue text-[10px] font-mono uppercase tracking-wider font-bold">
+              <Brain size={14} />
+              LightGBM wins
+            </div>
+            <p className="text-[12px] text-white/85 mt-2 leading-relaxed">
+              {insights?.predictability_map?.explanation?.lightgbm_beats_persistence ||
+                'Episodic / weather-driven pollution — yesterday is a weak guide. The model captures non-linear rush-hour, wind, and industrial patterns.'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {(
+                insights?.predictability_map?.lgbm_stations ||
+                insights?.predictability_map?.stations
+                  ?.filter((s) => s.winner === 'lightgbm')
+                  .map((s) => s.display_name) ||
+                []
+              ).map((name) => (
+                <span
+                  key={name}
+                  className="text-[10px] px-2 py-1 rounded-full bg-brand-blue/15 border border-brand-blue/30 text-white"
+                >
+                  {String(name).replace(/CPCB |KSPCB /gi, '')}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-brand-orange/30 bg-brand-orange/10 p-4">
+            <div className="flex items-center gap-2 text-brand-orange text-[10px] font-mono uppercase tracking-wider font-bold">
+              <Activity size={14} />
+              Persistence wins
+            </div>
+            <p className="text-[12px] text-white/85 mt-2 leading-relaxed">
+              {insights?.predictability_map?.explanation?.persistence_wins ||
+                'Stable / structural pollution — today’s level is usually close to yesterday’s. Serving persistence is the honest lower-error choice.'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {(
+                insights?.predictability_map?.persistence_stations ||
+                insights?.predictability_map?.stations
+                  ?.filter((s) => s.winner === 'persistence')
+                  .map((s) => s.display_name) ||
+                []
+              ).map((name) => (
+                <span
+                  key={name}
+                  className="text-[10px] px-2 py-1 rounded-full bg-brand-orange/15 border border-brand-orange/30 text-white"
+                >
+                  {String(name).replace(/CPCB |KSPCB /gi, '')}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-4">
+          <h3 className="text-sm font-bold text-white mb-2">Per-station scorecard</h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {(insights?.predictability_map?.stations || []).map((s) => (
+              <div
+                key={s.station_id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-black/30 border border-white/8 px-3 py-2"
+              >
+                <span className="text-sm font-semibold text-white">
+                  {s.display_name.replace(/CPCB |KSPCB /gi, '')}
+                </span>
+                <span
+                  className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border ${
+                    s.winner === 'lightgbm'
+                      ? 'text-brand-blue border-brand-blue/30 bg-brand-blue/10'
+                      : 'text-brand-orange border-brand-orange/30 bg-brand-orange/10'
+                  }`}
+                >
+                  {s.winner}
+                </span>
+                <span className="text-[11px] font-mono text-apple-secondary w-full sm:w-auto">
+                  Δ RMSE {Number(s.rmse_improvement_percent ?? 0).toFixed(1)}%
+                </span>
+                <p className="text-[11px] text-apple-secondary w-full leading-snug">
+                  {s.interpretation}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <MethodNote text={insights?.predictability_map?.method_note} />
+      </InsightModal>
     </div>
   );
 }

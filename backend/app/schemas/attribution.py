@@ -148,7 +148,41 @@ class HexagonExtreme(BaseModel):
 class CityExtremesResponse(BaseModel):
     city: str = Field(description="City name")
     computed_at: str = Field(description="ISO timestamp of computation")
+    mode: str = Field(
+        default="global",
+        description="Worst-list ranking mode: 'global' (absolute highest fused PM) or 'local_peaks'",
+    )
+    mode_description: str | None = Field(
+        default=None,
+        description="Human-readable explanation of the active ranking mode",
+    )
+    peak_k: int | None = Field(
+        default=None,
+        description="Per-station worst-hex count used for local_peaks mode",
+    )
     best: list[HexagonExtreme] = Field(description="Top N cleanest hexagons (lowest fused PM2.5)")
-    worst: list[HexagonExtreme] = Field(description="Top N most polluted hexagons (highest fused PM2.5)")
+    worst: list[HexagonExtreme] = Field(
+        description="Top N most polluted hexagons under the active mode ranking",
+    )
     total_hexagons_with_data: int = Field(description="Number of hexagons with a real fused PM2.5 estimate")
     total_hexagons_in_grid: int = Field(description="Total number of hexagons in the city grid")
+    fusion_range_m: float | None = Field(
+        default=None,
+        description="Station fusion range in metres used for coverage",
+    )
+    max_fused_pm25: float | None = Field(
+        default=None,
+        description="Highest fused PM2.5 among covered hexes (global plateau max)",
+    )
+    tie_count_at_max: int | None = Field(
+        default=None,
+        description="How many covered hexes share ~max_fused_pm25 (global plateau size)",
+    )
+    max_station_id: str | None = Field(
+        default=None,
+        description="Station most associated with the global max plateau",
+    )
+    ranking_note: str | None = Field(
+        default=None,
+        description="Honesty note: uncovered hexes are unmeasured, not clean",
+    )

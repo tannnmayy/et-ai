@@ -103,6 +103,14 @@ export default function App() {
                 }
               />
               <Route
+                path="citizens"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <NeighbourhoodsPage />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="insights"
                 element={
                   <Suspense fallback={<RouteFallback />}>

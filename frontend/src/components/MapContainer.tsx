@@ -4,6 +4,26 @@ import { Key, AlertTriangle } from 'lucide-react';
 import { PriorityHex } from '../types';
 import { actionTierStyles, formatLocationName } from '../services/enforcementUtils';
 
+export type StationMarker = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  aqi: number;
+  status: string;
+};
+
+export type NearbySample = {
+  key: string;
+  lat: number;
+  lng: number;
+  aqi: number;
+  stationId: string;
+  stationName: string;
+  hexId?: string;
+  name?: string;
+};
+
 interface MapContainerProps {
   selectedHex: PriorityHex | null;
   onSelectHex: (hex: PriorityHex) => void;
@@ -15,6 +35,13 @@ interface MapContainerProps {
   highlightedHexIds?: string[];
   /** Optional lat/lng from Copilot focus_on */
   focusCenter?: { lat: number; lng: number } | null;
+  /** Official CPCB/KSPCB stations */
+  stations?: StationMarker[];
+  /**
+   * Larger pool of hexes with real fused PM2.5 used only to pick ≥5 nearby
+   * samples around each station (not all drawn as hex labels).
+   */
+  samplePool?: PriorityHex[];
 }
 
 const API_KEY = String(
@@ -41,7 +68,10 @@ const darkMapStyles = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0c0c0e' }] },
 ];
 
-/** Apply classic JSON styles when not using a Cloud Map ID. */
+const NEARBY_COUNT = 5;
+/** Max search radius (km) for real hex samples around a station */
+const NEARBY_MAX_KM = 4.5;
+
 function MapStyleController({ enabled }: { enabled: boolean }) {
   const map = useMap();
   useEffect(() => {
@@ -58,7 +88,6 @@ function MapStyleController({ enabled }: { enabled: boolean }) {
   return null;
 }
 
-/** Pan/zoom when Copilot requests focus_on. */
 function MapFocusController({
   center,
 }: {
@@ -84,19 +113,17 @@ function MapFocusController({
 
 function confidenceColor(score: number | undefined): string {
   const s = score ?? 0;
-  if (s >= 80) return '#34C759'; // High
-  if (s >= 55) return '#0A84FF'; // Medium
-  if (s >= 30) return '#FF9F0A'; // Low
-  return '#ff453a'; // Very Low
+  if (s >= 80) return '#34C759';
+  if (s >= 55) return '#0A84FF';
+  if (s >= 30) return '#FF9F0A';
+  return '#ff453a';
 }
 
-/** High confidence = thicker border + stronger glow */
-function confidenceVisualWeight(score: number | undefined): { borderPx: number; glow: number } {
-  const s = score ?? 0;
-  if (s >= 80) return { borderPx: 3.5, glow: 18 };
-  if (s >= 55) return { borderPx: 2.5, glow: 12 };
-  if (s >= 30) return { borderPx: 1.5, glow: 6 };
-  return { borderPx: 1, glow: 2 };
+function aqiColor(aqi: number): string {
+  if (aqi <= 50) return '#34C759';
+  if (aqi <= 100) return '#FFCC00';
+  if (aqi <= 250) return '#FF9F0A';
+  return '#ff453a';
 }
 
 function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement' | 'confidence'): string {
@@ -106,11 +133,140 @@ function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement' | 'confidenc
   if (viewMode === 'confidence') {
     return confidenceColor(hex.attributionConfidence ?? hex.confidence);
   }
-  const pm = hex.pm25;
-  if (pm <= 50) return '#34C759';
-  if (pm <= 100) return '#FFCC00';
-  if (pm <= 250) return '#FF9F0A';
-  return '#ff453a';
+  return aqiColor(hex.pm25);
+}
+
+/** Approx km between two lat/lng points (equirectangular). */
+function distKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const dLat = (aLat - bLat) * 111;
+  const dLng = (aLng - bLng) * 111 * Math.cos((aLat * Math.PI) / 180);
+  return Math.sqrt(dLat * dLat + dLng * dLng);
+}
+
+/** Short station label for map (avoid clutter). */
+export function shortStationLabel(name: string, id: string): string {
+  const cleaned = name
+    .replace(/CPCB|KSPCB/gi, '')
+    .replace(/Bengaluru|Bangalore/gi, '')
+    .replace(/[-_,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return id.slice(0, 10);
+  // Prefer first meaningful token(s)
+  const parts = cleaned.split(' ').filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 14);
+  if (parts[0].length + parts[1].length < 16) return `${parts[0]} ${parts[1]}`.slice(0, 16);
+  return parts[0].slice(0, 14);
+}
+
+/**
+ * Pick ≥5 nearest real fused-PM hexes around each station from the sample pool.
+ * No synthetic AQI — only hexes with valid pm25.
+ */
+export function buildNearbySamples(
+  stations: StationMarker[],
+  pool: PriorityHex[],
+  count: number = NEARBY_COUNT,
+): NearbySample[] {
+  if (!stations.length || !pool.length) return [];
+
+  const valid = pool.filter(
+    (h) =>
+      h &&
+      typeof h.lat === 'number' &&
+      typeof h.lng === 'number' &&
+      Number.isFinite(h.pm25) &&
+      h.pm25 > 0,
+  );
+
+  const out: NearbySample[] = [];
+  const usedHexKeys = new Set<string>();
+
+  for (const s of stations) {
+    const ranked = valid
+      .map((h) => ({
+        hex: h,
+        d: distKm(s.lat, s.lng, h.lat, h.lng),
+      }))
+      .filter((x) => x.d <= NEARBY_MAX_KM && x.d > 0.05)
+      .sort((a, b) => a.d - b.d);
+
+    let added = 0;
+    for (const { hex } of ranked) {
+      // Prefer unique hexes globally; allow reuse if pool is sparse
+      const uk = `${s.id}:${hex.id}`;
+      if (usedHexKeys.has(hex.id) && added < count) {
+        // skip if already used by another station unless we need fillers
+        if (ranked.length > count * 2) continue;
+      }
+      usedHexKeys.add(hex.id);
+      out.push({
+        key: uk,
+        lat: hex.lat,
+        lng: hex.lng,
+        aqi: Math.round(hex.pm25),
+        stationId: s.id,
+        stationName: s.name,
+        hexId: hex.id,
+        name: formatLocationName(hex) || hex.name,
+      });
+      added += 1;
+      if (added >= count) break;
+    }
+  }
+  return out;
+}
+
+/** Official station diamond — clean, no glow. */
+function StationDiamondIcon({
+  name,
+  aqi,
+  status,
+  showLabel = true,
+}: {
+  name: string;
+  aqi: number;
+  status: string;
+  showLabel?: boolean;
+}) {
+  const label = shortStationLabel(name, '');
+  return (
+    <div
+      className="flex flex-col items-center pointer-events-auto select-none"
+      title={`${name} · ${aqi} µg/m³ · ${status}`}
+    >
+      {/* Diamond: outer blue, inner white — distinct from hex cards */}
+      <div className="relative w-5 h-5 flex items-center justify-center">
+        <div
+          className="absolute inset-0 rotate-45 rounded-[2px] border-[2.5px] border-[#0A84FF] bg-[#0A84FF]"
+          style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.45)' }}
+        />
+        <div className="absolute inset-[4px] rotate-45 rounded-[1px] bg-white" />
+      </div>
+      {showLabel && (
+        <span className="mt-1.5 max-w-[88px] truncate text-[8px] font-bold tracking-wide text-white bg-black/85 border border-[#0A84FF]/50 px-1.5 py-0.5 rounded-md leading-none">
+          {label}
+        </span>
+      )}
+      <span className="mt-0.5 text-[8px] font-mono font-bold text-[#0A84FF] bg-black/70 px-1 rounded leading-none">
+        {aqi}
+      </span>
+    </div>
+  );
+}
+
+/** Small AQI chip for nearby real hex samples */
+function NearbyAqiChip({ aqi, title }: { aqi: number; title: string }) {
+  const color = aqiColor(aqi);
+  return (
+    <div
+      className="flex items-center gap-1 rounded-full bg-black/80 border border-white/15 px-1.5 py-0.5 shadow-sm"
+      title={title}
+    >
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
+      <span className="text-[8px] font-mono font-bold text-white leading-none">{aqi}</span>
+    </div>
+  );
 }
 
 function MapContainer({
@@ -121,11 +277,22 @@ function MapContainer({
   compactLabels = false,
   highlightedHexIds = [],
   focusCenter = null,
+  stations = [],
+  samplePool,
 }: MapContainerProps) {
   const [showRealMap, setShowRealMap] = useState(isRealKey);
-  const [activeLayer, setActiveLayer] = useState<'h3' | 'heatmap' | 'sat'>('h3');
   const [mapsError, setMapsError] = useState<string | null>(null);
   const highlightSet = useMemo(() => new Set(highlightedHexIds || []), [highlightedHexIds]);
+
+  const pool = useMemo(() => {
+    if (samplePool && samplePool.length > 0) return samplePool;
+    return allHexes;
+  }, [samplePool, allHexes]);
+
+  const nearbySamples = useMemo(
+    () => buildNearbySamples(stations, pool, NEARBY_COUNT),
+    [stations, pool],
+  );
 
   useEffect(() => {
     if (!isRealKey && import.meta.env.DEV) {
@@ -137,18 +304,20 @@ function MapContainer({
   }, []);
 
   const bounds = useMemo(() => {
-    if (!allHexes || allHexes.length === 0) {
+    const pts = [
+      ...allHexes.map((h) => ({ lat: h.lat, lng: h.lng })),
+      ...stations.map((s) => ({ lat: s.lat, lng: s.lng })),
+    ].filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    if (pts.length === 0) {
       return { minLat: 12.9, maxLat: 13.05, minLng: 77.5, maxLng: 77.7 };
     }
-    const lats = allHexes.map((h) => h.lat);
-    const lngs = allHexes.map((h) => h.lng);
     return {
-      minLat: Math.min(...lats),
-      maxLat: Math.max(...lats),
-      minLng: Math.min(...lngs),
-      maxLng: Math.max(...lngs),
+      minLat: Math.min(...pts.map((p) => p.lat)),
+      maxLat: Math.max(...pts.map((p) => p.lat)),
+      minLng: Math.min(...pts.map((p) => p.lng)),
+      maxLng: Math.max(...pts.map((p) => p.lng)),
     };
-  }, [allHexes]);
+  }, [allHexes, stations]);
 
   const { minLat, maxLat, minLng, maxLng } = bounds;
   const latRange = maxLat - minLat || 0.01;
@@ -191,43 +360,32 @@ function MapContainer({
     );
   }
 
-  // AdvancedMarker requires a mapId; DEMO_MAP_ID works for demos when Vector maps are allowed.
   const effectiveMapId = MAP_ID || 'DEMO_MAP_ID';
 
   return (
     <div className="relative w-full h-full min-h-[320px] bg-black flex flex-col overflow-hidden">
-      <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2">
-        <div className="flex bg-apple-card/85 backdrop-blur-md rounded-full p-1 border border-apple-border shadow-lg animate-fade-in">
-          {(['h3', 'heatmap', 'sat'] as const).map((layer) => (
-            <button
-              key={layer}
-              type="button"
-              onClick={() => setActiveLayer(layer)}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-                activeLayer === layer
-                  ? 'bg-brand-blue text-white'
-                  : 'text-apple-secondary hover:text-white'
-              }`}
-            >
-              {layer === 'h3' ? 'H3 Grid' : layer === 'heatmap' ? 'Plume Overlay' : 'Sensor Hotspots'}
-            </button>
-          ))}
-        </div>
-
+      {/* Status chip — bottom-left area of map canvas (avoids MapPage top controls) */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
         <div className="bg-apple-card/85 backdrop-blur-md rounded-full px-3 py-1.5 border border-apple-border flex items-center gap-2 shadow-lg">
           <div
             className={`w-1.5 h-1.5 rounded-full ${isRealKey && showRealMap ? 'bg-brand-green' : 'bg-brand-orange animate-pulse'}`}
           />
           <span className="text-[10px] font-mono uppercase text-apple-secondary">
-            {isRealKey && showRealMap ? 'Google Maps Live' : 'High-Fidelity Simulation'}
+            {isRealKey && showRealMap ? 'Live map' : 'Simulation grid'}
           </span>
+          {stations.length > 0 && (
+            <span className="text-[10px] font-mono text-white/70 border-l border-white/10 pl-2">
+              {stations.length} sensors
+              {nearbySamples.length > 0 ? ` · ${nearbySamples.length} nearby` : ''}
+            </span>
+          )}
           {isRealKey && (
             <button
               type="button"
               onClick={() => setShowRealMap((v) => !v)}
               className="text-[10px] text-brand-blue underline hover:text-blue-300 ml-1"
             >
-              {showRealMap ? 'Sim' : 'Live map'}
+              {showRealMap ? 'Sim' : 'Live'}
             </button>
           )}
           {!isRealKey && (
@@ -235,7 +393,7 @@ function MapContainer({
               type="button"
               onClick={() =>
                 setMapsError(
-                  'No VITE_GOOGLE_MAPS_API_KEY loaded. Check frontend/.env and restart Vite (root .env must be UTF-8 without BOM).',
+                  'No VITE_GOOGLE_MAPS_API_KEY loaded. Check frontend/.env and restart Vite.',
                 )
               }
               className="text-[10px] text-brand-blue underline hover:text-blue-300 ml-1 flex items-center gap-1"
@@ -278,44 +436,58 @@ function MapContainer({
             >
               {!MAP_ID && <MapStyleController enabled />}
               <MapFocusController center={focusCenter} />
+
+              {/* Nearby real hex AQI chips around sensors */}
+              {nearbySamples.map((r) => (
+                <AdvancedMarker key={r.key} position={{ lat: r.lat, lng: r.lng }} zIndex={10}>
+                  <NearbyAqiChip
+                    aqi={r.aqi}
+                    title={`${r.name || r.hexId || 'Nearby hex'} · ${r.aqi} µg/m³ (near ${shortStationLabel(r.stationName, r.stationId)})`}
+                  />
+                </AdvancedMarker>
+              ))}
+
+              {/* Official CPCB/KSPCB diamonds */}
+              {stations.map((s) => (
+                <AdvancedMarker
+                  key={`st-${s.id}`}
+                  position={{ lat: s.lat, lng: s.lng }}
+                  zIndex={40}
+                >
+                  <StationDiamondIcon name={s.name} aqi={s.aqi} status={s.status} />
+                </AdvancedMarker>
+              ))}
+
+              {/* Hex labels — no glow layers */}
               {allHexes.map((hex) => {
                 const color = hexColor(hex, viewMode);
                 const label = formatLocationName(hex);
                 const isSelected = selectedHex?.id === hex.id;
                 const isCopilotHighlight = highlightSet.has(hex.id);
                 const confScore = hex.attributionConfidence ?? hex.confidence;
-                const confW =
-                  viewMode === 'confidence'
-                    ? confidenceVisualWeight(confScore)
-                    : { borderPx: 1.5, glow: 0 };
                 const borderColor = isCopilotHighlight ? '#BF5AF2' : color;
+                const borderW = isCopilotHighlight ? 2.5 : isSelected ? 2 : 1.5;
                 return (
                   <AdvancedMarker
                     key={hex.id}
                     position={{ lat: hex.lat, lng: hex.lng }}
                     onClick={() => onSelectHex(hex)}
+                    zIndex={isSelected || isCopilotHighlight ? 30 : 5}
                   >
                     <div
-                      className={`cursor-pointer rounded-lg bg-black/85 font-mono text-white transition-transform hover:scale-105 ${
+                      className={`cursor-pointer rounded-lg bg-black/88 font-mono text-white transition-transform hover:scale-105 ${
                         compactLabels ? 'p-1.5 text-[8px] max-w-[88px]' : 'p-2 text-[10px]'
-                      } ${isCopilotHighlight ? 'ring-2 ring-fuchsia-400/80 scale-105' : ''}`}
+                      } ${isCopilotHighlight ? 'ring-1 ring-fuchsia-400/70' : ''}`}
                       style={{
                         borderStyle: 'solid',
-                        borderWidth: isCopilotHighlight
-                          ? 2.5
-                          : viewMode === 'confidence'
-                            ? confW.borderPx
-                            : isSelected
-                              ? 2
-                              : 1.5,
+                        borderWidth: borderW,
                         borderColor,
-                        boxShadow: isCopilotHighlight
-                          ? `0 0 16px #BF5AF2aa, 0 0 0 2px #BF5AF2`
-                          : viewMode === 'confidence'
-                            ? `0 0 ${confW.glow}px ${color}${isSelected ? 'cc' : '88'}, 0 0 0 ${isSelected ? 2 : 0}px ${color}`
-                            : isSelected
-                              ? `0 0 0 2px ${color}`
-                              : undefined,
+                        // Selection outline only — no coloured glow / plume bloom
+                        boxShadow: isSelected
+                          ? `0 0 0 1px ${color}66`
+                          : isCopilotHighlight
+                            ? '0 0 0 1px #BF5AF266'
+                            : '0 1px 4px rgba(0,0,0,0.35)',
                       }}
                       title={`${label} · ${hex.pm25} µg/m³ · conf ${confScore ?? '—'}% · ${hex.id}${isCopilotHighlight ? ' · Copilot highlight' : ''}`}
                     >
@@ -324,10 +496,15 @@ function MapContainer({
                           Copilot
                         </span>
                       )}
-                      <span className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[76px]' : ''}`}>
+                      <span
+                        className={`font-bold font-sans block truncate ${compactLabels ? 'max-w-[76px]' : ''}`}
+                      >
                         {compactLabels && label.length > 12 ? `${label.slice(0, 11)}…` : label}
                       </span>
-                      <div className="text-right font-bold mt-0.5" style={{ color: isCopilotHighlight ? '#BF5AF2' : color }}>
+                      <div
+                        className="text-right font-bold mt-0.5"
+                        style={{ color: isCopilotHighlight ? '#BF5AF2' : color }}
+                      >
                         {viewMode === 'enforcement'
                           ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
                           : viewMode === 'confidence'
@@ -342,8 +519,8 @@ function MapContainer({
           </div>
         </APIProvider>
       ) : (
-        <div className="relative w-full h-full overflow-hidden bg-gradient-to-br from-apple-bg via-[#0c0c0e] to-apple-bg">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1c1c1e_1px,transparent_1px),linear-gradient(to_bottom,#1c1c1e_1px,transparent_1px)] bg-[size:40px_40px] opacity-40" />
+        <div className="relative w-full h-full overflow-hidden bg-[#050506]">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1c1c1e_1px,transparent_1px),linear-gradient(to_bottom,#1c1c1e_1px,transparent_1px)] bg-[size:40px_40px] opacity-30" />
 
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
@@ -357,15 +534,8 @@ function MapContainer({
               const isCopilotHighlight = highlightSet.has(hex.id);
               const label = formatLocationName(hex);
               const confScore = hex.attributionConfidence ?? hex.confidence;
-              const confW = confidenceVisualWeight(confScore);
               const strokeColor = isCopilotHighlight ? '#BF5AF2' : color;
-              const strokeW = isCopilotHighlight
-                ? 3
-                : viewMode === 'confidence'
-                  ? confW.borderPx
-                  : isSelected
-                    ? 2.5
-                    : 1.2;
+              const strokeW = isCopilotHighlight ? 2.5 : isSelected ? 2 : 1.2;
               return (
                 <g
                   key={hex.id}
@@ -374,34 +544,25 @@ function MapContainer({
                 >
                   {isCopilotHighlight && (
                     <polygon
-                      points={getHexPoints(x, y, (compactLabels ? 28 : 42) + 8)}
+                      points={getHexPoints(x, y, (compactLabels ? 28 : 42) + 6)}
                       fill="none"
                       stroke="#BF5AF2"
-                      strokeWidth={2}
-                      opacity={0.55}
-                    />
-                  )}
-                  {viewMode === 'confidence' && confW.glow > 4 && (
-                    <polygon
-                      points={getHexPoints(x, y, (compactLabels ? 28 : 42) + 4)}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={confW.glow / 4}
-                      opacity={0.35}
+                      strokeWidth={1.5}
+                      opacity={0.5}
                     />
                   )}
                   <polygon
                     points={getHexPoints(x, y, compactLabels ? 28 : 42)}
                     fill={
                       isCopilotHighlight
-                        ? '#BF5AF240'
+                        ? '#BF5AF228'
                         : isSelected
-                          ? `${color}40`
-                          : `${color}${viewMode === 'confidence' ? '28' : '15'}`
+                          ? `${color}35`
+                          : `${color}18`
                     }
                     stroke={strokeColor}
                     strokeWidth={strokeW}
-                    className="transition-all duration-300 hover:fill-white/10"
+                    className="transition-all duration-200 hover:fill-white/10"
                   />
                   <text
                     x={x}
@@ -428,21 +589,85 @@ function MapContainer({
                     {viewMode === 'enforcement'
                       ? `${hex.score10?.toFixed?.(1) ?? '—'} / ${hex.pm25 || '—'}µg`
                       : viewMode === 'confidence'
-                        ? `${hex.attributionConfidence ?? hex.confidence ?? '—'}%`
+                        ? `${confScore ?? '—'}%`
                         : `${hex.pm25} µg/m³`}
                   </text>
                 </g>
               );
             })}
-          </svg>
 
-          <div className="absolute bottom-6 right-6 p-4 rounded-2xl bg-apple-card/80 border border-apple-border backdrop-blur-md text-right max-w-[200px]">
-            <span className="text-[9px] font-mono uppercase text-apple-secondary block tracking-wider">
-              {isRealKey ? 'Simulation mode' : 'No Maps API key'}
-            </span>
-            <span className="text-sm font-bold text-white font-mono">{allHexes.length}</span>
-            <span className="text-[9px] text-apple-secondary block mt-1">grid targets</span>
-          </div>
+            {/* Nearby real samples (sim) */}
+            {nearbySamples.map((r) => {
+              const { x, y } = project(r.lat, r.lng);
+              const c = aqiColor(r.aqi);
+              return (
+                <g key={r.key}>
+                  <circle cx={x} cy={y} r={3} fill={c} stroke="#fff" strokeWidth={0.8} opacity={0.9} />
+                  <text
+                    x={x + 6}
+                    y={y + 3}
+                    fill="#fff"
+                    fontSize="7"
+                    fontFamily="monospace"
+                    className="font-bold"
+                  >
+                    {r.aqi}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Station diamonds (sim) */}
+            {stations.map((s) => {
+              const { x, y } = project(s.lat, s.lng);
+              const label = shortStationLabel(s.name, s.id);
+              return (
+                <g key={`st-${s.id}`}>
+                  <rect
+                    x={x - 6}
+                    y={y - 6}
+                    width={12}
+                    height={12}
+                    fill="#0A84FF"
+                    stroke="#fff"
+                    strokeWidth={1.5}
+                    transform={`rotate(45 ${x} ${y})`}
+                    rx={1}
+                  />
+                  <rect
+                    x={x - 2.5}
+                    y={y - 2.5}
+                    width={5}
+                    height={5}
+                    fill="#fff"
+                    transform={`rotate(45 ${x} ${y})`}
+                  />
+                  <text
+                    x={x}
+                    y={y + 18}
+                    fill="#fff"
+                    fontSize="8"
+                    fontFamily="Inter, sans-serif"
+                    textAnchor="middle"
+                    className="font-bold"
+                  >
+                    {label}
+                  </text>
+                  <text
+                    x={x}
+                    y={y + 28}
+                    fill="#0A84FF"
+                    fontSize="7"
+                    fontFamily="monospace"
+                    textAnchor="middle"
+                    className="font-bold"
+                  >
+                    {s.aqi}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
         </div>
       )}
     </div>

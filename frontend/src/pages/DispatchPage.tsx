@@ -348,34 +348,42 @@ export default function DispatchPage() {
           </div>
         )}
 
-        {/* Printable form */}
+        {/* Printable form — official operational letterhead */}
         <div
           id="dispatch-print-root"
-          className="glass-panel-strong rounded-[28px] p-6 md:p-10 border border-white/10 print:bg-white print:text-black print:shadow-none print:border-gray-200"
+          className="glass-panel-strong rounded-[28px] p-6 md:p-10 border border-white/10 print:bg-white print:text-black print:shadow-none print:border print:border-black print:rounded-none"
         >
-          {/* Header / letterhead */}
-          <div className="flex items-start justify-between gap-4 mb-8 border-b border-white/10 print:border-gray-300 pb-6">
-            <div>
-              <div className="flex items-center gap-2 text-brand-blue print:text-black mb-2">
-                <Shield size={22} />
-                <span className="text-[10px] font-mono uppercase tracking-[0.2em]">
-                  AQI Sentinel · Bengaluru Operations
-                </span>
+          {/* Official header */}
+          <div className="mb-6 print:mb-4 border-b-2 border-white/20 print:border-black pb-5 print:pb-3">
+            <div className="text-center mb-3 print:mb-2">
+              <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-apple-secondary print:text-black print:font-bold">
+                Government of Karnataka · Urban Air Quality Operations
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white print:text-black">
-                Unit Dispatch Order
-              </h1>
-              <p className="text-sm text-apple-secondary print:text-gray-600 mt-1">
-                Evidence-backed field action sheet for pollution control operations
-              </p>
+              <div className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary/80 print:text-gray-700 mt-0.5">
+                Supported by AQI Sentinel Decision Support · Bengaluru
+              </div>
             </div>
-            <div className="text-right shrink-0">
-              <div className="text-[10px] font-mono uppercase text-apple-secondary print:text-gray-500">
-                Unit ID
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white print:text-black uppercase">
+                  Field Inspection Dispatch Order
+                </h1>
+                <p className="text-xs text-apple-secondary print:text-gray-700 mt-1 max-w-md">
+                  Operational work order for authorised pollution-control field teams. Not a legal
+                  finding of liability.
+                </p>
               </div>
-              <div className="text-lg font-mono font-bold text-white print:text-black">{unitId}</div>
-              <div className="text-[10px] font-mono text-apple-secondary print:text-gray-500 mt-2">
-                Issued {issuedAt}
+              <div className="text-right shrink-0 border border-white/15 print:border-black rounded-lg px-3 py-2">
+                <div className="text-[9px] font-mono uppercase text-apple-secondary print:text-gray-600">
+                  Order No.
+                </div>
+                <div className="text-base font-mono font-bold text-white print:text-black">{unitId}</div>
+                <div className="text-[9px] font-mono text-apple-secondary print:text-gray-600 mt-1">
+                  {issuedAt}
+                </div>
+                <div className="text-[9px] font-bold uppercase mt-1 text-brand-orange print:text-black">
+                  Status: {statusLabel(status)}
+                </div>
               </div>
             </div>
           </div>
@@ -535,11 +543,11 @@ export default function DispatchPage() {
             />
           </section>
 
-          {/* Signature blocks */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-white/10 print:border-gray-300">
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
-                AQI Sentinel Operator
+          {/* Signature blocks — official style */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-6 border-t-2 border-white/15 print:border-black mt-2">
+            <div className="print:border print:border-black print:p-3 print:rounded-sm">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-black print:font-bold">
+                1. Control-room operator
               </span>
               <button
                 type="button"
@@ -556,15 +564,18 @@ export default function DispatchPage() {
                     <span className="text-xs font-semibold font-mono text-center px-2">
                       Signed · {operator || 'Operator'}
                     </span>
+                    <span className="text-[9px] font-mono print:text-gray-600">
+                      Date: _______________
+                    </span>
                   </>
                 ) : (
                   <span className="text-xs text-center px-3">Tap to acknowledge dispatch</span>
                 )}
               </button>
             </div>
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-gray-600">
-                Lead Officer In-Charge
+            <div className="print:border print:border-black print:p-3 print:rounded-sm">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-secondary print:text-black print:font-bold">
+                2. Lead officer in-charge
               </span>
               <button
                 type="button"
@@ -581,6 +592,9 @@ export default function DispatchPage() {
                     <span className="text-xs font-semibold font-mono text-center px-2">
                       Signed · {officer || 'Lead officer'}
                     </span>
+                    <span className="text-[9px] font-mono print:text-gray-600">
+                      Date: _______________
+                    </span>
                   </>
                 ) : (
                   <span className="text-xs text-center px-3">Tap to sign as lead officer</span>
@@ -589,8 +603,22 @@ export default function DispatchPage() {
             </div>
           </section>
 
-          <p className="mt-6 text-[9px] font-mono text-apple-secondary/70 print:text-gray-500 text-center">
-            AQI SENTINEL · CONFIDENTIAL OPERATIONAL USE · NOT A LEGAL FINDING
+          <div className="mt-6 pt-4 border-t border-white/10 print:border-black grid grid-cols-1 sm:grid-cols-3 gap-3 text-[9px] font-mono text-apple-secondary print:text-gray-600">
+            <div>
+              <div className="uppercase tracking-wider mb-1">Issuing system</div>
+              <div className="text-white print:text-black">AQI Sentinel · Bengaluru demo</div>
+            </div>
+            <div>
+              <div className="uppercase tracking-wider mb-1">Classification</div>
+              <div className="text-white print:text-black">Operational · Investigation aid</div>
+            </div>
+            <div>
+              <div className="uppercase tracking-wider mb-1">Disclaimer</div>
+              <div className="text-white print:text-black">Not a legal finding of liability</div>
+            </div>
+          </div>
+          <p className="mt-4 text-[9px] font-mono text-apple-secondary/70 print:text-gray-500 text-center">
+            FIELD INSPECTION DISPATCH · CONFIDENTIAL OPERATIONAL USE · VERIFY ON SITE
           </p>
         </div>
 

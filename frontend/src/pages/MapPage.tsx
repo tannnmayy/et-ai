@@ -5,6 +5,7 @@ import { PriorityHex } from '../types';
 import MapContainer from '../components/MapContainer';
 import SourceIcon from '../components/SourceIcon';
 import { formatLocationName } from '../services/enforcementUtils';
+import type { ExtremesRankingMode } from '../services/geospatialService';
 import { useMapCopilotContext } from '../context/MapCopilotContext';
 import {
   Shield,
@@ -16,6 +17,7 @@ import {
   Bot,
   Sparkles,
   X,
+  Info,
 } from 'lucide-react';
 
 /** Map view mode: cleanest-only, both, or most-polluted with selectable depth. */
@@ -28,10 +30,10 @@ type MapLayerMode = 'aqi' | 'confidence';
 type PollutedDepth = 15 | 30 | 50 | 100;
 
 const POLLUTED_OPTIONS: { value: PollutedDepth; label: string }[] = [
-  { value: 15, label: 'Top 15 Most Polluted' },
-  { value: 30, label: 'Top 30 Most Polluted' },
-  { value: 50, label: 'Top 50 Most Polluted' },
-  { value: 100, label: 'Show All Polluted (top 100)' },
+  { value: 15, label: 'Top 15' },
+  { value: 30, label: 'Top 30' },
+  { value: 50, label: 'Top 50' },
+  { value: 100, label: 'Top 100' },
 ];
 
 const CLEANEST_COUNT = 15;
@@ -47,9 +49,25 @@ export default function MapPage() {
     h3_cell: mapCtxH3,
     label: mapCtxLabel,
   } = useMapCopilotContext();
-  const { data: extremes, isError: extremesError, isLoading: extremesLoading } = useCityExtremes();
+  /**
+   * Dual mode for worst list:
+   * - global: absolute highest fused PM (scientific)
+   * - local_peaks: worst hexes per station catchment (operational)
+   * Default global preserves legacy "Top N most polluted" behaviour.
+   */
+  const [rankingMode, setRankingMode] = useState<ExtremesRankingMode>('global');
+  const {
+    data: extremes,
+    isError: extremesError,
+    isLoading: extremesLoading,
+    isFetching: extremesFetching,
+  } = useCityExtremes(rankingMode);
   const { data: priorities = [] } = usePriorities();
-  const { isError: stationsError, isLoading: stationsLoading } = useStations();
+  const {
+    data: stations = [],
+    isError: stationsError,
+    isLoading: stationsLoading,
+  } = useStations();
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
   const [extremeMode, setExtremeMode] = useState<ExtremeMode>('both');
@@ -79,6 +97,18 @@ export default function MapPage() {
     }
     return Array.from(byId.values());
   }, [baseHexes, priorities]);
+
+  /**
+   * Full pool of real fused-PM hexes for nearby-station samples.
+   * Includes cleanest + polluted extremes + priorities so each sensor can find ≥5 neighbours.
+   */
+  const samplePool = useMemo(() => {
+    const byId = new Map<string, PriorityHex>();
+    for (const h of cleanestPool) if (h?.id) byId.set(h.id, h);
+    for (const h of pollutedPool) if (h?.id) byId.set(h.id, h);
+    for (const p of priorities || []) if (p?.id) byId.set(p.id, p);
+    return Array.from(byId.values());
+  }, [cleanestPool, pollutedPool, priorities]);
 
   const highlightedHexIds = useMemo(
     () => mapActions?.highlight_h3_cells || [],
@@ -123,10 +153,6 @@ export default function MapPage() {
   const activeHex = selectedHex || allHexes[0] || null;
   const hasMapCtx = Boolean(mapCtxStation || mapCtxH3);
   const hasCopilotHighlights = highlightedHexIds.length > 0;
-  const pollutedLabel =
-    POLLUTED_OPTIONS.find((o) => o.value === pollutedDepth)?.label ??
-    `Top ${pollutedDepth} Most Polluted`;
-
   if (extremesLoading || stationsLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
@@ -195,108 +221,53 @@ export default function MapPage() {
           compactLabels={compactLabels}
           highlightedHexIds={highlightedHexIds}
           focusCenter={focusCenter}
+          stations={stations}
+          samplePool={samplePool}
         />
 
-        {/* Map ↔ Copilot status chips */}
-        {(hasCopilotHighlights || hasMapCtx) && (
-          <div className="absolute top-4 right-4 z-20 flex flex-col gap-2 items-end max-w-[280px]">
-            {hasCopilotHighlights && (
-              <div className="ui-glass ui-glass-floating rounded-2xl px-3 py-2 border border-fuchsia-500/40 shadow-lg flex items-start gap-2">
-                <Sparkles size={14} className="text-fuchsia-400 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">
-                    Copilot highlights
-                  </div>
-                  <div className="text-[10px] text-white/80 font-mono truncate">
-                    {highlightedHexIds.length} hex
-                    {highlightedHexIds.length === 1 ? '' : 'es'}
-                    {mapActions?.focus_on?.label
-                      ? ` · ${mapActions.focus_on.label}`
-                      : ''}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => clearMapActions()}
-                  className="p-1 rounded-full hover:bg-white/10 text-apple-secondary hover:text-white shrink-0"
-                  title="Clear Copilot highlights"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            )}
-            {hasMapCtx && (
-              <div className="ui-glass ui-glass-subtle rounded-2xl px-3 py-2 border border-brand-blue/40 flex items-center gap-2">
-                <MapPin size={12} className="text-brand-blue shrink-0" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-blue">
-                  Map context active
-                </span>
-                <span className="text-[10px] text-white/70 font-mono truncate max-w-[120px]">
-                  {mapCtxLabel || mapCtxStation || String(mapCtxH3 || '').slice(0, 10)}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Layer toggle — prominent top-left control */}
-        <div className="absolute top-4 left-4 z-20 flex flex-col gap-1.5">
-          <div className="text-[9px] font-mono uppercase tracking-[0.18em] text-apple-secondary px-1">
-            Map layer
-          </div>
-          <div className="flex gap-1 ui-glass ui-glass-floating p-1.5 rounded-2xl shadow-2xl shadow-black/40">
+        {/* Left: layer toggle only */}
+        <div className="absolute top-4 left-4 z-20">
+          <div className="flex ui-glass ui-glass-floating rounded-full p-1 shadow-xl">
             {(
               [
-                { id: 'aqi' as const, label: 'PM2.5 AQI', hint: 'Pollution intensity' },
-                {
-                  id: 'confidence' as const,
-                  label: 'Attribution Confidence',
-                  hint: 'How much we trust source mix',
-                },
+                { id: 'aqi' as const, label: 'AQI' },
+                { id: 'confidence' as const, label: 'Confidence' },
               ] as const
             ).map((opt) => (
               <button
                 key={opt.id}
                 type="button"
                 onClick={() => setMapLayer(opt.id)}
-                title={opt.hint}
-                className={`px-3.5 py-2.5 rounded-xl text-[11px] font-bold tracking-wide transition-colors min-h-[44px] active:scale-[0.97] ${
+                className={`px-4 py-2 rounded-full text-[11px] font-bold tracking-wide transition-colors min-h-[40px] ${
                   mapLayer === opt.id
-                    ? opt.id === 'confidence'
-                      ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30'
-                      : 'bg-white/15 text-white border border-white/20'
-                    : 'text-apple-secondary hover:text-white hover:bg-white/5'
+                    ? 'bg-brand-blue text-white shadow-md'
+                    : 'text-apple-secondary hover:text-white'
                 }`}
               >
                 {opt.label}
               </button>
             ))}
           </div>
-          {mapLayer === 'confidence' && (
-            <div className="text-[10px] text-brand-blue ui-glass ui-glass-subtle border-brand-blue/25 rounded-xl px-2.5 py-1.5 max-w-[260px] leading-snug">
-              Thicker glow = higher confidence. Low-confidence hexes stay thin/dim.
-            </div>
-          )}
         </div>
 
-        {/* Legend Overlay (Floating at bottom-left) */}
-        <div className="absolute bottom-6 left-6 z-10 ui-glass ui-glass-floating p-4 rounded-2xl max-w-[220px]">
-          <div className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest mb-3">
-            {mapLayer === 'confidence' ? 'Attribution confidence' : 'PM2.5 Levels (µg/m³)'}
+        {/* Legend — bottom-left, compact, no glow dots */}
+        <div className="absolute bottom-6 left-4 z-10 ui-glass ui-glass-floating p-3.5 rounded-2xl max-w-[210px]">
+          <div className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest mb-2.5">
+            {mapLayer === 'confidence' ? 'Attribution confidence' : 'Legend'}
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             {mapLayer === 'confidence' ? (
               <>
                 {[
                   { c: '#34C759', r: '80–100', l: 'High' },
                   { c: '#0A84FF', r: '55–79', l: 'Medium' },
                   { c: '#FF9F0A', r: '30–54', l: 'Low' },
-                  { c: '#ff453a', r: '0–29', l: 'Very Low' },
+                  { c: '#ff453a', r: '18–29', l: 'Very Low' },
                 ].map((row) => (
                   <div key={row.l} className="flex items-center justify-between text-xs font-semibold">
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: row.c, boxShadow: `0 0 6px ${row.c}` }} />
-                      <span className="font-mono text-white">{row.r}</span>
+                      <span className="w-2 h-2 rounded-full" style={{ background: row.c }} />
+                      <span className="font-mono text-white text-[11px]">{row.r}</span>
                     </div>
                     <span className="text-apple-secondary text-[10px] font-medium">{row.l}</span>
                   </div>
@@ -304,162 +275,276 @@ export default function MapPage() {
               </>
             ) : (
               <>
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#34C759] shadow-[0_0_6px_#34C759]" />
-                <span className="font-mono text-white">0 - 50</span>
-              </div>
-              <span className="text-apple-secondary text-[10px] font-medium">Good</span>
-            </div>
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#FFCC00] shadow-[0_0_6px_#FFCC00]" />
-                <span className="font-mono text-white">51 - 100</span>
-              </div>
-              <span className="text-apple-secondary text-[10px] font-medium">Moderate</span>
-            </div>
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-brand-orange shadow-[0_0_6px_#FF9F0A]" />
-                <span className="font-mono text-white">101 - 250</span>
-              </div>
-              <span className="text-apple-secondary text-[10px] font-medium">Poor</span>
-            </div>
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-brand-red shadow-[0_0_6px_#ff453a]" />
-                <span className="font-mono text-white">251+</span>
-              </div>
-              <span className="text-apple-secondary text-[10px] font-medium">Severe</span>
-            </div>
+                {[
+                  { c: '#34C759', r: '0–50', l: 'Good' },
+                  { c: '#FFCC00', r: '51–100', l: 'Moderate' },
+                  { c: '#FF9F0A', r: '101–250', l: 'Poor' },
+                  { c: '#ff453a', r: '251+', l: 'Severe' },
+                ].map((row) => (
+                  <div key={row.l} className="flex items-center justify-between text-xs font-semibold">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ background: row.c }} />
+                      <span className="font-mono text-white text-[11px]">{row.r}</span>
+                    </div>
+                    <span className="text-apple-secondary text-[10px] font-medium">{row.l}</span>
+                  </div>
+                ))}
               </>
             )}
           </div>
-
-          {/* Honesty note about data coverage */}
-          {extremes && (
-            <div className="mt-3 pt-3 border-t border-apple-border/40">
-              <div className="text-[8px] font-mono uppercase tracking-wider text-apple-secondary/60 leading-relaxed">
-                Ranked among {extremes.totalWithData} hexagons with live station coverage out of {extremes.totalInGrid} total
-              </div>
+          <div className="mt-3 pt-2.5 border-t border-white/10 space-y-1.5">
+            <div className="flex items-center gap-2 text-[10px] text-white/85">
+              <span className="relative w-3.5 h-3.5 shrink-0">
+                <span className="absolute inset-0 rotate-45 rounded-[1px] bg-[#0A84FF] border border-white/80" />
+              </span>
+              <span>Official CPCB/KSPCB sensor</span>
             </div>
-          )}
+            <div className="flex items-center gap-2 text-[10px] text-white/85">
+              <span className="inline-flex items-center rounded-full bg-black/60 border border-white/20 px-1 py-0.5 text-[8px] font-mono font-bold text-white">
+                42
+              </span>
+              <span>Nearby fused AQI (µg/m³)</span>
+            </div>
+            <p className="text-[8px] text-apple-secondary/80 leading-snug">
+              Nearby samples = real fused hexes within ~4.5 km of a station — not synthetic.
+            </p>
+            {extremes && (
+              <p className="text-[8px] font-mono text-apple-secondary/50 leading-relaxed">
+                {extremes.totalWithData} hexes with data · {extremes.totalInGrid} grid
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Map layer control: cleanest / both / polluted depth dropdown */}
-        <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2 max-w-[min(100vw-2rem,280px)]">
-          <div className="flex flex-wrap justify-end ui-glass ui-glass-floating rounded-full p-1 shadow-lg">
-            <button
-              type="button"
-              onClick={() => setExtremeMode('best')}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all min-h-[36px] ${
-                extremeMode === 'best'
-                  ? 'bg-brand-green text-white'
-                  : 'text-apple-secondary hover:text-white'
-              }`}
-            >
-              Top {CLEANEST_COUNT} Cleanest
-            </button>
-            <button
-              type="button"
-              onClick={() => setExtremeMode('both')}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all min-h-[36px] ${
-                extremeMode === 'both'
-                  ? 'bg-brand-blue text-white'
-                  : 'text-apple-secondary hover:text-white'
-              }`}
-            >
-              Both
-            </button>
-            <button
-              type="button"
-              onClick={() => setExtremeMode('worst')}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all min-h-[36px] ${
-                extremeMode === 'worst'
-                  ? 'bg-brand-red text-white'
-                  : 'text-apple-secondary hover:text-white'
-              }`}
-            >
-              Most Polluted
-            </button>
-          </div>
-
-          {(extremeMode === 'worst' || extremeMode === 'both') && (
-            <div className="flex flex-col items-end gap-1 w-full">
-              <label className="flex items-center gap-2 rounded-full px-3 py-2 bg-apple-card/90 backdrop-blur-md border border-apple-border shadow-lg w-full max-w-[280px]">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-apple-secondary shrink-0">
-                  Depth
-                </span>
-                <select
-                  value={pollutedDepth}
-                  onChange={(e) => {
-                    setPollutedDepth(Number(e.target.value) as PollutedDepth);
-                    setExtremeMode((m) => (m === 'best' ? 'worst' : m));
-                  }}
-                  className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white outline-none cursor-pointer"
-                  aria-label="Number of most polluted hexes to show"
-                >
-                  {POLLUTED_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value} className="bg-apple-card text-white">
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="text-[9px] font-mono text-apple-secondary/80 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
-                {extremeMode === 'both' ? (
-                  <>
-                    Showing {cleanestShown.length} cleanest + {pollutedShown.length} polluted
-                    {pollutedDepth >= 100 || pollutedShown.length >= pollutedAvailable
-                      ? pollutedAvailable >= 100
-                        ? ' · polluted capped at 100'
-                        : ''
-                      : ` · of ${pollutedAvailable} loaded`}
-                  </>
-                ) : (
-                  <>
-                    Showing {pollutedShown.length}
-                    {pollutedAvailable > pollutedShown.length
-                      ? ` of ${pollutedAvailable} polluted hexes`
-                      : ' polluted hexes'}
-                    {pollutedDepth >= 100 ? ' (top 100 cap)' : ''}
-                  </>
-                )}
+        {/* Right stack: controls (top) + optional detail (below) — no overlap */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2 w-[min(100vw-2rem,288px)] max-h-[calc(100%-2rem)] pointer-events-none">
+          {/* Unified map controls card */}
+          <div className="pointer-events-auto w-full ui-glass ui-glass-floating rounded-2xl border border-white/10 shadow-xl overflow-hidden">
+            <div className="px-3 pt-2.5 pb-1.5">
+              <div className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary">
+                Hex view
               </div>
-              {extremeMode === 'worst' && (
-                <div className="text-[9px] font-bold uppercase tracking-wider text-brand-red/90 px-1">
-                  {pollutedLabel}
+            </div>
+            <div className="px-2 pb-2">
+              <div className="flex rounded-xl overflow-hidden bg-black/45 border border-white/8">
+                {(
+                  [
+                    { id: 'best' as const, label: 'Cleanest', active: 'bg-brand-green text-white' },
+                    { id: 'both' as const, label: 'Both', active: 'bg-brand-blue text-white' },
+                    { id: 'worst' as const, label: 'Polluted', active: 'bg-brand-red text-white' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setExtremeMode(opt.id)}
+                    className={`flex-1 px-2 py-2.5 text-[11px] font-bold transition-colors min-h-[40px] ${
+                      extremeMode === opt.id
+                        ? opt.active
+                        : 'text-apple-secondary hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Dual ranking mode — only relevant when polluted hexes are shown */}
+              {(extremeMode === 'worst' || extremeMode === 'both') && (
+                <div className="mt-2.5 space-y-2">
+                  <div className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary px-0.5">
+                    Polluted ranking
+                  </div>
+                  <div className="flex rounded-xl overflow-hidden bg-black/45 border border-white/8">
+                    <button
+                      type="button"
+                      onClick={() => setRankingMode('global')}
+                      title="Absolute highest fused PM2.5 among all covered hexes"
+                      className={`flex-1 px-2 py-2 text-[10px] font-bold min-h-[38px] transition-colors leading-tight ${
+                        rankingMode === 'global'
+                          ? 'bg-brand-orange text-white'
+                          : 'text-apple-secondary hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      Global highest
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRankingMode('local_peaks')}
+                      title="Worst fused hexes near each official station, then merged"
+                      className={`flex-1 px-2 py-2 text-[10px] font-bold min-h-[38px] transition-colors leading-tight ${
+                        rankingMode === 'local_peaks'
+                          ? 'bg-brand-blue text-white'
+                          : 'text-apple-secondary hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      Local peaks
+                    </button>
+                  </div>
+                  <select
+                    value={pollutedDepth}
+                    onChange={(e) => {
+                      setPollutedDepth(Number(e.target.value) as PollutedDepth);
+                      setExtremeMode((m) => (m === 'best' ? 'worst' : m));
+                    }}
+                    className="w-full bg-black/50 border border-white/10 rounded-xl text-[11px] font-semibold text-white px-2.5 py-2 outline-none"
+                    aria-label="Polluted hex count"
+                  >
+                    {POLLUTED_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value} className="bg-apple-card">
+                        {o.label} · {rankingMode === 'local_peaks' ? 'local peaks' : 'global'}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Honesty banner for active ranking mode */}
+                  <div
+                    className={`rounded-xl border px-2.5 py-2 flex gap-2 ${
+                      rankingMode === 'local_peaks'
+                        ? 'bg-brand-blue/10 border-brand-blue/30'
+                        : 'bg-brand-orange/10 border-brand-orange/30'
+                    }`}
+                  >
+                    <Info
+                      size={12}
+                      className={`shrink-0 mt-0.5 ${
+                        rankingMode === 'local_peaks' ? 'text-brand-blue' : 'text-brand-orange'
+                      }`}
+                    />
+                    <div className="min-w-0 text-[9px] leading-relaxed text-white/80">
+                      {rankingMode === 'local_peaks' ? (
+                        <>
+                          <strong className="text-brand-blue">Local peaks</strong>
+                          {' — '}
+                          worst hexes near each PM2.5 station (~5 km), merged. Shows dirty
+                          pockets city-wide; not the same as global Top N.
+                        </>
+                      ) : (
+                        <>
+                          <strong className="text-brand-orange">Global highest</strong>
+                          {' — '}
+                          absolute fused PM among covered hexes. A high station can create a
+                          large northern tie plateau (e.g. Hebbal).
+                          {extremes?.tieCountAtMax != null &&
+                            extremes.tieCountAtMax > pollutedDepth && (
+                              <>
+                                {' '}
+                                <span className="text-white/60">
+                                  ~{extremes.tieCountAtMax} hexes near max
+                                  {extremes.maxFusedPm25 != null
+                                    ? ` (${Math.round(extremes.maxFusedPm25)} µg/m³)`
+                                    : ''}
+                                  .
+                                </span>
+                              </>
+                            )}
+                        </>
+                      )}
+                      {extremesFetching && (
+                        <span className="block text-brand-blue mt-1 animate-pulse">
+                          Updating ranking…
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="text-[9px] font-mono text-apple-secondary px-1 pt-2">
+                {extremeMode === 'best' && `${cleanestShown.length} cleanest hexes`}
+                {extremeMode === 'both' &&
+                  `${cleanestShown.length} clean + ${pollutedShown.length} polluted`}
+                {extremeMode === 'worst' && `${pollutedShown.length} polluted hexes`}
+                {stations.length > 0 && ` · ${stations.length} sensors`}
+              </div>
+              {extremes && (
+                <div className="text-[8px] font-mono text-apple-secondary/70 px-1 pt-1 leading-snug">
+                  Ranked among {extremes.totalWithData.toLocaleString()} fused hexes of{' '}
+                  {extremes.totalInGrid.toLocaleString()} grid
+                  {extremes.fusionRangeM != null &&
+                    ` · ~${Math.round(extremes.fusionRangeM / 1000)} km range`}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Floating Sidebar Detail Panel (Right side) */}
-        {activeHex && (
-          <div className="absolute right-6 top-24 bottom-6 w-80 ui-glass ui-glass-strong rounded-3xl shadow-2xl flex flex-col overflow-hidden z-20">
+            {/* Copilot / map context — inside same card to avoid extra floating boxes */}
+            {(hasCopilotHighlights || hasMapCtx) && (
+              <div className="border-t border-white/10 px-3 py-2.5 space-y-2">
+                {hasCopilotHighlights && (
+                  <div className="flex items-start gap-2 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/30 px-2.5 py-2">
+                    <Sparkles size={13} className="text-fuchsia-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">
+                        Copilot highlights
+                      </div>
+                      <div className="text-[10px] text-white/75 font-mono truncate">
+                        {highlightedHexIds.length} hex
+                        {highlightedHexIds.length === 1 ? '' : 'es'}
+                        {mapActions?.focus_on?.label
+                          ? ` · ${mapActions.focus_on.label}`
+                          : ''}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => clearMapActions()}
+                      className="p-1 rounded-full hover:bg-white/10 text-apple-secondary hover:text-white shrink-0"
+                      title="Clear Copilot highlights"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+                {hasMapCtx && (
+                  <div className="flex items-center gap-2 rounded-xl bg-brand-blue/10 border border-brand-blue/30 px-2.5 py-2">
+                    <MapPin size={12} className="text-brand-blue shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-brand-blue shrink-0">
+                      Context
+                    </span>
+                    <span className="text-[10px] text-white/70 font-mono truncate">
+                      {mapCtxLabel || mapCtxStation || String(mapCtxH3 || '').slice(0, 12)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Detail panel — scrolls inside stack, does not cover controls */}
+          {activeHex && (
+          <div className="pointer-events-auto w-full flex-1 min-h-0 max-h-[min(58vh,520px)] ui-glass ui-glass-strong rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-white/10">
             {/* Header */}
-            <div className="p-5 border-b border-white/10 flex flex-col gap-1 bg-black/20">
-              <span className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest flex items-center gap-1.5">
-                <MapPin size={10} className="text-brand-blue" />
-                {formatLocationName(activeHex)}
-              </span>
-              <h2 className="text-lg font-bold text-white tracking-tight leading-snug mt-1">
-                Local Plume Analysis
+            <div className="p-4 border-b border-white/10 flex flex-col gap-0.5 bg-black/25 shrink-0">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest flex items-center gap-1.5 min-w-0">
+                  <MapPin size={10} className="text-brand-blue shrink-0" />
+                  <span className="truncate">{formatLocationName(activeHex)}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedHex(null)}
+                  className="p-1 rounded-full hover:bg-white/10 text-apple-secondary hover:text-white shrink-0"
+                  title="Close detail"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <h2 className="text-base font-bold text-white tracking-tight leading-snug mt-1">
+                Area detail
               </h2>
               <span
-                className="text-xs text-apple-secondary font-sans leading-none block"
+                className="text-[10px] text-apple-secondary font-mono truncate"
                 title={activeHex.id}
               >
-                {formatLocationName(activeHex)}
+                {activeHex.id}
               </span>
             </div>
 
             {/* Readouts */}
-            <div className="p-5 flex flex-col gap-6 flex-1 overflow-y-auto">
-              {/* Giant AQI Circle */}
-              <div className="flex items-end gap-3.5">
-                <div className={`text-5xl font-bold font-mono select-none leading-none ${
+            <div className="p-4 flex flex-col gap-4 flex-1 overflow-y-auto min-h-0">
+              {/* Giant AQI */}
+              <div className="flex items-end gap-3">
+                <div className={`text-4xl font-bold font-mono select-none leading-none ${
                   activeHex.pm25 <= 50 ? 'text-[#34C759]' : activeHex.pm25 <= 100 ? 'text-[#FFCC00]' : activeHex.pm25 <= 250 ? 'text-brand-orange' : 'text-brand-red'
                 }`}>
                   {activeHex.pm25}
@@ -497,11 +582,11 @@ export default function MapPage() {
                   })()}
                 </div>
 
-                {/* Attribution confidence — primary highlighted card */}
+                {/* Attribution confidence — calm, no blue glow bloom */}
                 {(activeHex.attributionConfidence != null || activeHex.confidence > 0) && (
-                  <div className="mt-3 rounded-2xl border border-brand-blue/35 bg-gradient-to-br from-brand-blue/15 to-white/[0.03] px-3.5 py-3 shadow-lg shadow-brand-blue/10">
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-brand-blue font-bold">
+                  <div className="mt-3 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-apple-secondary font-bold">
                         Attribution confidence
                       </span>
                       <span
@@ -518,17 +603,17 @@ export default function MapPage() {
                         {activeHex.attributionConfidenceLevel || '—'}
                       </span>
                     </div>
-                    <div className="text-3xl font-mono font-bold text-white leading-none">
+                    <div className="text-2xl font-mono font-bold text-white leading-none">
                       {activeHex.attributionConfidence ?? activeHex.confidence}
-                      <span className="text-base text-apple-secondary">%</span>
+                      <span className="text-sm text-apple-secondary">%</span>
                     </div>
                     {activeHex.confidenceExplanation && (
-                      <p className="text-[12px] text-white/85 mt-2 leading-snug font-medium">
+                      <p className="text-[11px] text-white/75 mt-1.5 leading-snug">
                         {activeHex.confidenceExplanation}
                       </p>
                     )}
                     {activeHex.nearestStationDistanceM != null && (
-                      <p className="text-[10px] font-mono text-white/45 mt-1.5">
+                      <p className="text-[10px] font-mono text-white/40 mt-1">
                         Nearest station · {(activeHex.nearestStationDistanceM / 1000).toFixed(1)} km
                       </p>
                     )}
@@ -550,7 +635,6 @@ export default function MapPage() {
                     );
                   }
 
-                  const pct = (v: number) => `${Math.round(v * 100)}%`;
                   const pctVal = (v: number) => Math.round(v * 100);
                   const segments = [
                     { key: 'construction', label: 'Const.', color: '#A2845E', value: pctVal(attr.construction) },
@@ -596,63 +680,45 @@ export default function MapPage() {
                 })()}
               </div>
 
-              {/* Signature Wind compass gauge */}
-              <div className="bg-apple-card border border-apple-border rounded-xl p-4 flex justify-between items-center">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-mono uppercase text-apple-secondary block">
-                    Local Wind Vector
-                  </span>
-                  <div className="text-xs font-semibold text-white mt-1">
-                    Blowing towards East
-                  </div>
-                  <span className="text-[9px] font-mono text-apple-secondary mt-1">
-                    Sensor array Alpha-2
+              {activeHex.attributionMethod && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-mono text-apple-secondary">
+                  Method ·{' '}
+                  <span className="text-white/80">
+                    {(activeHex.attributionMethod || '').replace(/_/g, ' ')}
                   </span>
                 </div>
-
-                {/* Wind Compass SVG */}
-                <div className="relative w-16 h-16 flex items-center justify-center">
-                  <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" fill="none" r="44" stroke="#2C2C2E" strokeDasharray="3 3" strokeWidth="2" />
-                    <circle cx="50" cy="50" fill="none" r="44" stroke="#FF9F0A" strokeWidth="3" strokeDasharray="120 280" strokeLinecap="round" />
-                    <polygon fill="#FF9F0A" points="50,14 46,36 54,36" transform="rotate(90, 50, 50)" />
-                  </svg>
-                  <div className="z-10 flex flex-col items-center">
-                    <span className="text-[13px] font-mono font-bold text-white leading-none">12</span>
-                    <span className="text-[8px] text-apple-secondary leading-none uppercase mt-0.5">km/h</span>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Actions: Ask Copilot (Map → Copilot) + Dispatch */}
-            <div className="p-5 border-t border-apple-border bg-apple-card/20 space-y-2">
+            <div className="p-3 border-t border-white/10 bg-black/30 space-y-2 shrink-0">
               <button
                 type="button"
                 onClick={() => handleAskCopilot(activeHex)}
-                className="w-full min-h-[44px] py-3 rounded-full text-xs font-bold uppercase tracking-wider transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-indigo-600/20 border border-indigo-400/30"
+                className="w-full min-h-[42px] py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-colors duration-200 flex items-center justify-center gap-2 bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/25"
               >
                 <Bot size={14} />
-                Ask Copilot about this area
+                Ask Copilot
               </button>
               <button
                 type="button"
                 onClick={() => handleDispatch(activeHex)}
-                className="w-full min-h-[44px] py-3 rounded-full text-xs font-bold uppercase tracking-wider transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg bg-brand-blue hover:bg-blue-600 text-white shadow-brand-blue/15"
+                className="w-full min-h-[42px] py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-colors duration-200 flex items-center justify-center gap-2 bg-brand-blue hover:bg-blue-600 text-white"
               >
                 <Shield size={14} />
-                {dispatchedUnits[activeHex.id] ? 'Open Dispatch Sheet' : 'Dispatch Inspection Unit'}
+                {dispatchedUnits[activeHex.id] ? 'Open Dispatch' : 'Dispatch unit'}
               </button>
             </div>
           </div>
-        )}
+          )}
+        </div>
 
-        {/* Scroll hint */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 pointer-events-none">
-          <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-white/70 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+        {/* Scroll hint — offset so it does not collide with map status chip */}
+        <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-[5] flex flex-col items-center gap-1 pointer-events-none">
+          <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-white/60 bg-black/45 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
             Scroll for hotspots
           </span>
-          <ChevronDown size={16} className="text-white/60 animate-bounce" />
+          <ChevronDown size={14} className="text-white/45 animate-bounce" />
         </div>
       </div>
 

@@ -24,7 +24,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
         { id: 'map', label: t('nav.map') },
         { id: 'enforcement', label: t('nav.enforcement') },
         { id: 'copilot', label: t('nav.copilot') },
-        { id: 'neighbourhoods', label: t('nav.neighbourhoods') },
+        { id: 'citizens', label: t('nav.citizens') || t('nav.neighbourhoods') },
         { id: 'insights', label: t('nav.insights') },
       ] as const,
     [t],

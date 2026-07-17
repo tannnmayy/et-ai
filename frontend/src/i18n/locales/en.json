@@ -25,9 +25,10 @@
   "nav.map": "Map",
   "nav.enforcement": "Enforcement",
   "nav.copilot": "Copilot",
-  "nav.neighbourhoods": "Neighbourhoods",
+  "nav.neighbourhoods": "Citizens",
+  "nav.citizens": "Citizens",
   "nav.insights": "Insights",
-  "nav.neighbourhood_finder": "Neighbourhood Finder",
+  "nav.neighbourhood_finder": "Citizen Mode",
 
   "role.enforcement": "Enforcement Authority",
   "role.citizen": "Citizen",

@@ -94,26 +94,26 @@ def _template_enforcement_guidance(
 ACTIONABILITY_INDUSTRIAL: float = 1.0
 ACTIONABILITY_CONSTRUCTION: float = 1.0
 ACTIONABILITY_BURNING: float = 1.0
-ACTIONABILITY_TRAFFIC: float = 0.28
+ACTIONABILITY_TRAFFIC: float = 0.42
 
 # Extra actionability for traffic on high corridor-score hexes (additive).
-# At corridor_score=1.0 → traffic actionability ≈ 0.28 + 0.17 = 0.45
-# (still well below construction/industrial at 1.0).
-ACTIONABILITY_TRAFFIC_CORRIDOR_BONUS: float = 0.17
+# At corridor_score=1.0 → traffic actionability ≈ 0.42 + 0.28 = 0.70
+# (still below construction/industrial at 1.0).
+ACTIONABILITY_TRAFFIC_CORRIDOR_BONUS: float = 0.28
 
 # Extra raw-signal boost for traffic when corridor score is high.
 # traffic_raw *= (1 + CORRIDOR_TRAFFIC_SIGNAL_BOOST * corridor_score)
-# At corridor_score=1.0 → ≈ 2.4× traffic raw before renormalisation.
-CORRIDOR_TRAFFIC_SIGNAL_BOOST: float = 1.4
+# At corridor_score=1.0 → ≈ 2.6× traffic raw before renormalisation.
+CORRIDOR_TRAFFIC_SIGNAL_BOOST: float = 1.6
 
 # Include a corridor-scaled share of traffic in magnitude so high-traffic
 # corridors can rank without treating all traffic as fully "site-enforceable".
 # magnitude uses: enforceable + traffic_frac * corridor_score * TRAFFIC_MAGNITUDE_WEIGHT
-TRAFFIC_MAGNITUDE_WEIGHT: float = 0.75
+TRAFFIC_MAGNITUDE_WEIGHT: float = 0.95
 
 # Soft ranking lift: priority *= (1 + CORRIDOR_RANK_LIFT * corridor * traffic_frac)
-# At corridor=1 and traffic_frac=0.5 → score × 1.2. Construction hotspots still win.
-CORRIDOR_RANK_LIFT: float = 0.40
+# At corridor=1 and traffic_frac=0.5 → score × 1.25. Construction hotspots still win.
+CORRIDOR_RANK_LIFT: float = 0.50
 
 # Flag threshold for is_traffic_corridor (0–1 corridor score).
 TRAFFIC_CORRIDOR_FLAG_THRESHOLD: float = 0.4

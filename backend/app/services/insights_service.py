@@ -79,7 +79,7 @@ def _insight_rush_hour_flip() -> dict[str, Any]:
     no2 = _build_no2_lookup("bengaluru")
 
     hours = [8, 14, 18, 2]
-    best: dict[str, Any] | None = None
+    candidates: list[dict[str, Any]] = []
 
     for _, row in cand.iterrows():
         h3 = str(row["h3_cell"])
@@ -123,14 +123,45 @@ def _insight_rush_hour_flip() -> dict[str, Any]:
             "flip_pp": round(flip * 100, 1),
             "dominant_am": series[0]["dominant"],
             "dominant_night": next(s["dominant"] for s in series if s["hour"] == 2),
+            "_flip": flip,
         }
-        if best is None or flip > best.get("_flip", -1):
-            payload["_flip"] = flip
-            best = payload
+        candidates.append(payload)
 
-    if not best:
+    if not candidates:
         return {"available": False, "reason": "No suitable corridor hex found"}
+
+    candidates.sort(key=lambda p: p.get("_flip", -1), reverse=True)
+    # De-dupe by locality name so modal shows distinct neighbourhoods
+    seen_names: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for c in candidates:
+        nm = str(c.get("location_name") or c.get("h3_cell") or "")
+        if nm in seen_names:
+            continue
+        seen_names.add(nm)
+        unique.append(c)
+        if len(unique) >= 6:
+            break
+
+    best = dict(unique[0])
     best.pop("_flip", None)
+    related = []
+    for c in unique:
+        related.append(
+            {
+                "h3_cell": c["h3_cell"],
+                "location_name": c["location_name"],
+                "corridor_score": c["corridor_score"],
+                "traffic_am_pct": c["traffic_am_pct"],
+                "traffic_night_pct": c["traffic_night_pct"],
+                "flip_pp": c["flip_pp"],
+                "dominant_am": c["dominant_am"],
+                "dominant_night": c["dominant_night"],
+                "series": c["series"],
+            }
+        )
+
+    best["related_examples"] = related
     best["headline"] = f"The Rush-Hour Personality Flip — {best['location_name']}"
     best["finding"] = (
         f"At 8 AM, {best['location_name']} is {best['traffic_am_pct']:.0f}% traffic. "
@@ -224,9 +255,11 @@ def _insight_predictability_map() -> dict[str, Any]:
                 "rmse_improvement_percent": m.get("rmse_improvement_percent"),
                 "test_rows": m.get("test_rows"),
                 "interpretation": (
-                    "Episodic / bursty — model wins by learning non-linear structure"
+                    "Episodic / bursty pollution — LightGBM beats “yesterday = today” by learning "
+                    "non-linear weather & traffic structure"
                     if win == "lightgbm"
-                    else "Structurally persistent — yesterday is already a strong forecast"
+                    else "Stable / structural pollution — persistence (yesterday’s value) is already "
+                    "a strong forecast; little extra structure for the model to exploit"
                 ),
             }
         )
@@ -234,22 +267,38 @@ def _insight_predictability_map() -> dict[str, Any]:
     lgbm = [s for s in stations if s["winner"] == "lightgbm"]
     pers = [s for s in stations if s["winner"] == "persistence"]
     overall = metrics.get("overall_rmse_improvement_percent")
+    lgbm_names = ", ".join(_station_display_name(s["station_id"]).replace("CPCB ", "").replace("KSPCB ", "") for s in lgbm[:4]) or "—"
+    pers_names = ", ".join(_station_display_name(s["station_id"]).replace("CPCB ", "").replace("KSPCB ", "") for s in pers[:4]) or "—"
 
     return {
         "available": True,
         "headline": "The Predictability Map",
         "finding": (
             f"On the multi-station test set, LightGBM wins at {len(lgbm)} stations "
-            f"(e.g. Peenya, Hebbal — more episodic signals) while persistence still wins at "
-            f"{len(pers)} (e.g. BTM, Kasturi Nagar — steadier structure). "
+            f"({lgbm_names} — more episodic signals) while persistence still wins at "
+            f"{len(pers)} ({pers_names} — steadier structure). "
             f"Overall RMSE improvement: {overall}%."
         ),
         "stations": sorted(stations, key=lambda s: -(s.get("rmse_improvement_percent") or 0)),
         "lgbm_wins": len(lgbm),
         "persistence_wins": len(pers),
+        "lgbm_stations": [s["display_name"] for s in lgbm],
+        "persistence_stations": [s["display_name"] for s in pers],
         "overall_rmse_improvement_percent": overall,
         "overall_persistence_rmse": (metrics.get("overall_persistence") or {}).get("rmse"),
         "overall_lightgbm_rmse": (metrics.get("overall_lightgbm") or {}).get("rmse"),
+        "explanation": {
+            "lightgbm_beats_persistence": (
+                "When LightGBM beats persistence, pollution is episodic or weather-driven — "
+                "yesterday is a weak guide. The model captures non-linear patterns "
+                "(wind shifts, rush-hour peaks, industrial bursts)."
+            ),
+            "persistence_wins": (
+                "When persistence wins, air quality is structurally stable — today’s level is "
+                "usually close to yesterday’s. That is common near constant sources or basins "
+                "with slow turnover. Serving persistence there is the honest, lower-error choice."
+            ),
+        },
         "method_note": (
             "From ml/artifacts/multistation/evaluation_metrics.json — chronological "
             "70/15/15 split; model_selected_for_serving is the lower test RMSE."
@@ -371,6 +420,28 @@ def _insight_rent_vs_air() -> dict[str, Any]:
     city_aqi = float(df["aqi"].median())
     city_rent = float(df["median_rent"].median())
 
+    # Multiple counter-intuitive pairs for expanded modal (up to 5)
+    exp_pool = df[df["median_rent"] >= rent_hi].sort_values("aqi", ascending=False)
+    aff_pool = df[df["median_rent"] <= rent_lo].sort_values("aqi", ascending=True)
+    comparison_pairs: list[dict[str, Any]] = []
+    n_pairs = min(5, len(exp_pool), len(aff_pool))
+    for i in range(n_pairs):
+        e = exp_pool.iloc[i]
+        a = aff_pool.iloc[i]
+        if e["name"] == a["name"]:
+            continue
+        comparison_pairs.append(
+            {
+                "expensive_dirty": e.to_dict(),
+                "affordable_clean": a.to_dict(),
+                "rent_premium_inr": round(float(e["median_rent"] - a["median_rent"]), 0),
+                "aqi_penalty": round(float(e["aqi"] - a["aqi"]), 1),
+            }
+        )
+    # Also surface top expensive-dirty and affordable-clean lists for judges
+    expensive_dirty_list = exp_pool.head(6).to_dict(orient="records")
+    affordable_clean_list = aff_pool.head(6).to_dict(orient="records")
+
     # Listing count from rent dataset summary if present
     summary = _load_json("rent_dataset_generator/output/scrape_summary.json")
     listing_total = None
@@ -395,6 +466,9 @@ def _insight_rent_vs_air() -> dict[str, Any]:
         ),
         "expensive_dirty": expensive_dirty.to_dict(),
         "affordable_clean": affordable_clean.to_dict(),
+        "comparison_pairs": comparison_pairs,
+        "expensive_dirty_list": expensive_dirty_list,
+        "affordable_clean_list": affordable_clean_list,
         "city_median_aqi": round(city_aqi, 1),
         "city_median_rent": round(city_rent, 0),
         "localities_compared": int(len(df)),

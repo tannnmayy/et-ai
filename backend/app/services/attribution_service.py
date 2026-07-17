@@ -22,7 +22,7 @@ from backend.app.services.traffic_service import traffic_time_metadata
 from backend.app.services.weather_forecast_service import get_weather_forecast
 from pipeline.firms_ingestion import get_fire_detections
 from pipeline.sentinel5p_ingestion import get_no2_column_density
-from pipeline.station_registry import BENGALURU_STATIONS, get_station_by_id
+from pipeline.station_registry import BENGALURU_STATIONS, get_registry_stations, get_station_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -666,13 +666,124 @@ def _estimate_fused_pm25_for_grid(hex_df: pd.DataFrame) -> np.ndarray:
     return estimate_fused_pm25(hex_df)
 
 
+# Worst-hex count pulled per station catchment for Local Peaks mode.
+LOCAL_PEAKS_PER_STATION_K: int = 8
+
+EXTREMES_MODE_GLOBAL = "global"
+EXTREMES_MODE_LOCAL_PEAKS = "local_peaks"
+EXTREMES_MODES = frozenset({EXTREMES_MODE_GLOBAL, EXTREMES_MODE_LOCAL_PEAKS})
+
+_MODE_DESCRIPTIONS = {
+    EXTREMES_MODE_GLOBAL: (
+        "Global highest fused PM2.5 among hexes with station fusion "
+        f"(within ~{int(FUSION_STATION_RANGE_METERS / 1000)} km of an eligible PM2.5 station). "
+        "A single high station can create a large tied plateau of identical worst ranks."
+    ),
+    EXTREMES_MODE_LOCAL_PEAKS: (
+        "Local peaks: for each eligible PM2.5 station, take the worst "
+        f"{LOCAL_PEAKS_PER_STATION_K} fused hexes in its ~{int(FUSION_STATION_RANGE_METERS / 1000)} km "
+        "catchment, merge/de-dupe, then rank by fused PM2.5. Surfaces dirty pockets city-wide "
+        "without inventing values outside fusion range."
+    ),
+}
+
+
+def _haversine_m_scalar(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance in metres between two points."""
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return _EARTH_RADIUS_M * 2 * asin(sqrt(min(1.0, a)))
+
+
+def _select_local_peaks_worst(
+    scored: list[dict[str, Any]],
+    *,
+    n: int,
+    peak_k: int = LOCAL_PEAKS_PER_STATION_K,
+    range_m: float = FUSION_STATION_RANGE_METERS,
+) -> list[dict[str, Any]]:
+    """Per-station top-K worst fused hexes, merged and re-ranked.
+
+    Only hexes already in ``scored`` (real fused PM2.5) are considered.
+    Stations without a live PM2.5 reading are skipped so catchments match fusion.
+    """
+    if not scored or n <= 0:
+        return []
+
+    # Prefer registry stations (verified lat/lon). BENGALURU_STATIONS may omit coordinates.
+    stations_live: list[tuple[str, float, float]] = []
+    registry = list(get_registry_stations())
+    station_iter = registry if registry else list(BENGALURU_STATIONS)
+    for station in station_iter:
+        if not getattr(station, "forecast_eligible", True):
+            continue
+        lat = getattr(station, "latitude", None)
+        lon = getattr(station, "longitude", None)
+        if lat is None or lon is None:
+            continue
+        reading = get_latest_station_reading(station.station_id, "pm25")
+        if not reading.get("available") or reading.get("value") is None:
+            continue
+        stations_live.append((station.station_id, float(lat), float(lon)))
+
+    if not stations_live:
+        # Fallback: absolute ranking if no live stations with coordinates
+        ordered = sorted(scored, key=lambda h: float(h.get("fused_pm25") or 0), reverse=True)
+        return ordered[:n]
+
+    by_cell: dict[str, dict[str, Any]] = {}
+    for sid, slat, slon in stations_live:
+        in_catchment: list[dict[str, Any]] = []
+        for h in scored:
+            try:
+                hlat = float(h["center_lat"])
+                hlon = float(h["center_lon"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if _haversine_m_scalar(slat, slon, hlat, hlon) <= range_m:
+                in_catchment.append(h)
+        in_catchment.sort(key=lambda h: float(h.get("fused_pm25") or 0), reverse=True)
+        for h in in_catchment[:peak_k]:
+            cell = str(h.get("h3_cell") or "")
+            if not cell:
+                continue
+            prev = by_cell.get(cell)
+            if prev is None or float(h.get("fused_pm25") or 0) > float(
+                prev.get("fused_pm25") or 0
+            ):
+                # Annotate which station catchment contributed (for UI honesty)
+                tagged = dict(h)
+                tagged["local_peak_station_id"] = sid
+                by_cell[cell] = tagged
+
+    merged = list(by_cell.values())
+    merged.sort(key=lambda h: float(h.get("fused_pm25") or 0), reverse=True)
+    return merged[:n]
+
+
 def get_city_extremes(
     city: str = "bengaluru",
     n: int = 15,
     simulated_hour: int | None = None,
+    mode: str = EXTREMES_MODE_GLOBAL,
+    peak_k: int = LOCAL_PEAKS_PER_STATION_K,
 ) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
+
+    mode_norm = (mode or EXTREMES_MODE_GLOBAL).strip().lower().replace("-", "_")
+    if mode_norm in ("local", "peaks", "localpeaks"):
+        mode_norm = EXTREMES_MODE_LOCAL_PEAKS
+    if mode_norm not in EXTREMES_MODES:
+        return {
+            "error": (
+                f"Unsupported extremes mode '{mode}'. "
+                f"Use '{EXTREMES_MODE_GLOBAL}' or '{EXTREMES_MODE_LOCAL_PEAKS}'."
+            )
+        }
+
+    peak_k = max(1, min(20, int(peak_k or LOCAL_PEAKS_PER_STATION_K)))
 
     hex_df = _load_hexagon_features()
     if hex_df.empty:
@@ -681,7 +792,6 @@ def get_city_extremes(
     wind_data = _get_current_wind(city)
     firms_lookup = _build_firms_lookup(city)
     no2_lookup = _build_no2_lookup(city)
-    computed_at = datetime.now(tz=timezone.utc).isoformat()
 
     fused_arr = _estimate_fused_pm25_for_grid(hex_df)
 
@@ -694,11 +804,15 @@ def get_city_extremes(
     st_lats: list[float] = []
     st_lons: list[float] = []
     st_ids: list[str] = []
-    for station in BENGALURU_STATIONS:
-        if not station.forecast_eligible or station.latitude is None or station.longitude is None:
+    for station in get_registry_stations():
+        if not getattr(station, "forecast_eligible", True):
             continue
-        st_lats.append(float(station.latitude))
-        st_lons.append(float(station.longitude))
+        lat = getattr(station, "latitude", None)
+        lon = getattr(station, "longitude", None)
+        if lat is None or lon is None:
+            continue
+        st_lats.append(float(lat))
+        st_lons.append(float(lon))
         st_ids.append(station.station_id)
     nearest_d, nearest_i = nearest_station_distances_m(
         hex_df["center_lat"].to_numpy(),
@@ -742,9 +856,19 @@ def get_city_extremes(
         hexagon_results.append(entry)
 
     scored = [h for h in hexagon_results if h.get("fused_pm25") is not None]
-    scored.sort(key=lambda h: h["fused_pm25"])
-    best = scored[:n]
-    worst = list(reversed(scored[-n:]))
+    scored_asc = sorted(scored, key=lambda h: float(h["fused_pm25"]))
+    # Cleanest: always absolute lowest fused (same for both modes)
+    best = scored_asc[:n]
+
+    # Global worst: absolute highest fused (unchanged math)
+    worst_global = list(reversed(scored_asc[-n:])) if n else []
+    # Local peaks worst: per-station catchment top-K merge
+    worst_local = _select_local_peaks_worst(scored, n=n, peak_k=peak_k)
+
+    if mode_norm == EXTREMES_MODE_LOCAL_PEAKS:
+        worst = worst_local
+    else:
+        worst = worst_global
 
     # Prefer locality registry names (fast) over reverse-geocode for every extreme
     from backend.app.services.locality_naming import resolve_location_name
@@ -762,12 +886,44 @@ def get_city_extremes(
                 logger.debug("Could not name %s: %s", hexagon["h3_cell"], exc)
                 hexagon["name"] = None
 
+    _add_names(best)
+    _add_names(worst)
+
+    max_fused = float(scored_asc[-1]["fused_pm25"]) if scored_asc else None
+    tie_count = 0
+    max_station_id = None
+    if max_fused is not None:
+        tie_count = sum(
+            1 for h in scored if abs(float(h["fused_pm25"]) - max_fused) < 0.05
+        )
+        # Dominant station among global plateau (nearest station of max hexes)
+        max_hexes = [
+            h for h in scored if abs(float(h["fused_pm25"]) - max_fused) < 0.05
+        ]
+        counts: dict[str, int] = {}
+        for h in max_hexes:
+            sid = h.get("nearest_station_id")
+            if sid:
+                counts[str(sid)] = counts.get(str(sid), 0) + 1
+        if counts:
+            max_station_id = max(counts, key=counts.get)
 
     return {
         "city": city,
         "computed_at": datetime.now(tz=timezone.utc).isoformat(),
+        "mode": mode_norm,
+        "mode_description": _MODE_DESCRIPTIONS[mode_norm],
+        "peak_k": peak_k if mode_norm == EXTREMES_MODE_LOCAL_PEAKS else None,
         "best": best,
         "worst": worst,
         "total_hexagons_with_data": len(scored),
         "total_hexagons_in_grid": len(hexagon_results),
+        "fusion_range_m": FUSION_STATION_RANGE_METERS,
+        "max_fused_pm25": max_fused,
+        "tie_count_at_max": tie_count,
+        "max_station_id": max_station_id,
+        "ranking_note": (
+            "Only hexes with real fused PM2.5 (station in range) are ranked. "
+            "Uncovered grid cells are not scored as clean — they are unmeasured."
+        ),
     }

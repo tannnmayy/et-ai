@@ -17,18 +17,18 @@ export default function MainLayout() {
 
   const getActiveTab = () => {
     const path = location.pathname;
-    if (path.startsWith('/citizen')) return 'citizen';
+    if (path.startsWith('/citizen') || path.includes('/neighbourhoods') || path.includes('/citizens'))
+      return 'citizens';
     if (path.startsWith('/dispatch')) return 'enforcement';
     if (path === '/' || path.includes('/map')) return 'map';
     if (path.includes('/enforcement')) return 'enforcement';
     if (path.includes('/copilot')) return 'copilot';
-    if (path.includes('/neighbourhoods')) return 'neighbourhoods';
     if (path.includes('/insights')) return 'insights';
     return 'map';
   };
 
   const handleTabChange = (tab: string) => {
-    if (tab === 'citizen') {
+    if (tab === 'citizen' || tab === 'citizens' || tab === 'neighbourhoods') {
       navigate('/citizen');
       return;
     }

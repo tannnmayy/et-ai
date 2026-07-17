@@ -11,7 +11,7 @@ const menuItems = [
   { id: 'map', label: 'Map', icon: Map },
   { id: 'enforcement', label: 'Enforcement', icon: Shield },
   { id: 'copilot', label: 'Copilot', icon: Bot },
-  { id: 'neighbourhoods', label: 'Neighbourhoods', icon: Building2 },
+  { id: 'citizens', label: 'Citizens', icon: Building2 },
   { id: 'insights', label: 'Insights', icon: BarChart3 },
 ] as const;
 

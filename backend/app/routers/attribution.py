@@ -114,15 +114,25 @@ def city_grid_fusion(
     "/city/{city}/extremes",
     response_model=CityExtremesResponse,
     summary="Get best and worst hexagons by fused PM2.5",
-    description="Returns the top N cleanest and top N most polluted hexagons in a city, "
-    "ranked by fused PM2.5 estimate. Only hexagons with a real fused estimate are included "
-    "in the ranking. The response includes total_hexagons_with_data vs total_hexagons_in_grid "
-    "to surface data coverage honestly. "
+    description="Returns the top N cleanest and top N most polluted hexagons in a city. "
+    "Only hexagons with a real fused estimate are included. "
+    "mode=global: absolute highest fused PM2.5 (may cluster around one high station). "
+    "mode=local_peaks: worst K hexes per station catchment, merged — operational city-wide peaks. "
     "Optional simulated_hour (0–23) overrides Bengaluru local time for traffic peak weighting.",
 )
 def city_extremes(
     city: str = "bengaluru",
     n: int = Query(default=15, ge=1, le=100, description="Number of best/worst hexagons to return"),
+    mode: str = Query(
+        default="global",
+        description="Worst ranking: 'global' (absolute) or 'local_peaks' (per-station catchments)",
+    ),
+    peak_k: int = Query(
+        default=8,
+        ge=1,
+        le=20,
+        description="Per-station worst-hex count when mode=local_peaks",
+    ),
     simulated_hour: int | None = Query(
         default=None,
         ge=0,
@@ -130,7 +140,16 @@ def city_extremes(
         description="Optional Bengaluru local hour (0–23) for traffic time-of-day simulation",
     ),
 ) -> CityExtremesResponse:
-    result = get_city_extremes(city=city, n=n, simulated_hour=simulated_hour)
+    result = get_city_extremes(
+        city=city,
+        n=n,
+        simulated_hour=simulated_hour,
+        mode=mode,
+        peak_k=peak_k,
+    )
     if "error" in result:
-        raise HTTPException(status_code=503, detail=result["error"])
+        # Invalid mode → 400; data missing → 503
+        detail = result["error"]
+        status = 400 if "Unsupported extremes mode" in str(detail) else 503
+        raise HTTPException(status_code=status, detail=detail)
     return CityExtremesResponse(**result)

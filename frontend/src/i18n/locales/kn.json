@@ -25,9 +25,10 @@
   "nav.map": "ನಕ್ಷೆ",
   "nav.enforcement": "ಜಾರಿ",
   "nav.copilot": "ಕೋಪೈಲಟ್",
-  "nav.neighbourhoods": "ನೆರೆಹೊರೆ",
+  "nav.neighbourhoods": "ನಾಗರಿಕರು",
+  "nav.citizens": "ನಾಗರಿಕರು",
   "nav.insights": "ಒಳನೋಟಗಳು",
-  "nav.neighbourhood_finder": "ನೆರೆಹೊರೆ ಹುಡುಕಾಟ",
+  "nav.neighbourhood_finder": "ನಾಗರಿಕ ಮೋಡ್",
 
   "role.enforcement": "ಜಾರಿ ಪ್ರಾಧಿಕಾರ",
   "role.citizen": "ನಾಗರಿಕ",

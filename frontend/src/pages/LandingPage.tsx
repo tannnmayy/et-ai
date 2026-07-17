@@ -110,14 +110,27 @@ function buildRoles(t: TFn): RoleOption[] {
   ];
 }
 
-const TERMS_TEXT = `AQI Sentinel is an urban air-quality intelligence prototype for research, civic demonstration, and operational decision support in Bengaluru.
+const TERMS_TEXT = `AQI SENTINEL — TERMS OF USE (DEMONSTRATION ACCESS)
 
-By continuing you acknowledge that:
-• Air-quality estimates and forecasts are derived from public sensors, satellite products, weather, and geospatial layers. Coverage is incomplete and may lag real-world conditions.
-• Source attribution and enforcement rankings are investigation aids — not legal findings of liability against any site, vehicle, or individual.
-• Citizen neighbourhood scores use available AQI, rent estimates, commute, and amenity data; some fields may be modelled or incomplete and are labelled accordingly.
-• Contact details you enter (name, phone, optional email) stay in your browser for this session only and are not sold to third parties.
-• You will use the platform responsibly and will not treat outputs as medical advice or substitute for official CPCB / KSPCB notifications.`;
+1. Purpose
+AQI Sentinel is a research and operational decision-support prototype for Bengaluru urban air quality. It is intended for civic demonstration, training, and informed prioritisation — not as a substitute for statutory monitoring or court evidence.
+
+2. Data sources & estimates
+Outputs combine CPCB/KSPCB station readings, satellite products (e.g. Sentinel-5P, FIRMS), weather, OpenStreetMap/H3 geospatial layers, and open housing signals. Coverage is incomplete, may lag live conditions, and may include model-based interpolation. Forecasts and fused PM2.5 values are estimates with uncertainty.
+
+3. Attribution & enforcement rankings
+Source mixes (traffic, industrial, construction, burning) and enforcement priority scores are investigation signals. They do not identify a liable person or entity and must not be treated as legal findings, violation determinations, or grounds for prosecution without independent field verification by authorised officers.
+
+4. Citizen recommendations
+Neighbourhood matching uses AQI, rent estimates, commute proxies, and amenities. Some inputs are incomplete or modelled. Recommendations are guidance for personal planning only — not medical, financial, or legal advice.
+
+5. Privacy
+Name, phone, and optional email you enter are stored in this browser session (and optionally a local SQLite demo store if configured). They are not sold to third parties. Clear browser data or sign out to remove session details.
+
+6. Responsible use
+You will not present AQI Sentinel outputs as official CPCB/KSPCB notifications, medical advice, or final enforcement orders. Always verify with authorised agencies and current Gazette / board notifications.
+
+By continuing you accept these terms.`;
 
 function LanguagePill({
   language,
@@ -229,9 +242,26 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-black text-white font-sans overflow-x-hidden">
+    <div className="min-h-screen w-full bg-black text-white font-sans overflow-x-hidden relative">
+      {/* Atmospheric Bengaluru map layer — soft, blurred, Apple-like depth */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0"
+        aria-hidden
+        style={{
+          backgroundImage: `url(${new URL('../assets/bengaluru-map-bg.png', import.meta.url).href})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center 30%',
+          filter: 'blur(18px) saturate(0.55) brightness(0.35)',
+          transform: 'scale(1.08)',
+          opacity: 0.45,
+        }}
+      />
+      <div
+        className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-black/80 via-black/75 to-black"
+        aria-hidden
+      />
       {/* Sticky header — solid black, no ambient color wash */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/90 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-white/[0.06] border border-white/15 flex items-center justify-center text-white shrink-0">

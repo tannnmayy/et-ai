@@ -12,6 +12,18 @@ export interface RushHourSeriesPoint {
   multiplier?: number | null;
 }
 
+export interface RushHourExample {
+  h3_cell?: string;
+  location_name?: string;
+  corridor_score?: number;
+  traffic_am_pct?: number;
+  traffic_night_pct?: number;
+  flip_pp?: number;
+  dominant_am?: string;
+  dominant_night?: string;
+  series?: RushHourSeriesPoint[];
+}
+
 export interface RushHourFlipInsight {
   available: boolean;
   reason?: string;
@@ -29,6 +41,8 @@ export interface RushHourFlipInsight {
   flip_pp?: number;
   dominant_am?: string;
   dominant_night?: string;
+  /** Additional corridor flips for expanded modal (3–6) */
+  related_examples?: RushHourExample[];
 }
 
 export interface SensorGapRow {
@@ -69,6 +83,12 @@ export interface PredictabilityMapInsight {
   stations?: PredictabilityStation[];
   lgbm_wins?: number;
   persistence_wins?: number;
+  lgbm_stations?: string[];
+  persistence_stations?: string[];
+  explanation?: {
+    lightgbm_beats_persistence?: string;
+    persistence_wins?: string;
+  };
   overall_rmse_improvement_percent?: number | null;
   overall_persistence_rmse?: number | null;
   overall_lightgbm_rmse?: number | null;
@@ -100,6 +120,13 @@ export interface RentLocality {
   source_attribution?: Record<string, number> | null;
 }
 
+export interface RentComparisonPair {
+  expensive_dirty: RentLocality;
+  affordable_clean: RentLocality;
+  rent_premium_inr?: number;
+  aqi_penalty?: number;
+}
+
 export interface RentVsAirInsight {
   available: boolean;
   reason?: string;
@@ -108,6 +135,9 @@ export interface RentVsAirInsight {
   method_note?: string;
   expensive_dirty?: RentLocality;
   affordable_clean?: RentLocality;
+  comparison_pairs?: RentComparisonPair[];
+  expensive_dirty_list?: RentLocality[];
+  affordable_clean_list?: RentLocality[];
   city_median_aqi?: number;
   city_median_rent?: number;
   localities_compared?: number;
