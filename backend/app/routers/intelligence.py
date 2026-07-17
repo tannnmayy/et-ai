@@ -81,12 +81,13 @@ def station_advisory(
             status_code=422,
             detail=f"Invalid profile '{profile}'. Supported: {', '.join(ADVISORY_PROFILES)}",
         )
-    if language not in SUPPORTED_LANGUAGES:
+    lang = (language or "en").strip().lower()
+    if lang not in SUPPORTED_LANGUAGES:
         raise HTTPException(
             status_code=422,
             detail=f"Invalid language '{language}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}",
         )
-    return _handle_errors(get_citizen_advisory, station_id, profile=profile, language=language)
+    return _handle_errors(get_citizen_advisory, station_id, profile=profile, language=lang)
 
 
 # ---------------------------------------------------------------------------

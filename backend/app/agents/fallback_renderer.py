@@ -116,8 +116,9 @@ def render_citizen_advisory(data: dict[str, Any]) -> str:
     conf_level = data.get("confidence_level", "Unavailable")
     lang_served = data.get("language_served", "en")
     fallback = data.get("translation_fallback", False)
-    disclaimer = MEDICAL_DISCLAIMER
+    disclaimer = data.get("medical_disclaimer") or MEDICAL_DISCLAIMER
 
+    # Shell labels stay short English for copilot render path; body content is localized
     lines = [
         f"Advisory for {station}",
         f"Headline: {headline}",
@@ -135,7 +136,10 @@ def render_citizen_advisory(data: dict[str, Any]) -> str:
     lines.append(f"Language served: {lang_served}")
 
     if fallback:
-        lines.append("Note: Requested language not available. English shown.")
+        if lang_served == "en" and data.get("language_requested") in ("hi", "kn"):
+            lines.append("Note: Requested language not fully available. English shown.")
+        else:
+            lines.append("Note: Requested language not available. English shown.")
 
     lines.append(f"Medical disclaimer: {disclaimer}")
     return "\n".join(lines)

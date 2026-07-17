@@ -1,6 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '../api/axiosClient';
 import type { CopilotResponseMode } from '../types';
+import { DEFAULT_LANGUAGE, toApiLang, type ApiLanguage } from '../i18n/lang';
+import { translate } from '../i18n/translate';
 
 export type CopilotSuggestion = {
   id: string;
@@ -77,6 +79,8 @@ export type CopilotSendPayload = {
   /** Prior turns in this chat (max 6 sent) */
   conversation_history?: ConversationTurn[];
   session_id?: string;
+  /** User language: en | hi | kn (default en) */
+  language?: ApiLanguage | string;
 };
 
 export type CopilotModeLabel =
@@ -154,7 +158,10 @@ export function deriveCopilotMode(data: {
   };
 }
 
-export function formatCopilotError(err: unknown): {
+export function formatCopilotError(
+  err: unknown,
+  language: ApiLanguage | string = DEFAULT_LANGUAGE,
+): {
   detail: string;
   timedOut: boolean;
   networkError: boolean;
@@ -182,15 +189,16 @@ export function formatCopilotError(err: unknown): {
 
   let userMessage: string;
   if (timedOut) {
-    userMessage =
-      'Timed out waiting for Copilot (90s). Try again or simplify the question.';
+    userMessage = translate('copilot.error.timeout', language);
   } else if (networkError) {
-    userMessage =
-      'Network error — could not reach the API. Check that the backend is running and try again.';
+    userMessage = translate('copilot.error.network', language);
   } else if (e?.response?.status && e.response.status >= 500) {
-    userMessage = `Server error (${e.response.status}): ${detail}`;
+    userMessage = translate('copilot.error.server', language, {
+      status: e.response.status,
+      detail,
+    });
   } else if (e?.response?.status === 422) {
-    userMessage = `Invalid request: ${detail}`;
+    userMessage = translate('copilot.error.invalid', language, { detail });
   } else {
     userMessage = detail;
   }
@@ -207,12 +215,15 @@ export function useSendMessage() {
       const conversation_history =
         typeof payload === 'object' ? payload.conversation_history || [] : [];
       const session_id = typeof payload === 'object' ? payload.session_id : undefined;
+      const language = toApiLang(
+        typeof payload === 'object' ? payload.language : DEFAULT_LANGUAGE,
+      );
 
       const body: Record<string, unknown> = {
         query: message,
         city: 'bengaluru',
         profile: 'general',
-        language: 'en',
+        language,
       };
       if (station_id) body.station_id = station_id;
       if (h3_cell) body.h3_cell = h3_cell;

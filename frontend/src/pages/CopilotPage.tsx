@@ -12,6 +12,8 @@ import {
 import { useMapCopilotContext } from '../context/MapCopilotContext';
 import { ChatMessage, ReasoningStep } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { useSession } from '../context/SessionContext';
+import { useT } from '../i18n/useT';
 import {
   Bot,
   Send,
@@ -150,12 +152,12 @@ function modeIcon(mode: string) {
   return <Wrench size={10} />;
 }
 
-const LOADING_HINTS = [
-  'Resolving location…',
-  'Calling data tools…',
-  'Running scenario / grounding…',
-  'Composing answer…',
-];
+const LOADING_HINT_KEYS = [
+  'copilot.loading.resolve',
+  'copilot.loading.tools',
+  'copilot.loading.scenario',
+  'copilot.loading.compose',
+] as const;
 
 const CATEGORY_ORDER = [
   'What-If',
@@ -179,6 +181,8 @@ function buildHistoryFromMessages(msgs: ChatMessage[], maxTurns = 6): Conversati
 
 export default function CopilotPage() {
   const navigate = useNavigate();
+  const { language: sessionLanguage } = useSession();
+  const { t } = useT();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const sendMessageMutation = useSendMessage();
   const [inputText, setInputText] = useState('');
@@ -193,6 +197,16 @@ export default function CopilotPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const prefetchOnce = useRef(false);
   const submittingRef = useRef(false);
+
+  const modeLabel = useCallback(
+    (mode: string) => {
+      if (mode === 'tool_agent') return t('copilot.mode.tool_agent');
+      if (mode === 'heuristic_fallback') return t('copilot.mode.heuristic_fallback');
+      if (mode === 'fast_path') return t('copilot.mode.fast_path');
+      return mode.replace(/_/g, ' ');
+    },
+    [t],
+  );
 
   // Sync URL params into Map context on mount
   useEffect(() => {
@@ -234,7 +248,7 @@ export default function CopilotPage() {
       return;
     }
     const id = window.setInterval(() => {
-      setLoadingHintIdx((i) => (i + 1) % LOADING_HINTS.length);
+      setLoadingHintIdx((i) => (i + 1) % LOADING_HINT_KEYS.length);
     }, 2800);
     return () => window.clearInterval(id);
   }, [sendMessageMutation.isPending]);
@@ -281,7 +295,7 @@ export default function CopilotPage() {
         role: 'user',
         content: text,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sender: 'You',
+        sender: t('common.you'),
       };
       setMessages((prev) => [...prev, userMsg]);
 
@@ -292,6 +306,7 @@ export default function CopilotPage() {
           h3_cell: activeMapContext.h3_cell,
           conversation_history: history,
           session_id: sessionId,
+          language: sessionLanguage,
         });
         const audit = data.audit_trail ?? {};
         const reasoning = buildReasoningSteps(data);
@@ -305,18 +320,15 @@ export default function CopilotPage() {
         let content = (data.answer || '').trim();
         const isGeneric = isGenericCopilotRefuse(content);
         if (!content) {
-          content =
-            'Copilot returned an empty answer. Check that the API is running and LLM keys are configured.';
-          setMutationError('Empty answer from server');
+          content = t('copilot.error.empty_body');
+          setMutationError(t('copilot.error.empty'));
         } else if (isGeneric) {
-          setMutationError(
-            'Limited response — try a more specific place, what-if scenario, or topic.',
-          );
+          setMutationError(t('copilot.error.limited'));
         }
 
         if (content.startsWith('{') && content.includes('"request_id"')) {
-          content = 'Received an unexpected response format. Please try again.';
-          setMutationError('Malformed copilot response');
+          content = t('copilot.error.malformed_body');
+          setMutationError(t('copilot.error.malformed'));
         }
 
         const grounding = data.structured_data?.grounding;
@@ -351,8 +363,9 @@ export default function CopilotPage() {
               mapActions.highlight_h3_cells?.[0] ||
               '';
             setLastMapActionSummary(
-              `Map updated · ${mapActions.highlight_h3_cells?.length || 0} hex(es)` +
-                (labelFocus ? ` · ${String(labelFocus).slice(0, 40)}` : ''),
+              t('copilot.map_updated', {
+                count: mapActions.highlight_h3_cells?.length || 0,
+              }) + (labelFocus ? ` · ${String(labelFocus).slice(0, 40)}` : ''),
             );
             reasoning.push({
               id: 'map-actions',
@@ -363,14 +376,17 @@ export default function CopilotPage() {
           }
         }
 
+        const modeDisplay = modeLabel(String(mode));
         const assistantMsg: ChatMessage = {
           id: botId,
           role: 'assistant',
           content,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sender: fromCache
-            ? `Copilot · Cached${cacheKind === 'semantic' ? ' (similar)' : ''}`
-            : `Copilot · ${label}`,
+            ? cacheKind === 'semantic'
+              ? t('copilot.sender.cached_similar')
+              : t('copilot.sender.cached')
+            : t('copilot.sender.prefix', { label: modeDisplay || label }),
           reasoning,
           meta: {
             knowledgeBaseUsed: Boolean(audit.knowledge_base_used),
@@ -392,18 +408,18 @@ export default function CopilotPage() {
         };
         setMessages((prev) => [...prev, assistantMsg]);
       } catch (err: unknown) {
-        const { timedOut, networkError, userMessage } = formatCopilotError(err);
+        const { timedOut, networkError, userMessage } = formatCopilotError(err, sessionLanguage);
         setMutationError(userMessage);
         const errMsg: ChatMessage = {
           id: `bot-err-${Date.now()}`,
           role: 'assistant',
           content: timedOut
-            ? '⏱ Timed out waiting for Copilot. Try again, or ask a shorter question.'
+            ? t('copilot.error.timeout_chat')
             : networkError
-              ? '🔌 Network error — the API may be offline. Start the backend and retry.'
+              ? t('copilot.error.network_chat')
               : `⚠ ${userMessage}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sender: 'Copilot · Error',
+          sender: t('copilot.sender.error'),
           meta: {
             responseMode: 'error',
             isLimitedResponse: true,
@@ -414,7 +430,17 @@ export default function CopilotPage() {
         submittingRef.current = false;
       }
     },
-    [inputText, sendMessageMutation, messages, activeMapContext, sessionId, mapCtx],
+    [
+      inputText,
+      sendMessageMutation,
+      messages,
+      activeMapContext,
+      sessionId,
+      mapCtx,
+      sessionLanguage,
+      t,
+      modeLabel,
+    ],
   );
 
   const onSuggestionClick = (question: string) => {
@@ -451,13 +477,13 @@ export default function CopilotPage() {
       {/* Top banner + Map Context Active chip */}
       <div className="absolute top-0 left-0 w-full z-10 p-3 bg-gradient-to-b from-black to-transparent flex flex-col items-center gap-2 pointer-events-none">
         <span className="text-[10px] uppercase tracking-widest font-mono font-bold text-apple-secondary bg-apple-card px-4 py-1.5 rounded-full border border-apple-border/50 pointer-events-auto">
-          COPILOT
+          {t('copilot.banner')}
         </span>
         {hasMapCtx && (
           <div className="pointer-events-auto flex items-center gap-2 ui-glass ui-glass-floating rounded-full px-3 py-1.5 border border-brand-blue/40 shadow-lg">
             <MapPin size={12} className="text-brand-blue shrink-0" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-blue">
-              Map Context Active
+              {t('copilot.map_context_active')}
             </span>
             <span className="text-[10px] text-white/80 font-mono max-w-[160px] truncate normal-case tracking-normal">
               {activeMapContext.label ||
@@ -468,7 +494,7 @@ export default function CopilotPage() {
               type="button"
               onClick={() => mapCtx.clearMapContext()}
               className="p-0.5 rounded hover:bg-white/10 text-apple-secondary hover:text-white"
-              title="Clear map context"
+              title={t('common.clear_map_context')}
             >
               <X size={12} />
             </button>
@@ -484,7 +510,7 @@ export default function CopilotPage() {
             <span className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">
               {lastMapActionSummary}
             </span>
-            <span className="text-[9px] text-white/70 font-mono">View Map →</span>
+            <span className="text-[9px] text-white/70 font-mono">{t('common.view_map_arrow')}</span>
           </button>
         )}
       </div>
@@ -499,7 +525,7 @@ export default function CopilotPage() {
               onClick={() => setMutationError(null)}
               className="ml-1 text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100 shrink-0"
             >
-              Dismiss
+              {t('common.dismiss')}
             </button>
           </div>
         </div>
@@ -513,13 +539,11 @@ export default function CopilotPage() {
                 <Bot size={22} />
               </div>
               <h2 className="text-lg font-semibold text-white tracking-tight">
-                AQI Sentinel Copilot
+                {t('copilot.title')}
               </h2>
               <p className="text-sm text-apple-secondary max-w-md">
-                Ask about enforcement, pollution sources, policy, or what-if scenarios.
-                {hasMapCtx
-                  ? ' Map context is active — answers will prefer this area.'
-                  : ' Select an area on the Map and tap “Ask Copilot” for location-aware answers.'}
+                {t('copilot.empty_body')}
+                {hasMapCtx ? t('copilot.empty_map_active') : t('copilot.empty_map_hint')}
               </p>
             </div>
 
@@ -528,14 +552,14 @@ export default function CopilotPage() {
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-apple-secondary flex items-center gap-1.5">
                     <Sparkles size={12} className="text-amber-400" />
-                    Suggested questions
+                    {t('copilot.suggested')}
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowSuggestions(false)}
                     className="text-[10px] font-mono text-apple-secondary hover:text-white flex items-center gap-1 transition-colors"
                   >
-                    <EyeOff size={12} /> Hide
+                    <EyeOff size={12} /> {t('common.hide')}
                   </button>
                 </div>
 
@@ -569,7 +593,7 @@ export default function CopilotPage() {
                 onClick={() => setShowSuggestions(true)}
                 className="text-[10px] font-mono text-apple-secondary hover:text-white flex items-center gap-1.5 transition-colors"
               >
-                <Eye size={12} /> Show suggested questions
+                <Eye size={12} /> {t('copilot.show_suggested')}
               </button>
             )}
           </div>
@@ -605,7 +629,7 @@ export default function CopilotPage() {
                     {limited && !isUser && (
                       <div className="text-[10px] font-mono uppercase tracking-wider text-orange-300/90 mb-2 flex items-center gap-1.5">
                         <AlertCircle size={11} />
-                        Limited / partial response
+                        {t('copilot.limited_response')}
                       </div>
                     )}
                     <div className="whitespace-pre-line space-y-2">{msg.content}</div>
@@ -622,34 +646,30 @@ export default function CopilotPage() {
                       className={`text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-1 ${modeBadgeStyle(String(mode))}`}
                     >
                       {modeIcon(String(mode))}
-                      {mode === 'tool_agent'
-                        ? 'Tool Agent'
-                        : mode === 'heuristic_fallback'
-                          ? 'Heuristic Fallback'
-                          : mode === 'fast_path'
-                            ? 'Fast Path'
-                            : String(mode).replace(/_/g, ' ')}
+                      {modeLabel(String(mode))}
                     </span>
                   )}
 
                   {!isUser && msg.meta?.cacheHit && (
                     <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-900/40 border border-violet-700/40 text-violet-300 flex items-center gap-1">
                       <Database size={10} />
-                      {msg.meta.cacheKind === 'semantic' ? 'Cache · similar' : 'Cache'}
+                      {msg.meta.cacheKind === 'semantic'
+                        ? t('copilot.cache_similar')
+                        : t('copilot.cache')}
                     </span>
                   )}
 
                   {!isUser && msg.meta?.whatifUsed && (
                     <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-fuchsia-900/40 border border-fuchsia-700/40 text-fuchsia-300 flex items-center gap-1">
                       <FlaskConical size={10} />
-                      What-If
+                      {t('copilot.whatif')}
                     </span>
                   )}
 
                   {!isUser && (msg.meta?.memoryTurns ?? 0) > 0 && (
                     <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-900/40 border border-cyan-700/40 text-cyan-300 flex items-center gap-1">
                       <MessageSquare size={10} />
-                      Memory · {msg.meta?.memoryTurns}
+                      {t('copilot.memory', { count: msg.meta?.memoryTurns ?? 0 })}
                     </span>
                   )}
 
@@ -660,7 +680,7 @@ export default function CopilotPage() {
                       className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-fuchsia-900/40 border border-fuchsia-700/40 text-fuchsia-300 flex items-center gap-1 hover:bg-fuchsia-900/60"
                     >
                       <Map size={10} />
-                      View on Map
+                      {t('common.view_on_map')}
                       {(msg.meta.mapActionCount ?? 0) > 0
                         ? ` · ${msg.meta.mapActionCount}`
                         : ''}
@@ -674,7 +694,7 @@ export default function CopilotPage() {
                   )}
                   {!isUser && msg.meta?.fallbackUsed && mode !== 'heuristic_fallback' && (
                     <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-900/40 border border-orange-700/40 text-orange-300">
-                      Fallback
+                      {t('copilot.fallback')}
                     </span>
                   )}
                   {!isUser && msg.meta?.llmProvider && msg.meta.llmProvider !== 'cache' && (
@@ -695,10 +715,10 @@ export default function CopilotPage() {
                       >
                         <span className="flex items-center gap-2">
                           {isReasoningOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                          Reasoning & audit trail
+                          {t('copilot.reasoning_trace')}
                         </span>
                         <span className="text-[10px] font-mono text-apple-secondary/60">
-                          {msg.reasoning.length} STEPS
+                          {t('copilot.steps', { count: msg.reasoning.length })}
                         </span>
                       </button>
 
@@ -745,11 +765,13 @@ export default function CopilotPage() {
               <div className="px-5 py-3.5 rounded-2xl rounded-tl-[4px] text-xs font-mono select-none space-y-1.5 bg-apple-card/40 border border-apple-border/50 text-apple-secondary">
                 <div className="flex items-center gap-2 font-semibold text-white/80">
                   <Wrench size={12} className="text-indigo-400" />
-                  Tool agent working…
+                  {t('copilot.working')}
                 </div>
-                <div className="text-apple-secondary/90">{LOADING_HINTS[loadingHintIdx]}</div>
+                <div className="text-apple-secondary/90">
+                  {t(LOADING_HINT_KEYS[loadingHintIdx])}
+                </div>
                 <div className="flex gap-1 pt-0.5">
-                  {LOADING_HINTS.map((_, i) => (
+                  {LOADING_HINT_KEYS.map((_, i) => (
                     <span
                       key={i}
                       className={`h-1 w-4 rounded-full transition-colors ${
@@ -774,14 +796,14 @@ export default function CopilotPage() {
               <div className="flex items-center justify-between px-1">
                 <span className="text-[9px] font-bold uppercase tracking-widest text-apple-secondary/80 flex items-center gap-1">
                   <Sparkles size={10} className="text-amber-400" />
-                  Try asking
+                  {t('copilot.try_asking')}
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowSuggestions(false)}
                   className="text-[9px] font-mono text-apple-secondary/70 hover:text-white transition-colors"
                 >
-                  Hide
+                  {t('common.hide')}
                 </button>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
@@ -808,7 +830,7 @@ export default function CopilotPage() {
                 onClick={() => setShowSuggestions(true)}
                 className="text-[9px] font-mono text-apple-secondary hover:text-white flex items-center gap-1 transition-colors"
               >
-                <Eye size={10} /> Show suggestions
+                <Eye size={10} /> {t('copilot.show_suggestions')}
               </button>
             </div>
           )}
@@ -827,7 +849,7 @@ export default function CopilotPage() {
               className="text-[10px] font-bold uppercase tracking-wider text-apple-secondary bg-apple-card border border-apple-border rounded-full px-4 py-1.5 hover:bg-apple-modal hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
             >
               <FlaskConical size={11} className="text-fuchsia-400" />
-              What-If 50% Construction
+              {t('copilot.quick.whatif')}
             </button>
             <button
               type="button"
@@ -841,7 +863,7 @@ export default function CopilotPage() {
               className="text-[10px] font-bold uppercase tracking-wider text-apple-secondary bg-apple-card border border-apple-border rounded-full px-4 py-1.5 hover:bg-apple-modal hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
             >
               <Shield size={11} className="text-brand-orange" />
-              Draft Dispatch
+              {t('copilot.quick.dispatch')}
             </button>
             <button
               type="button"
@@ -855,7 +877,7 @@ export default function CopilotPage() {
               className="text-[10px] font-bold uppercase tracking-wider text-apple-secondary bg-apple-card border border-apple-border rounded-full px-4 py-1.5 hover:bg-apple-modal hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
             >
               <Map size={11} className="text-brand-blue" />
-              Map Overlay
+              {t('copilot.quick.map_overlay')}
             </button>
           </div>
 
@@ -871,10 +893,10 @@ export default function CopilotPage() {
               className="flex-1 bg-transparent border-none text-sm text-white placeholder:text-apple-secondary/50 focus:ring-0 px-4 outline-none disabled:opacity-60"
               placeholder={
                 isBusy
-                  ? 'Waiting for Copilot…'
+                  ? t('copilot.placeholder_busy')
                   : hasMapCtx
-                    ? 'Ask about this area, run a what-if, or follow up…'
-                    : 'Ask about pollution, enforcement, policy, or what-if scenarios…'
+                    ? t('copilot.placeholder_map')
+                    : t('copilot.placeholder')
               }
             />
 
@@ -883,7 +905,7 @@ export default function CopilotPage() {
                 type="submit"
                 disabled={isBusy || !inputText.trim()}
                 className="bg-brand-blue hover:bg-brand-blue/90 active:scale-95 disabled:opacity-50 text-white w-10 h-10 min-w-[40px] min-h-[40px] rounded-full transition-all flex items-center justify-center shadow-md shadow-brand-blue/20 shrink-0"
-                title="Send"
+                title={t('common.send')}
               >
                 {isBusy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               </button>

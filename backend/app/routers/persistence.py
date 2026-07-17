@@ -56,7 +56,7 @@ class SessionIn(BaseModel):
     phone: str = ""
     email: str | None = None
     role: str = "guest"
-    language: str = "EN"
+    language: str = "en"
     acceptedTerms: bool = True
     enteredAt: str | None = None
 

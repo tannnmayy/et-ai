@@ -331,7 +331,7 @@ def _scope_blob(
             (station_id or "").strip().lower(),
             (h3_cell or "").strip().lower(),
             profile or "general",
-            language or "en",
+            (language or "en").strip().lower() or "en",
             "deep" if force_dynamic_planning else "std",
         ]
     )

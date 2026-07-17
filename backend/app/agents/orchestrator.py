@@ -144,6 +144,8 @@ def _validate_input(state: AgentState) -> list[str]:
         warnings.append(f"Profile '{state.profile}' is not valid. Using default: general")
         state.profile = "general"
 
+    # Normalize case (EN → en) and validate
+    state.language = (state.language or "en").strip().lower()
     if state.language not in SUPPORTED_LANGUAGES:
         warnings.append(f"Language '{state.language}' is not supported. Using default: en")
         state.language = "en"
@@ -206,6 +208,10 @@ def run_orchestrator(
     session_id: str | None = None,
 ) -> dict[str, Any]:
     history = _normalize_history(conversation_history)
+    # Canonical language for cache + agent (accept EN/HI/KN from clients)
+    language = (language or "en").strip().lower()
+    if language not in SUPPORTED_LANGUAGES:
+        language = "en"
 
     # --- Cache (exact + semantic) ---
     # Multi-turn answers are context-dependent — skip response cache when history present

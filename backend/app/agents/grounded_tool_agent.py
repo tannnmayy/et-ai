@@ -106,9 +106,28 @@ def _execute_tool(
         return {"_tool_error": str(exc), "_error_type": type(exc).__name__}
 
 
+def _normalize_language(code: str | None) -> str:
+    c = (code or "en").strip().lower()
+    if c in ("en", "hi", "kn"):
+        return c
+    return "en"
+
+
+def _language_instruction(lang: str) -> str:
+    names = {"en": "English", "hi": "Hindi", "kn": "Kannada"}
+    label = names.get(lang, "English")
+    return (
+        f"language={lang} ({label}). "
+        f"Respond in {label}. Keep PM2.5, AQI, CPCB, station IDs, and H3 cell IDs in English; "
+        "translate only the natural-language explanation."
+    )
+
+
 def _build_context_block(state: AgentState) -> str:
-    """User-message appendix: preferred Map context for the tool agent."""
+    """User-message appendix: preferred Map context + language for the tool agent."""
     lines: list[str] = []
+    lang = _normalize_language(state.language)
+    lines.append(_language_instruction(lang))
     if state.station_id:
         lines.append(f"preferred station_id={state.station_id}")
     if state.h3_cell:
@@ -121,8 +140,6 @@ def _build_context_block(state: AgentState) -> str:
         )
     if state.city:
         lines.append(f"city={state.city}")
-    if not lines:
-        return ""
     return "(Context: " + "; ".join(lines) + ")"
 
 
@@ -141,6 +158,10 @@ def _inject_map_context_args(
             out["h3_cell"] = state.h3_cell
         if name == "run_whatif_scenario" and not out.get("station_id") and state.station_id:
             out["station_id"] = state.station_id
+    # User-facing text tools: inject session language when model omits it
+    if name == "get_causal_explanation":
+        if not out.get("language"):
+            out["language"] = _normalize_language(state.language)
     return out
 
 
@@ -337,6 +358,8 @@ def _run_heuristic_fallback(state: AgentState, audit: AuditTrail) -> None:
                 args["lon"] = lon
             else:
                 continue
+            if name == "get_causal_explanation":
+                args["language"] = _normalize_language(state.language)
         if name == "run_whatif_scenario":
             args = {**args, "city": city, "scenario_text": args.get("scenario_text") or state.user_query}
             if h3:
@@ -372,13 +395,17 @@ def _run_heuristic_fallback(state: AgentState, audit: AuditTrail) -> None:
         tool_results["get_attribution"] = res
         audit.record_tool_call("get_attribution", args, "_tool_error" not in res)
 
-    answer = deterministic_summary_from_tools(state.user_query, tool_results)
+    lang = _normalize_language(state.language)
+    answer = deterministic_summary_from_tools(
+        state.user_query, tool_results, language=lang
+    )
     grounding = check_answer_grounding(answer, tool_results)
     state.response = answer
     state.structured_data = {
         "tool_results": tool_results,
         "grounding": grounding,
         "path": "heuristic_fallback",
+        "language": lang,
         "map_context": {
             "station_id": state.station_id or None,
             "h3_cell": state.h3_cell,
@@ -405,6 +432,12 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
     audit.set_agent("grounded_tool_agent")
     audit.set_intent("tool_agent")
     audit.record_reasoning("route", "Default path: native tool-calling agent (Phase 2)")
+    state.language = _normalize_language(state.language)
+    audit.record_reasoning(
+        "language",
+        f"Response language: {state.language}",
+        language=state.language,
+    )
 
     llm = get_llm_provider()
     if not llm.is_available:
@@ -568,10 +601,14 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
                 }
             )
             # Force final prose without more tools
+            lang = _normalize_language(state.language)
+            lang_name = {"en": "English", "hi": "Hindi", "kn": "Kannada"}.get(lang, "English")
             summary = llm.summarize(
                 "Using only the tool data provided, write the final natural-language answer "
-                f"to the user query: {state.user_query!r}. Do not invent numbers.",
-                {"tool_results": tool_results},
+                f"to the user query: {state.user_query!r}. Do not invent numbers. "
+                f"Write the answer in {lang_name} (language={lang}). "
+                "Keep PM2.5, AQI, CPCB, station IDs, and H3 IDs in English.",
+                {"tool_results": tool_results, "language": lang},
                 system_prompt=AGENT_SYSTEM_PROMPT,
             )
             if summary:
@@ -579,12 +616,16 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
             elif content:
                 final_text = content.strip()
             else:
-                final_text = deterministic_summary_from_tools(state.user_query, tool_results)
+                final_text = deterministic_summary_from_tools(
+                    state.user_query, tool_results, language=state.language
+                )
             break
 
     if not final_text:
         # Last turn still wanted tools but no text
-        final_text = deterministic_summary_from_tools(state.user_query, tool_results)
+        final_text = deterministic_summary_from_tools(
+            state.user_query, tool_results, language=state.language
+        )
         audit.record_reasoning("fallback", "No final model text — deterministic tool summary")
 
     # Grounding check
@@ -632,14 +673,18 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
                 final_text = retry_text
                 grounding = g2
             else:
-                final_text = deterministic_summary_from_tools(state.user_query, tool_results)
+                final_text = deterministic_summary_from_tools(
+                    state.user_query, tool_results, language=state.language
+                )
                 grounding = check_answer_grounding(final_text, tool_results)
                 state.fallback_used = True
                 audit.record_reasoning(
                     "fallback", "Grounding failed twice — deterministic tool summary"
                 )
         else:
-            final_text = deterministic_summary_from_tools(state.user_query, tool_results)
+            final_text = deterministic_summary_from_tools(
+                state.user_query, tool_results, language=state.language
+            )
             grounding = check_answer_grounding(final_text, tool_results)
             state.fallback_used = True
 
@@ -648,6 +693,7 @@ def run_grounded_tool_agent(state: AgentState, audit: AuditTrail) -> None:
         "tool_results": tool_results,
         "grounding": grounding,
         "path": "native_tool_agent",
+        "language": state.language,
         "provider": getattr(llm, "last_provider", None),
         "map_context": {
             "station_id": state.station_id or None,

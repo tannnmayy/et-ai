@@ -6,8 +6,15 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import {
+  DEFAULT_LANGUAGE,
+  normalizeLanguage,
+  type ApiLanguage,
+} from '../i18n/lang';
 
-export type AppLanguage = 'EN' | 'HI' | 'KN';
+/** Canonical session language codes (API-aligned lowercase). */
+export type AppLanguage = ApiLanguage;
+
 export type UserRole = 'enforcement' | 'citizen' | 'guest';
 
 export interface UserSession {
@@ -15,6 +22,7 @@ export interface UserSession {
   phone: string;
   email?: string;
   role: UserRole;
+  /** Always en | hi | kn */
   language: AppLanguage;
   acceptedTerms: boolean;
   enteredAt: string;
@@ -22,8 +30,11 @@ export interface UserSession {
 
 interface SessionContextValue {
   session: UserSession | null;
+  /** Current language (en | hi | kn), default en */
   language: AppLanguage;
-  setLanguage: (lang: AppLanguage) => void;
+  /** Same as language — explicit name for API clients */
+  apiLanguage: AppLanguage;
+  setLanguage: (lang: AppLanguage | string) => void;
   isAuthenticated: boolean;
   enterApp: (payload: Omit<UserSession, 'enteredAt'>) => void;
   clearSession: () => void;
@@ -51,9 +62,13 @@ function loadSession(): UserSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as UserSession;
+    const parsed = JSON.parse(raw) as UserSession & { language?: string };
     if (!parsed?.name || !parsed?.role || !parsed?.acceptedTerms) return null;
-    return parsed;
+    // Migrate legacy EN/HI/KN → en/hi/kn
+    return {
+      ...parsed,
+      language: normalizeLanguage(parsed.language),
+    };
   } catch {
     return null;
   }
@@ -62,23 +77,26 @@ function loadSession(): UserSession | null {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<UserSession | null>(() => loadSession());
   const [language, setLanguageState] = useState<AppLanguage>(
-    () => loadSession()?.language ?? 'EN',
+    () => normalizeLanguage(loadSession()?.language ?? DEFAULT_LANGUAGE),
   );
 
   useEffect(() => {
     if (session) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      const normalized = { ...session, language: normalizeLanguage(session.language) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     }
   }, [session]);
 
-  const setLanguage = useCallback((lang: AppLanguage) => {
-    setLanguageState(lang);
-    setSession((prev) => (prev ? { ...prev, language: lang } : prev));
+  const setLanguage = useCallback((lang: AppLanguage | string) => {
+    const next = normalizeLanguage(lang);
+    setLanguageState(next);
+    setSession((prev) => (prev ? { ...prev, language: next } : prev));
   }, []);
 
   const enterApp = useCallback((payload: Omit<UserSession, 'enteredAt'>) => {
     const next: UserSession = {
       ...payload,
+      language: normalizeLanguage(payload.language),
       enteredAt: new Date().toISOString(),
     };
     setSession(next);
@@ -100,6 +118,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     () => ({
       session,
       language,
+      apiLanguage: language,
       setLanguage,
       isAuthenticated: Boolean(session?.acceptedTerms),
       enterApp,

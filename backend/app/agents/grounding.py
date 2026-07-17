@@ -175,9 +175,51 @@ def check_answer_grounding(
     }
 
 
-def deterministic_summary_from_tools(query: str, tool_results: dict[str, Any]) -> str:
-    """Build a grounded prose answer from tool results when LLM invents numbers."""
+_LANG_ONLY_EN_NOTE = {
+    "hi": "\n\n(नोट: विस्तृत उपकरण सारांश अंग्रेज़ी में है। पूर्ण हिंदी उत्तर के लिए LLM उपलब्ध होने पर पुनः प्रयास करें।)",
+    "kn": "\n\n(ಸೂಚನೆ: ವಿವರವಾದ ಉಪಕರಣ ಸಾರಾಂಶ ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿದೆ. ಪೂರ್ಣ ಕನ್ನಡ ಉತ್ತರಕ್ಕೆ LLM ಲಭ್ಯವಿದ್ದಾಗ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.)",
+}
+
+_LANG_INTRO = {
+    "hi": "उपलब्ध उपकरण डेटा का सारांश (मुख्य तथ्य):",
+    "kn": "ಲಭ್ಯವಿರುವ ಉಪಕರಣ ಡೇಟಾದ ಸಾರಾಂಶ (ಪ್ರಮುಖ ಅಂಶಗಳು):",
+}
+
+
+def deterministic_summary_from_tools(
+    query: str,
+    tool_results: dict[str, Any],
+    language: str = "en",
+) -> str:
+    """Build a grounded prose answer from tool results when LLM invents numbers.
+
+    When language is hi/kn, prefer localized advisory tool fields if present;
+    otherwise English tool summary + short note that full localization needs LLM.
+    """
+    lang = (language or "en").strip().lower()
     parts: list[str] = []
+
+    # Prefer citizen advisory tool payload (already localized in Phase 2)
+    for key in ("get_citizen_advisory", "tool_get_citizen_advisory"):
+        adv = tool_results.get(key)
+        if isinstance(adv, dict) and not adv.get("_tool_error") and adv.get("headline"):
+            lines = [str(adv["headline"])]
+            for rec in adv.get("recommendations") or []:
+                lines.append(f"- {rec}")
+            if adv.get("caution_note"):
+                lines.append(str(adv["caution_note"]))
+            if adv.get("medical_disclaimer"):
+                lines.append(str(adv["medical_disclaimer"]))
+            return "\n".join(lines)
+
+    # Causal explanation may already be localized
+    for key in ("get_causal_explanation", "tool_get_causal_explanation"):
+        causal = tool_results.get(key)
+        if isinstance(causal, dict) and not causal.get("_tool_error"):
+            text = causal.get("text") or causal.get("explanation") or causal.get("summary")
+            if text:
+                parts.append(str(text))
+
     enf = tool_results.get("get_enforcement_priority") or tool_results.get(
         "tool_get_enforcement_priority"
     )
@@ -267,14 +309,23 @@ def deterministic_summary_from_tools(query: str, tool_results: dict[str, Any]) -
         parts.insert(0, f"Resolved location: {name}.")
 
     if not parts:
-        return (
+        empty = (
             "I looked up the available air-quality tools for your question but could not "
             "assemble a fully grounded numeric answer. Try naming a Bengaluru locality "
             "(e.g. Peenya, Whitefield) or ask for enforcement priorities, a city briefing, "
             "or CPCB construction-dust guidance."
         )
-    parts.append(
-        "Numbers above come only from live AQI Sentinel tools. "
+        if lang in _LANG_ONLY_EN_NOTE:
+            return empty + _LANG_ONLY_EN_NOTE[lang]
+        return empty
+
+    body = " ".join(parts) if len(parts) == 1 else "\n\n".join(parts)
+    body += (
+        "\n\nNumbers above come only from live AQI Sentinel tools. "
         "Attribution and rankings are investigation aids, not legal determinations."
     )
-    return " ".join(parts) if len(parts) == 1 else "\n\n".join(parts)
+    if lang in ("hi", "kn"):
+        intro = _LANG_INTRO.get(lang, "")
+        note = _LANG_ONLY_EN_NOTE.get(lang, "")
+        return f"{intro}\n\n{body}{note}"
+    return body

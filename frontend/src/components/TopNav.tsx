@@ -1,27 +1,40 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Satellite, LogOut, LayoutDashboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useSession, type AppLanguage, roleLabel } from '../context/SessionContext';
+import { useSession } from '../context/SessionContext';
+import { LANGUAGE_SHORT, type ApiLanguage } from '../i18n/lang';
+import { useT } from '../i18n/useT';
 
 interface TopNavProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
 
-const ADMIN_TABS = [
-  { id: 'map', label: 'Map' },
-  { id: 'enforcement', label: 'Enforcement' },
-  { id: 'copilot', label: 'Copilot' },
-  { id: 'neighbourhoods', label: 'Neighbourhoods' },
-  { id: 'insights', label: 'Insights' },
-] as const;
-
 export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
   const navigate = useNavigate();
-  const { session, language, setLanguage, clearSession, roleLabel: labelFn } = useSession();
+  const { session, language, setLanguage, clearSession } = useSession();
+  const { t } = useT();
   const isCitizen = session?.role === 'citizen';
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const adminTabs = useMemo(
+    () =>
+      [
+        { id: 'map', label: t('nav.map') },
+        { id: 'enforcement', label: t('nav.enforcement') },
+        { id: 'copilot', label: t('nav.copilot') },
+        { id: 'neighbourhoods', label: t('nav.neighbourhoods') },
+        { id: 'insights', label: t('nav.insights') },
+      ] as const,
+    [t],
+  );
+
+  const roleLabelText = (role: string) => {
+    if (role === 'enforcement') return t('role.enforcement');
+    if (role === 'citizen') return t('role.citizen');
+    return t('role.guest');
+  };
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -56,11 +69,11 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
         </div>
         <div className="flex flex-col leading-tight min-w-0">
           <span className="text-lg sm:text-xl font-bold tracking-tight text-white font-sans truncate">
-            AQI Sentinel
+            {t('app.name')}
           </span>
           {isCitizen && (
             <span className="text-[9px] font-semibold uppercase tracking-wider text-brand-blue">
-              Citizen Mode
+              {t('app.citizen_mode')}
             </span>
           )}
         </div>
@@ -68,7 +81,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
 
       <div className="hidden lg:flex items-center gap-6 h-full">
         {!isCitizen &&
-          ADMIN_TABS.map((tab) => {
+          adminTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -91,7 +104,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
 
         {isCitizen && (
           <div className="h-full px-2 flex items-center text-xs font-semibold tracking-wider uppercase text-brand-blue font-bold relative">
-            Neighbourhood Finder
+            {t('nav.neighbourhood_finder')}
             <div className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-blue rounded-t" />
           </div>
         )}
@@ -99,7 +112,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
 
       <div className="flex items-center gap-3 sm:gap-5">
         <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-medium bg-white/5 px-3 py-1.5 rounded-full border border-white/10 text-apple-secondary select-none">
-          {(['EN', 'HI', 'KN'] as AppLanguage[]).map((lang, i) => (
+          {(['en', 'hi', 'kn'] as ApiLanguage[]).map((lang, i) => (
             <React.Fragment key={lang}>
               {i > 0 && <span className="text-white/20">·</span>}
               <button
@@ -107,9 +120,9 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
                 onClick={() => setLanguage(lang)}
                 className={`cursor-pointer hover:text-white transition-colors min-h-[28px] px-0.5 ${
                   language === lang ? 'text-brand-blue font-bold' : ''
-                } ${lang === 'EN' ? 'uppercase' : ''}`}
+                } ${lang === 'en' ? 'uppercase' : ''}`}
               >
-                {lang === 'EN' ? 'EN' : lang === 'HI' ? 'हिंदी' : 'ಕನ್ನಡ'}
+                {LANGUAGE_SHORT[lang]}
               </button>
             </React.Fragment>
           ))}
@@ -120,17 +133,17 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
             className="flex items-center gap-2 pl-1 pr-2 sm:pr-3 py-1 rounded-full bg-white/5 border border-white/10 hover:border-white/20 transition-colors min-h-[44px]"
-            aria-label="Profile menu"
+            aria-label={t('common.profile_menu')}
           >
             <span className="w-8 h-8 rounded-full bg-brand-blue/20 border border-brand-blue/30 flex items-center justify-center text-[11px] font-bold font-mono text-brand-blue">
               {initials}
             </span>
             <span className="hidden md:flex flex-col items-start leading-tight pr-1">
               <span className="text-[11px] font-semibold text-white max-w-[100px] truncate">
-                {session?.name || 'Guest'}
+                {session?.name || t('common.guest')}
               </span>
               <span className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary">
-                {session ? labelFn(session.role) : 'Session'}
+                {session ? roleLabelText(session.role) : t('common.session')}
               </span>
             </span>
           </button>
@@ -140,7 +153,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
               <div className="px-3 py-2 border-b border-white/10 mb-1">
                 <div className="text-xs font-semibold text-white truncate">{session?.name}</div>
                 <div className="text-[10px] text-apple-secondary font-mono">
-                  {session ? roleLabel(session.role) : '—'}
+                  {session ? roleLabelText(session.role) : '—'}
                 </div>
               </div>
               <button
@@ -152,7 +165,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
                 }}
               >
                 <LayoutDashboard size={14} />
-                Change role / landing
+                {t('common.change_role')}
               </button>
               <button
                 type="button"
@@ -164,7 +177,7 @@ export default function TopNav({ activeTab, setActiveTab }: TopNavProps) {
                 }}
               >
                 <LogOut size={14} />
-                Sign out
+                {t('common.sign_out')}
               </button>
             </div>
           )}

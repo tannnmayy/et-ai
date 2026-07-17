@@ -28,6 +28,8 @@ import {
   defaultPathForRole,
 } from '../context/SessionContext';
 import { warmAppFromLanding } from '../services/prefetchService';
+import { useT } from '../i18n/useT';
+import type { TranslateParams } from '../i18n/translate';
 
 type RoleOption = {
   id: UserRole;
@@ -38,87 +40,75 @@ type RoleOption = {
   icon: React.ElementType;
 };
 
-const FEATURES = [
-  {
-    title: 'Source Attribution',
-    body: 'Pinpoint whether pollution comes from construction, traffic, industry, or burning using satellite, sensor, and geospatial data.',
-    icon: Crosshair,
-    accent: 'text-brand-blue',
-    ring: 'border-brand-blue/25 bg-brand-blue/10',
-  },
-  {
-    title: 'Hyperlocal Forecasting',
-    body: '24-hour AQI predictions at street level so authorities can act before pollution spikes.',
-    icon: LineChart,
-    accent: 'text-brand-green',
-    ring: 'border-brand-green/25 bg-brand-green/10',
-  },
-  {
-    title: 'Enforcement Intelligence',
-    body: 'Prioritized, evidence-backed recommendations with clear actions for pollution control boards and municipal teams.',
-    icon: Shield,
-    accent: 'text-brand-orange',
-    ring: 'border-brand-orange/25 bg-brand-orange/10',
-  },
-  {
-    title: 'Citizen Guidance',
-    body: 'Personalized neighborhood recommendations based on AQI, rent, commute, schools, hospitals, and parks.',
-    icon: Home,
-    accent: 'text-violet-400',
-    ring: 'border-violet-400/25 bg-violet-400/10',
-  },
-] as const;
+type TFn = (key: string, params?: TranslateParams) => string;
 
-const DATA_SOURCES = [
-  {
-    title: 'CPCB & KSPCB Sensors',
-    body: 'Ground-truth air quality readings',
-    icon: Radio,
-  },
-  {
-    title: 'Sentinel-5P & FIRMS Satellite',
-    body: 'NO₂ levels and active fire/burning detection',
-    icon: Flame,
-  },
-  {
-    title: 'OpenStreetMap + H3 Grid',
-    body: 'Road density, land use, construction sites, and vulnerability hotspots',
-    icon: MapIcon,
-  },
-  {
-    title: 'Open-Meteo Weather',
-    body: 'Wind patterns that move pollution across the city',
-    icon: CloudSun,
-  },
-  {
-    title: 'MagicBricks Rental Data',
-    body: 'Real housing costs for citizen recommendations',
-    icon: Building,
-  },
-] as const;
+function buildFeatures(t: TFn) {
+  return [
+    {
+      title: t('landing.feature.attribution.title'),
+      body: t('landing.feature.attribution.body'),
+      icon: Crosshair,
+      accent: 'text-brand-blue',
+      ring: 'border-brand-blue/25 bg-brand-blue/10',
+    },
+    {
+      title: t('landing.feature.forecast.title'),
+      body: t('landing.feature.forecast.body'),
+      icon: LineChart,
+      accent: 'text-brand-green',
+      ring: 'border-brand-green/25 bg-brand-green/10',
+    },
+    {
+      title: t('landing.feature.enforcement.title'),
+      body: t('landing.feature.enforcement.body'),
+      icon: Shield,
+      accent: 'text-brand-orange',
+      ring: 'border-brand-orange/25 bg-brand-orange/10',
+    },
+    {
+      title: t('landing.feature.citizen.title'),
+      body: t('landing.feature.citizen.body'),
+      icon: Home,
+      accent: 'text-violet-400',
+      ring: 'border-violet-400/25 bg-violet-400/10',
+    },
+  ] as const;
+}
 
-const ROLES: RoleOption[] = [
-  {
-    id: 'enforcement',
-    title: 'Enforcement Authority',
-    description: 'For pollution control boards, municipal corporations, and police',
-    icon: Shield,
-  },
-  {
-    id: 'citizen',
-    title: 'Citizen',
-    description: 'Find better places to live based on air quality and livability',
-    icon: Users,
-  },
-  {
-    id: 'guest',
-    title: 'Guest / Judge Mode',
-    description: 'Quick demo access for judges and evaluators',
-    badge: 'Recommended for hackathon',
-    highlight: true,
-    icon: Gavel,
-  },
-];
+function buildDataSources(t: TFn) {
+  return [
+    { title: t('landing.data.cpcb.title'), body: t('landing.data.cpcb.body'), icon: Radio },
+    { title: t('landing.data.satellite.title'), body: t('landing.data.satellite.body'), icon: Flame },
+    { title: t('landing.data.osm.title'), body: t('landing.data.osm.body'), icon: MapIcon },
+    { title: t('landing.data.weather.title'), body: t('landing.data.weather.body'), icon: CloudSun },
+    { title: t('landing.data.rent.title'), body: t('landing.data.rent.body'), icon: Building },
+  ] as const;
+}
+
+function buildRoles(t: TFn): RoleOption[] {
+  return [
+    {
+      id: 'enforcement',
+      title: t('landing.role.enforcement.title'),
+      description: t('landing.role.enforcement.desc'),
+      icon: Shield,
+    },
+    {
+      id: 'citizen',
+      title: t('landing.role.citizen.title'),
+      description: t('landing.role.citizen.desc'),
+      icon: Users,
+    },
+    {
+      id: 'guest',
+      title: t('landing.role.guest.title'),
+      description: t('landing.role.guest.desc'),
+      badge: t('landing.role.guest.badge'),
+      highlight: true,
+      icon: Gavel,
+    },
+  ];
+}
 
 const TERMS_TEXT = `AQI Sentinel is an urban air-quality intelligence prototype for research, civic demonstration, and operational decision support in Bengaluru.
 
@@ -137,9 +127,9 @@ function LanguagePill({
   setLanguage: (l: AppLanguage) => void;
 }) {
   const items: { id: AppLanguage; label: string }[] = [
-    { id: 'EN', label: 'English' },
-    { id: 'KN', label: 'ಕನ್ನಡ' },
-    { id: 'HI', label: 'हिंदी' },
+    { id: 'en', label: 'English' },
+    { id: 'kn', label: 'ಕನ್ನಡ' },
+    { id: 'hi', label: 'हिंदी' },
   ];
   return (
     <div className="inline-flex items-center gap-0.5 p-1 rounded-full glass-panel">
@@ -168,6 +158,10 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { enterApp, language, setLanguage, session, isAuthenticated } = useSession();
+  const { t } = useT();
+  const FEATURES = useMemo(() => buildFeatures(t), [t]);
+  const DATA_SOURCES = useMemo(() => buildDataSources(t), [t]);
+  const ROLES = useMemo(() => buildRoles(t), [t]);
 
   // Warm Map + Enforcement API caches and start Google Maps JS while user reads landing.
   useEffect(() => {
@@ -192,19 +186,19 @@ export default function LandingPage() {
   const handleContinue = () => {
     setError(null);
     if (!selectedRole) {
-      setError('Please select how you want to enter.');
+      setError(t('landing.error.role'));
       return;
     }
     if (name.trim().length < 2) {
-      setError('Please enter your full name.');
+      setError(t('landing.error.name'));
       return;
     }
     if (phone.trim().length < 8) {
-      setError('Please enter a valid phone number.');
+      setError(t('landing.error.phone'));
       return;
     }
     if (!accepted) {
-      setError('Please accept the terms to continue.');
+      setError(t('landing.error.terms'));
       return;
     }
 
@@ -244,9 +238,9 @@ export default function LandingPage() {
               <Satellite size={18} />
             </div>
             <div className="min-w-0">
-              <div className="text-base sm:text-lg font-bold tracking-tight truncate">AQI Sentinel</div>
+              <div className="text-base sm:text-lg font-bold tracking-tight truncate">{t('app.name')}</div>
               <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-apple-secondary hidden sm:block">
-                Urban air intelligence
+                {t('app.tagline')}
               </div>
             </div>
           </div>
@@ -258,7 +252,7 @@ export default function LandingPage() {
                 onClick={resume}
                 className="hidden sm:inline-flex min-h-[44px] items-center gap-2 px-4 rounded-full bg-white/10 border border-white/15 text-xs font-semibold hover:bg-white/15 transition-colors"
               >
-                Resume session
+                {t('common.resume_session')}
                 <ArrowRight size={14} />
               </button>
             )}
@@ -271,17 +265,16 @@ export default function LandingPage() {
         <section className="pt-14 sm:pt-20 pb-16 sm:pb-20 text-center animate-fade-up">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel text-[10px] font-mono uppercase tracking-[0.2em] text-apple-secondary mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
-            Bengaluru · Live intelligence prototype
+            {t('landing.badge')}
           </div>
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-white mb-5">
-            AQI Sentinel
+            {t('app.name')}
           </h1>
           <p className="text-lg sm:text-xl md:text-2xl font-medium text-white/90 max-w-3xl mx-auto leading-snug mb-5">
-            AI-Powered Urban Air Quality Intelligence for Smarter Cities
+            {t('landing.hero_subtitle')}
           </p>
           <p className="text-sm sm:text-base text-apple-secondary max-w-2xl mx-auto leading-relaxed">
-            Real-time source attribution • Hyperlocal forecasting • Evidence-based enforcement •
-            Personalized citizen guidance
+            {t('landing.hero_bullets')}
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <a
@@ -289,13 +282,13 @@ export default function LandingPage() {
               className="min-h-[48px] inline-flex items-center gap-2 px-6 rounded-full bg-brand-blue hover:bg-brand-blue/90 text-white text-sm font-bold shadow-xl shadow-brand-blue/25 transition-all"
             >
               <Sparkles size={16} />
-              Enter the platform
+              {t('landing.enter')}
             </a>
             <a
               href="#features"
               className="min-h-[48px] inline-flex items-center gap-2 px-6 rounded-full glass-panel text-sm font-semibold text-white/90 hover:bg-white/10 transition-all"
             >
-              Explore capabilities
+              {t('landing.explore')}
             </a>
           </div>
         </section>
@@ -304,9 +297,9 @@ export default function LandingPage() {
         <section id="features" className="mb-20">
           <div className="flex items-end justify-between gap-4 mb-8 animate-fade-up">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">What We Do</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('landing.what_we_do')}</h2>
               <p className="text-sm text-apple-secondary mt-2 max-w-xl">
-                Four pillars that connect satellite evidence, city sensors, and operational action.
+                {t('landing.what_we_do_sub')}
               </p>
             </div>
           </div>
@@ -332,10 +325,9 @@ export default function LandingPage() {
         {/* Data transparency */}
         <section className="mb-20">
           <div className="mb-8 animate-fade-up">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Data We Use</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('landing.data_we_use')}</h2>
             <p className="text-sm text-apple-secondary mt-2 max-w-2xl">
-              Transparency first — every recommendation is grounded in public sensors, satellites,
-              geospatial layers, weather, and open housing signals.
+              {t('landing.data_we_use_sub')}
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
@@ -365,12 +357,11 @@ export default function LandingPage() {
                 <div>
                   <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.18em] text-brand-blue mb-3">
                     <Lock size={12} />
-                    Secure lightweight entry
+                    {t('landing.secure_entry')}
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Choose your role</h2>
+                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('landing.choose_role')}</h2>
                   <p className="text-sm text-apple-secondary mt-2 max-w-lg">
-                    Tell us who you are so we open the right workspace. Judges: use Guest mode for
-                    the fastest full-product tour.
+                    {t('landing.choose_role_sub')}
                   </p>
                 </div>
                 <LanguagePill language={language} setLanguage={setLanguage} />
@@ -433,19 +424,19 @@ export default function LandingPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                 <label className="flex flex-col gap-2">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-apple-secondary">
-                    Full name *
+                    {t('landing.name')} *
                   </span>
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
+                    placeholder={t('landing.name')}
                     className="min-h-[48px] rounded-2xl bg-black/40 border border-white/10 px-4 text-sm text-white placeholder:text-apple-secondary/50 focus:outline-none focus:border-brand-blue/60 focus:ring-2 focus:ring-brand-blue/20 transition-all"
                     autoComplete="name"
                   />
                 </label>
                 <label className="flex flex-col gap-2">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-apple-secondary">
-                    Phone number *
+                    {t('landing.phone')} *
                   </span>
                   <input
                     value={phone}
@@ -458,7 +449,7 @@ export default function LandingPage() {
                 </label>
                 <label className="flex flex-col gap-2 md:col-span-2">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-apple-secondary">
-                    Email <span className="normal-case tracking-normal font-normal">(optional)</span>
+                    {t('landing.email')}
                   </span>
                   <input
                     value={email}
@@ -481,7 +472,7 @@ export default function LandingPage() {
                     className="mt-1 w-5 h-5 rounded border-white/20 bg-black/40 text-brand-blue focus:ring-brand-blue/40"
                   />
                   <span className="text-sm text-white/90 leading-relaxed pt-0.5">
-                    I accept the Terms of Use for AQI Sentinel demonstration access.
+                    {t('landing.accept_terms')}
                   </span>
                 </label>
                 <button
@@ -489,7 +480,7 @@ export default function LandingPage() {
                   onClick={() => setShowTerms((v) => !v)}
                   className="w-full flex items-center justify-between px-4 py-3 border-t border-white/10 text-xs font-semibold text-apple-secondary hover:text-white transition-colors min-h-[44px]"
                 >
-                  <span>View short terms</span>
+                  <span>{showTerms ? t('landing.hide_terms') : t('landing.show_terms')}</span>
                   {showTerms ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
                 {showTerms && (
@@ -514,11 +505,11 @@ export default function LandingPage() {
                 {submitting ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Entering AQI Sentinel…
+                    {t('landing.entering')}
                   </>
                 ) : (
                   <>
-                    Accept Terms & Continue
+                    {t('landing.continue')}
                     <ArrowRight size={16} />
                   </>
                 )}

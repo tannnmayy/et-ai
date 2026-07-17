@@ -49,17 +49,24 @@ class TestGetCitizenAdvisory:
         assert result["profile"] == "school"
         assert any("school" in r.lower() or "sport" in r.lower() for r in result["recommendations"])
 
-    def test_hindi_fallback(self) -> None:
+    def test_hindi_served_no_fallback(self) -> None:
         result = get_citizen_advisory("cpcb_hebbal", language="hi")
         assert result["language_requested"] == "hi"
-        assert result["language_served"] == "en"
-        assert result["translation_fallback"] is True
+        assert result["language_served"] == "hi"
+        assert result["translation_fallback"] is False
+        # Devanagari content present
+        assert any("\u0900" <= c <= "\u097F" for c in result["headline"])
+        assert len(result["recommendations"]) > 0
+        assert any("\u0900" <= c <= "\u097F" for c in result["recommendations"][0])
 
-    def test_kannada_fallback(self) -> None:
+    def test_kannada_served_no_fallback(self) -> None:
         result = get_citizen_advisory("cpcb_hebbal", language="kn")
         assert result["language_requested"] == "kn"
-        assert result["language_served"] == "en"
-        assert result["translation_fallback"] is True
+        assert result["language_served"] == "kn"
+        assert result["translation_fallback"] is False
+        # Kannada script present
+        assert any("\u0C80" <= c <= "\u0CFF" for c in result["headline"])
+        assert len(result["recommendations"]) > 0
 
     def test_english_served(self) -> None:
         result = get_citizen_advisory("cpcb_hebbal", language="en")
@@ -69,6 +76,18 @@ class TestGetCitizenAdvisory:
     def test_medical_disclaimer(self) -> None:
         result = get_citizen_advisory("cpcb_hebbal")
         assert result["medical_disclaimer"] == MEDICAL_DISCLAIMER
+
+    def test_hindi_medical_disclaimer(self) -> None:
+        result = get_citizen_advisory("cpcb_hebbal", language="hi")
+        assert result["medical_disclaimer"]
+        assert result["medical_disclaimer"] != MEDICAL_DISCLAIMER
+        assert any("\u0900" <= c <= "\u097F" for c in result["medical_disclaimer"])
+
+    def test_hindi_child_profile_modifiers(self) -> None:
+        result = get_citizen_advisory("cpcb_hebbal", profile="child", language="hi")
+        assert result["translation_fallback"] is False
+        joined = " ".join(result["recommendations"])
+        assert "बच्च" in joined or "स्कूल" in joined
 
     def test_confidence_level_in_response(self) -> None:
         result = get_citizen_advisory("cpcb_hebbal")

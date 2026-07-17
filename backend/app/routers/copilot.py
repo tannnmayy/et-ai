@@ -98,7 +98,9 @@ def copilot_query(body: CopilotQueryRequest) -> CopilotResponse:
             status_code=422,
             detail=f"Invalid profile '{body.profile}'. Supported: {', '.join(sorted(all_profiles))}",
         )
-    if body.language not in SUPPORTED_LANGUAGES:
+    # Accept EN/HI/KN or en/hi/kn
+    lang = (body.language or "en").strip().lower()
+    if lang not in SUPPORTED_LANGUAGES:
         raise HTTPException(
             status_code=422,
             detail=f"Invalid language '{body.language}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}",
@@ -114,7 +116,7 @@ def copilot_query(body: CopilotQueryRequest) -> CopilotResponse:
         city=body.city,
         query=body.query,
         profile=body.profile,
-        language=body.language,
+        language=lang,
         top_k=body.top_k,
         force_dynamic_planning=body.force_dynamic_planning,
         h3_cell=body.h3_cell,
@@ -202,7 +204,8 @@ def copilot_station_guidance(
             status_code=422,
             detail=f"Invalid profile '{profile}'. Supported: {', '.join(sorted(all_profiles))}",
         )
-    if language not in SUPPORTED_LANGUAGES:
+    lang = (language or "en").strip().lower()
+    if lang not in SUPPORTED_LANGUAGES:
         raise HTTPException(
             status_code=422,
             detail=f"Invalid language '{language}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}",
@@ -214,7 +217,7 @@ def copilot_station_guidance(
         city="bengaluru",
         query=f"Health guidance for this station",
         profile=profile,
-        language=language,
+        language=lang,
         explicit_intent="citizen_guidance",
     )
     return CopilotResponse(**result)
