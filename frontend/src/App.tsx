@@ -29,7 +29,7 @@ function RouteFallback() {
   return (
     <div className="w-full h-full flex items-center justify-center bg-black">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 rounded-full border-2 border-brand-blue/30 border-t-brand-blue animate-spin" />
+        <div className="w-8 h-8 border-2 border-brand-blue/30 border-t-brand-blue animate-spin" />
         <span className="text-[10px] font-mono uppercase tracking-widest text-apple-secondary">
           Loading section…
         </span>
@@ -54,6 +54,18 @@ function RootRedirect() {
   return <Navigate to="/welcome" replace />;
 }
 
+/**
+ * Entry at `#/` — send guests to welcome so production preview never lands on an
+ * empty black Map shell before auth.
+ */
+function IndexEntry() {
+  const { isAuthenticated } = useSession();
+  if (!isAuthenticated) {
+    return <Navigate to="/welcome" replace />;
+  }
+  return <MapPage />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -65,10 +77,7 @@ export default function App() {
             <Route path="/entry" element={<Navigate to="/welcome" replace />} />
 
             <Route path="/" element={<MainLayout />}>
-              <Route
-                index
-                element={<MapPage />}
-              />
+              <Route index element={<IndexEntry />} />
               <Route path="map" element={<Navigate to="/" replace />} />
               <Route
                 path="enforcement"

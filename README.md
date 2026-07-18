@@ -1,533 +1,218 @@
-# AQI Sentinel — Complete Project Documentation
+# AQI Sentinel
 
-*A full, exhaustive reference: what this project is, why every decision was made,
-exactly how every part works, and precisely where things stand right now. Written
-to be usable by a teammate, a judge, or future-you with zero prior context.*
+> **From air-quality readings to defensible city action.** AQI Sentinel is a Bengaluru-first urban air-quality intelligence platform that fuses ground observations, geospatial evidence, weather, satellite context, and operational rules into explainable enforcement priorities and citizen guidance.
 
----
+Built for **Problem Statement 5 — AI-Powered Urban Air Quality Intelligence for Smart City Intervention**.
 
-## Part 1 — The Problem This Exists to Solve
+![AQI Sentinel map and hotspot surface](docs/assets/screenshots/01-map.png)
 
-### 1.1 The real-world problem
+## Why this matters
 
-India's air quality crisis is not a Delhi problem — it's a national urban crisis.
-CPCB's 2024 National Air Quality data shows 24 of India's 50 most polluted cities
-are Tier 1/Tier 2 urban centres. The Lancet Planetary Health journal estimates 1.67
-million premature deaths annually in India from air pollution. Despite India
-operating 900+ Continuous Ambient Air Quality Monitoring Stations (CAAQMS) under
-the National Clean Air Programme, a 2024 CAG audit found only 31% of cities with
-monitoring data had any actionable, multi-agency response protocol linked to those
-readings. **The data exists. The intelligence layer to act on it does not.**
+Air-quality platforms commonly stop at a number: *the AQI is high*. AQI Sentinel is designed to answer the next questions responsibly:
 
-### 1.2 The hackathon problem statement (Problem Statement 5)
+- **Where should officers act first?** A citywide H3 grid ranks locations by exposure, attributable pollution magnitude, and the practicality of intervention.
+- **What is likely contributing at this location?** The detailed map engine combines upwind spatial context, wind direction, roads, land use, construction, industrial context, fire detections, and satellite NO₂ context into an investigation hypothesis.
+- **How certain is the signal?** Attribution confidence, station distance, data freshness, forecast error, fusion coverage, and fallbacks are exposed instead of hidden.
+- **What does it mean for residents?** Citizen Mode ranks neighbourhoods against a person’s budget, commute, health sensitivity, amenities, and air quality.
 
-The ET AI Hackathon challenge asks for an AI-powered Urban Air Quality Intelligence
-platform that fuses monitoring station data, satellite imagery, mobility feeds,
-meteorological forecasts, and geospatial land-use layers to move cities from
-**reactive monitoring** to **proactive, evidence-based intervention**. Explicitly
-named suggested capabilities:
+This is an **operational decision-support prototype**, not a legal source-identification system or a medical diagnostic product. Source attribution indicates where to investigate; it does not prove that a particular entity caused a reading.
 
-- **Geospatial Pollution Source Attribution** — multi-modal analysis of spatial-
-  temporal AQI against land use, traffic, construction, industrial stacks, and
-  satellite-detected thermal anomalies, attributing pollution by source category
-  with confidence scores.
-- **Hyperlocal Predictive AQI Forecasting** — 24-72h forecasts at ~1km grid
-  resolution, not just at physical station locations.
-- **Enforcement Intelligence & Prioritisation** — evidence-backed, prioritized
-  recommendations correlating pollution hotspots with registered emission sources.
-- **Multi-City Comparative Dashboard** — explicitly listed as illustrative-only,
-  not a core requirement.
-- **Citizen Health Risk Advisory** — ward-level risk alerts, personalized
-  advisories pushed through mobile apps, public displays, and IVR, in regional
-  languages ("Bengaluru in Kannada" is the problem statement's own example).
+## Judge’s first look
 
-Judging weights: **Innovation 25%, Business Impact 25%, Technical Excellence 20%,
-Scalability 15%, User Experience 15%.**
+| What to inspect | What the prototype demonstrates |
+| --- | --- |
+| **Innovation** | Wind-aware spatial attribution, station-anchored PM2.5 fusion, transparent confidence-aware re-ranking, and an AI copilot grounded in tool outputs and policy knowledge. |
+| **Business impact** | Converts a citywide surface into ranked inspection targets and source-specific action templates; provides a resident-facing decision layer rather than a dashboard alone. |
+| **Technical excellence** | FastAPI + React/TypeScript, H3 resolution-9 grid, vectorized citywide ranking, LightGBM vs persistence evaluation, source/status flags, and 60+ automated tests. |
+| **Scalability** | Data providers, H3 grid construction, station registry, artifacts, and city routing are separated; Bengaluru is the current implementation, not an architectural ceiling. |
+| **User experience** | Map, enforcement queue, Copilot, Citizen Mode, dispatch workflow, and insights are one coherent product surface, with English, Hindi, and Kannada UI wiring. |
 
----
+## Core capabilities
 
-## Part 2 — Project History: How This Evolved
+### 1. Hyperlocal map and evidence layers
 
-### 2.1 The starting point
+- Uses an **H3 resolution-9 grid** across Bengaluru (about 10,000 cells; approximately 174 m edge length) rather than treating a few stations as the whole city.
+- Shows station readings, fused PM2.5 where a station anchor is within 5 km, source fractions, confidence, and global/local-peak hotspot modes.
+- Uses a full wind-weighted attribution path for a selected cell, including a calm-wind fallback that is explicitly labelled.
 
-Before this collaboration, "AQI Sentinel" already existed as a well-engineered but
-narrowly-scoped Bengaluru PM2.5 forecasting API: LightGBM + persistence baseline,
-a deterministic multi-agent copilot, geospatial context via OSM/H3, and a
-neighbourhood-suitability comparison feature. Independent review (pulling the real
-GitHub repo, not trusting self-reported summaries) found the architecture excellent
-— but only ~30% aligned with what the problem statement actually asked for. The
-core ask — *why* is a location polluted, not just *what* the number will be — was
-explicitly disclaimed in the code. There was no satellite data, no frontend, and
-the "multi-agent" system, on inspection, was keyword-matched routing, not genuine
-autonomous orchestration.
+### 2. Enforcement Intelligence
 
-### 2.2 The strategic pivot
+![Enforcement Intelligence queue](docs/assets/screenshots/02-enforcement.png)
 
-Rather than bolt attribution onto the existing station-centric forecaster, the
-project was rebuilt around a different thesis: **model where pollution sources are,
-use real wind conditions to reason about how pollution physically moves, and use
-real ground stations only to correct that physical estimate — not generate it from
-scratch.** This is a deliberately simplified version of how real operational
-systems (CAMS, Google's Environmental Insights Explorer) work: a physical prior
-corrected by sparse real observations. The alternative — full Gaussian-plume
-atmospheric physics — was explicitly rejected as over-engineering: it would need
-real per-source emission-rate data that doesn't exist as reliable public data for
-Indian cities, and would look more "scientific" while resting on the same amount of
-real evidence.
+- Ranks H3 cells with the inspectable formula **Exposure × Attributable Magnitude × Actionability**.
+- Accounts for vulnerable locations (schools, hospitals, elderly-care POIs), residential context, fused PM2.5, source mix, major-road corridors, and time of day.
+- Has a **Risk-Adjusted View** that downweights high scores where station support or attribution reliability is weak.
+- Produces targeted actions for construction dust, traffic, industrial compliance, or open-burning investigations. A single-source label appears only when a source share reaches 80%; otherwise the UI says **Mixed**.
 
-### 2.3 The verification discipline
+### 3. Forecasting and honest uncertainty
 
-Every substantial change in this project — whether written by a human or a coding
-agent — was independently re-verified: cloning the actual repo, running the actual
-test suite, and in many cases hand-computing real numbers from raw data rather than
-trusting a summary. This wasn't ceremony. It caught, among others:
+- Trains a pooled 24-hour PM2.5 LightGBM model on nine forecast-eligible Bengaluru stations, with station-specific interaction features.
+- Benchmarks it against a persistence baseline (“tomorrow ≈ the observation 24 hours earlier”) using a chronological 70/15/15 split.
+- Serves the lower-test-RMSE model **per station**, rather than pretending one model wins everywhere.
+- Returns an approximate `prediction ± selected-model RMSE` interval and an uncertainty level.
 
-- A **gitignore blind spot** that recurred **five separate times** across
-  different milestones — a newly-created required file sitting inside a
-  blanket-ignored directory, silently never committed, leaving a test suite that
-  passed locally while the live API would crash on a fresh clone.
-- A **statistics bug** in a self-generated diagnostic report: a headline finding
-  ("target volatility explains why the model underperforms," claimed 0.94
-  correlation) was computed from the wrong slice of data. Recomputed correctly,
-  the correlation dropped to 0.14 — the finding was wrong, and only caught by
-  independent recomputation.
-- A **frontend data-fabrication system**: a request interceptor that, on any
-  backend failure, silently substituted fully fabricated data (including a
-  hexagon literally named "Okhla Phase II" — a real Delhi neighbourhood, in a
-  Bengaluru-only app) behind a spoofed HTTP 200 status, indistinguishable from a
-  real response to any calling component.
-- A **hardcoded UI panel** showing frozen "45% Construction / 30% Traffic" values
-  regardless of which real hexagon was selected, sitting directly beside genuinely
-  live PM2.5 data.
-- A **sign/direction bug** in a vectorized bearing-calculation rewrite that, if
-  wrong, would have silently inverted the entire attribution engine's directional
-  logic — caught by manually re-deriving the trigonometry, not by trusting that
-  the rewrite's own tests passed.
-- A **one-character typo** in a Google Earth Engine dataset path
-  (`COPERNICUS/S5P/OFFL_L3_NO2` vs the correct `COPERNICUS/S5P/OFFL/L3_NO2`) that
-  silently broke all Sentinel-5P NO2 ingestion until directly diagnosed.
-- **Two parallel enforcement-priority systems** left in the codebase
-  simultaneously — an old 6-station heuristic and the new hexagon-based real
-  engine — with the LLM copilot silently able to call either one, causing
-  identical, location-blind answers regardless of what was actually asked.
+### 4. Grounded Copilot and what-if reasoning
 
-The throughline: this project treats "the tests pass" and "the coding agent said
-it's done" as claims to verify, never as proof.
+![Grounded Copilot answering an inspection query](docs/assets/screenshots/09-copilot.png)
 
----
+- Uses native LLM tool calling when a configured provider is available, with Groq-first, Gemini, and OpenRouter fallback support.
+- Grounds numeric claims in tool results, records an audit trail, uses map context bidirectionally, and falls back to deterministic tool orchestration if an LLM is unavailable.
+- Supports bounded source-reduction what-if scenarios. These are clearly labelled **simulations**, use a linear source-share model, and include an illustrative uncertainty band.
 
-## Part 3 — System Architecture
+### 5. Citizen Mode
 
-### 3.1 The six layers
+| Profile | Ranked results | Detail and constraints |
+| --- | --- | --- |
+| ![Citizen profile builder](docs/assets/screenshots/03-citizen-profile.png) | ![Citizen ranked results](docs/assets/screenshots/04-citizen-results.png) | ![Citizen locality detail](docs/assets/screenshots/05-citizen-detail.png) |
 
-```
-External data sources (CPCB, Open-Meteo, FIRMS, Sentinel-5P, OSM)
-        ↓
-Ingestion & feature store (station registry, H3 hexagon grid)
-        ↓
-Forecast, attribution & fusion (LightGBM, wind-weighted attribution)
-        ↓
-Enforcement priority scoring (exposure × magnitude × actionability)
-        ↓
-Orchestration layer (deterministic router + opt-in agentic reasoning)
-        ↓
-FastAPI backend + React frontend(s)
+- Ranks localities using a transparent, profile-weighted blend of rent fit, AQI, commute, parks, hospitals, schools, noise, and metro access.
+- Raises the AQI weight for respiratory, elderly, and young-child profiles.
+- Refines a short list with Google Routes when configured; otherwise it labels commute as an estimate. AQI and rent fields retain estimation flags.
+
+### 6. Insight and decision-explanation layer
+
+![Rush-hour attribution insight](docs/assets/screenshots/06-insights-rush-hour.png)
+
+![Per-station model comparison](docs/assets/screenshots/07-insights-predictability.png)
+
+The Insights screen explains time-of-day source changes, coverage gaps, forecast-model selection, enforcement concentration, and rent-versus-air-quality trade-offs using computed artifacts rather than static marketing cards.
+
+## System at a glance
+
+```mermaid
+flowchart LR
+    subgraph Sources[Evidence sources]
+        A[CPCB / KSPCB station CSVs]
+        B[Open-Meteo forecast]
+        C[OpenStreetMap layers]
+        D[Sentinel-5P NO2 via Earth Engine]
+        E[NASA FIRMS fire detections]
+        F[Rental and metro reference data]
+    end
+
+    subgraph Data[Data and model layer]
+        G[Quality gates and feature engineering]
+        H[H3 resolution-9 feature grid]
+        I[LightGBM plus persistence evaluation]
+        J[Station-anchored PM2.5 fusion]
+        K[Attribution and confidence]
+    end
+
+    subgraph Decision[Decision layer]
+        L[Enforcement priority engine]
+        M[Citizen matching engine]
+        N[Grounded Copilot and policy retrieval]
+    end
+
+    subgraph Product[Product surface]
+        O[FastAPI]
+        P[React + TypeScript UI]
+        Q[Map, Enforcement, Copilot, Citizens, Insights, Dispatch]
+    end
+
+    Sources --> G --> H
+    A --> I
+    A --> J
+    B --> K
+    C --> H
+    D --> K
+    E --> K
+    H --> K --> J
+    I --> O
+    J --> L
+    K --> L
+    F --> M
+    L --> N
+    M --> O
+    N --> O --> P --> Q
 ```
 
-### 3.2 The one non-negotiable rule
+Read the full architecture and data flow in [Architecture & Data Flow](docs/ARCHITECTURE_AND_DATA_FLOW.md).
 
-**Never fabricate a value when real data is missing.** Every service in this
-project reports an explicit "unavailable," "stale," or "estimated" status rather
-than silently substituting a plausible-looking number. This rule exists because it
-was violated once (the frontend interceptor above) and fixing it required ripping
-out and rebuilding a meaningful part of the frontend's data layer. It is now the
-single most enforced invariant across every new feature, including Citizen Mode's
-`aqiIsEstimated`/`rentIsEstimated` flags.
+## Evidence at a glance
 
----
+| Artifact-backed fact | Current implementation |
+| --- | --- |
+| Ground-station coverage | 12 registered Bengaluru stations; 9 are forecast-eligible after data-quality gating. |
+| Training/evaluation | 8,576 chronological held-out test rows across the 9 eligible stations. |
+| Pooled 24-hour forecast RMSE | LightGBM: **18.4730 µg/m³**; persistence: **18.5552 µg/m³**. |
+| Per-station serving | LightGBM is selected at 3 stations; persistence is selected at 6 where it has lower test RMSE. |
+| Spatial operating bounds | Attribution considers source cells within 3 km; PM2.5 fusion only appears inside 5 km of an eligible station. |
+| Transparency behaviour | Missing, stale, estimated, forecast-ineligible, calm-wind, and feature-proxy conditions are represented in service payloads/UI rather than fabricated. |
 
-## Part 4 — Data Layer
+The evaluation method, station-level results, and what has **not** yet been validated are documented in [Benchmarks & Validation](docs/BENCHMARKS.md).
 
-| Source | What it provides | Real / Verified Status |
-|---|---|---|
-| **CPCB/KSPCB station CSVs** | PM2.5, PM10, NO2, temperature, humidity, wind speed/direction at 12 physical Bengaluru stations, 15-min resolution | ✅ Real, ingested |
-| **Open-Meteo** | Forecast weather (wind speed/direction, temperature), 72h horizon, one city-centre point | ✅ Real, ingested |
-| **NASA FIRMS (VIIRS satellite)** | Fire/burning detection points with Fire Radiative Power, per H3 hexagon | ✅ Confirmed live — `source_status: live_provider` independently verified against the real NASA API; zero detections observed is a genuine, plausible "no fires today" result, not a broken integration |
-| **Sentinel-5P NO2 (Google Earth Engine)** | Satellite NO2 column density, a real traffic/industrial proxy | ✅ Fixed and confirmed — was broken by a one-character asset-path typo (`OFFL_L3_NO2` vs `OFFL/L3_NO2`); also had a severe performance bug (a per-hexagon `.getInfo()` loop, ~10,146 individual network calls) that was rewritten into a single batched `reduceRegions()` call |
-| **OpenStreetMap** | Road density, land-use fractions, industrial/construction facility counts, hospital/school/elderly-care ("vulnerability") POI density, green-space fraction | ✅ Real, ingested, columns confirmed present in `hexagon_features.parquet` |
-| **MagicBricks rental listings** (`rent_dataset_generator/`) | 12,951 real rental listings: rent, locality, BHK, property type, furnishing, lat/lon | ✅ Real, independently verified row-for-row against its own documentation (median rent ₹50,000, 97.19% lat/lon coverage, 1,497 raw locality strings) |
+## Repository guide
 
-### 4.1 The station capability model
+| Document | Use it for |
+| --- | --- |
+| [Features & Scoring](docs/FEATURES_AND_SCORING.md) | Exact formulas for attribution, fusion, confidence, enforcement, forecast selection, citizen matching, and what-if outputs. |
+| [Architecture & Data Flow](docs/ARCHITECTURE_AND_DATA_FLOW.md) | Source provenance, offline and runtime flows, services, APIs, artifacts, and scaling path. |
+| [Benchmarks & Validation](docs/BENCHMARKS.md) | Real evaluation metrics, station results, quality gates, validation boundaries, and reproducibility commands. |
+| [Setup & API Keys](docs/SETUP_AND_API_KEYS.md) | A judge-friendly Windows setup guide, which keys are optional, how to obtain/restrict them, and exact `.env` placement. |
+| [Judge Demo Guide](docs/JUDGE_DEMO_GUIDE.md) | A concise 5–7 minute demonstration path with prompts and the point each screen proves. |
 
-Not every station can support every feature. Rather than silently failing or
-excluding a station, each of the 12 registered stations carries three explicit
-fields: `forecast_eligible`, `available_pollutants`, and
-`pm25_forecast_coverage_status` (`complete` / `insufficient_pm25_history` /
-`pm25_sensor_unavailable`).
+## Quick start
 
-**9 of 12 stations are forecast-eligible.** Two of the remaining three
-(`cpcb_city_railway`, `cpcb_saneguravahalli`) have a permanently dead PM2.5 sensor
-but genuinely excellent NO2/PM10 data — used for attribution and geospatial
-context, never for PM2.5 forecasting. The third
-(`cpcb_kadabesanahalli`) has PM2.5 data too gap-riddled for reliable 24h-ahead
-forecasting, served as a stale "last known reading" advisory instead.
+The checked-in data and artifacts support an offline local demonstration. Google Maps, external live data refreshes, routing/geocoding, and LLM Copilot enhancement have separate optional keys.
 
----
+```powershell
+# From the repository root
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
-## Part 5 — Forecasting Layer
+Copy-Item .env.example .env
+Copy-Item frontend\.env.example frontend\.env
 
-A single LightGBM model trained across all 9 forecast-eligible stations combined
-(not one model per station). Station identity is encoded two ways: a one-hot dummy
-per station (found to be nearly useless on its own — the model barely used it), and
-**interaction features** — 5 specific predictors (`no2_lag_1h`, `no2_lag_24h`,
-`pm25_roll_std_24h`, `hour_sin`, `temperature_c`) multiplied against each station's
-dummy, letting the model learn genuinely different relationships per station. This
-was added after diagnosing (and, on first attempt, mis-diagnosing due to a stats
-bug that was independently caught and corrected) that LightGBM was losing to a
-naive "persistence" baseline at 4 of 6 originally-served stations. Fixing the
-interaction features flipped one station from a loss to a win and substantially
-improved the worst performer.
-
-**Persistence is always computed alongside**, and whichever model actually
-performs better on a given station's held-out test data is the one served —
-tracked explicitly as `model_selected_for_serving`. Some stations are genuinely
-served by persistence, not LightGBM, and the API discloses this honestly.
-
-Three newly-added stations (`btmlayout`, `kasturinagar`, `rvce_mailasandra`) were
-folded into the retrained model but never received the same underperformance
-diagnosis the original four got — this remains an open item.
-
-**Known gap:** forecast horizon is 24h only. 72h (named in the problem statement)
-was never built.
-
----
-
-## Part 6 — Geospatial Layer
-
-H3 hexagon grid, resolution 9 (~174m across, ~9,991 hexagons covering Bengaluru).
-Every hexagon carries real OSM-derived features:
-`road_density_m_per_sq_m`, `industrial_fraction`, `commercial_fraction`,
-`residential_fraction`, `green_space_fraction`, `construction_feature_count`,
-`industrial_facility_count`, `vulnerability_feature_count`,
-`vulnerability_feature_density_per_sq_km` (hospitals/schools/elderly-care combined
-into one POI-density signal). Every station additionally carries the same class of
-context at station-level granularity via a separate, earlier-built pipeline.
-
----
-
-## Part 7 — The Attribution Engine
-
-`compute_attribution_for_hexagon()` answers: *given the wind right now, which
-nearby hexagons are physically upwind, and what's their pollution-source profile?*
-
-```
-weight = max(0, cosine_similarity(bearing_to_target, wind_blowing_toward_direction))
-         × (1 / distance)
-         × source_hexagon's traffic/industrial/construction/burning density
+Set-Location frontend
+npm ci
+Set-Location ..
 ```
 
-Every candidate source hexagon within a 3km radius contributes a weighted amount
-per category (traffic, industrial, construction, burning); contributions are
-summed and normalized to a percentage breakdown. Traffic/industrial density draws
-on real OSM + Sentinel-5P NO2; burning draws on real FIRMS detections; construction
-on OSM tags.
+Start the API in one terminal:
 
-**This is explicitly a simplified directional-weighting proxy, not full
-atmospheric physics** — a deliberate, documented trade-off, not a limitation
-hidden from the design.
-
-**Calm-wind handling:** below 1 km/h, directional weighting is mathematically
-meaningless, so the engine falls back to pure inverse-distance weighting and marks
-the response `method: "calm_fallback"` instead of `"wind_weighted"` — meant to be
-visible in the UI, not just the API, so directional confidence is never overstated.
-
-**The meteorological convention correctness** (wind direction is reported as
-"blowing FROM," requiring a +180° correction before comparing to a bearing) was
-independently re-derived and confirmed correct during a vectorization rewrite — the
-one place a silent sign error would have inverted the entire engine without
-necessarily failing any test.
-
-**Performance:** originally an O(n²) computation using Python-level `.iterrows()`
-loops (two separate ones — haversine distance and bearing calculation, in
-different functions), taking upward of 20+ seconds for the full city grid.
-Vectorized with NumPy array operations; the real, measured HTTP-path latency
-(2,000-hexagon default) is **~3 seconds**.
-
----
-
-## Part 8 — The Fusion Layer
-
-Bridges "9 real PM2.5 readings" to "a continuous estimate across ~9,991 hexagons."
-At each real station, a residual (actual reading minus what the attribution-derived
-baseline predicts) is computed using attribution-profile similarity to other
-stations as a proxy for "should behave alike," then spread to nearby hexagons via
-inverse-distance weighting. Result: `fused_pm25` per hexagon — the
-attribution-informed baseline, corrected toward reality wherever a real station is
-near.
-
----
-
-## Part 9 — Enforcement Priority System
-
-A decomposed, explainable score, never a black-box number:
-
-```
-priority_score = exposure_weight × attributable_magnitude × actionability_weight
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8010
 ```
 
-- **Exposure weight**: real vulnerability-POI density (hospitals/schools/elderly
-  care) near the hexagon — or, when that specific artifact is unavailable, an
-  honestly-disclosed `residential_fraction` proxy (`exposure_data_source` field
-  always states which was used).
-- **Attributable magnitude**: fused PM2.5 multiplied only by the *enforceable*
-  attribution share — industrial, construction, burning. **Traffic is
-  deliberately excluded** from this term entirely; a purely traffic-attributed
-  hexagon scores zero here regardless of exposure, because diffuse traffic isn't
-  something an inspector can be sent to fix.
-- **Actionability weight**: industrial/construction/burning weighted high
-  (permitted, inspectable, stoppable); traffic weighted near zero.
+Start the frontend in a second terminal:
 
-**Known duplicate-system issue:** an older, pre-hexagon 6-station heuristic
-priority system (`inspection_priority_service.py`) still exists in the codebase
-alongside the real one (`enforcement_priority_service.py`), and was found to still
-be reachable by the LLM copilot's tool registry — causing identical, query-blind
-answers ("Jayanagar 5th Block is the top priority") regardless of what location
-was actually asked about. Diagnosed; fix (removing the old tool from the LLM's
-registry) was in progress as of the last verified state.
-
----
-
-## Part 10 — Orchestration and Copilot Layer
-
-### 10.1 Nine deterministic agents
-
-`backend/app/agents/`: `forecast_evidence_agent`, `enforcement_planning_agent`,
-`citizen_advisory_agent`, `city_briefing_agent`, `policy_guidance_agent`,
-`spatial_context_agent`, `spatial_intelligence_agent`,
-`neighbourhood_decision_agent`, `travel_readiness_agent`. Each is dispatched by
-plain substring keyword matching against 11 fixed intents in `orchestrator.py` —
-no model, no API call, fully offline-capable for the common case.
-
-### 10.2 The opt-in agentic path
-
-`dynamic_planning_agent.py` runs a genuine LangGraph `StateGraph` — at each step,
-an LLM (Groq) decides `call_tool` or `final_answer` based on everything gathered
-so far, bounded by a max-step cap and duplicate-call detection. This is real,
-autonomous multi-step reasoning, not a hardcoded sequence, and directly answers the
-problem statement's "Multi-Agent AI Systems" suggested technology. It was
-deliberately made **opt-in** (a "Deep Reasoning Mode" toggle, plus automatic
-escalation only for genuinely ambiguous/compound queries) after an earlier,
-unscoped change had made it the silent default for every query the moment an LLM
-key existed — reverted specifically because unpredictable multi-second latency on
-every query is a worse live-demo experience than a fast, honest deterministic
-answer for the common case.
-
-### 10.3 Known reliability gaps in this layer
-
-- The Groq client originally had no request timeout (defaulting to 600 seconds) —
-  fixed, capped at 15 seconds.
-- Malformed LLM decision JSON originally crashed the graph with an unhandled
-  `KeyError` instead of degrading gracefully — fixed.
-- The LLM-unreachable fallback (`_grounded_fallback()`) **ignores the actual query
-  text entirely** and doesn't disclose that it's a degraded response — this is the
-  root cause of the "identical answer every time" symptom observed in testing, and
-  was still open as of the last verified state, pending confirmation of whether the
-  Groq key/quota itself was also a contributing factor.
-- `tool_resolve_location` exists in the tool registry (free-text place-name
-  resolution) but reliable, consistent use of it by the planner is unconfirmed.
-
----
-
-## Part 11 — Frontend
-
-### 11.1 Design system
-
-Dark-mode, Apple Human Interface Guidelines-inspired: clarity over decoration,
-deference to data, 44×44pt minimum tap targets, visible feedback on every
-interaction. Black background (`#000000`), dark-charcoal cards (`#1C1C1E`), an
-iOS-matching brand palette (blue `#0A84FF`, red `#ff453a`, orange `#FF9F0A`, green
-`#34C759`), Inter for UI text, JetBrains Mono specifically for numeric data.
-
-### 11.2 The four pages (main `frontend/` app)
-
-- **Map** — city-wide hexagon grid via Google Maps + `h3-js`, source attribution
-  and fused PM2.5 per hexagon, with `wind_weighted` vs `calm_fallback` meant to be
-  visually distinguished.
-- **Enforcement** — full ranked priority list with the decomposed
-  exposure/magnitude/actionability breakdown always visible.
-- **Copilot** — natural-language query interface with the deterministic/deep-
-  reasoning toggle.
-- **Neighbourhoods** — citizen-facing locality comparison; **still contains
-  hardcoded example data** (Koramangala/Indiranagar/HSR Layout with fabricated
-  scores) behind otherwise-real loading/error states — a known, not-yet-fixed
-  instance of the same fabrication pattern already removed elsewhere.
-
-### 11.3 A serious, real fabrication bug that was found and removed
-
-`axiosClient.ts` originally contained a request interceptor that, on any backend
-failure, silently substituted fabricated data (stations, enforcement priorities,
-fire detections, NO2 density, a fake analytics dashboard, even fake copilot chat
-history) behind a spoofed HTTP 200 response — completely indistinguishable from a
-real response to any calling component, with only a `console.warn()` as any trace.
-This was found, confirmed precisely (including the "Okhla Phase II" Delhi-in-
-Bengaluru detail), and fully removed; `mockData.ts` is now quarantined to a
-clearly-marked dev-only path with zero production imports.
-
-### 11.4 Frontend unification (resolved)
-
-Citizen Mode was originally a **separate Vite app** (`citizen mode frontend/`).
-It has been **merged into `frontend/`**: one HashRouter SPA, shared TopNav with a
-working **City Admin / Citizen** toggle (`#/` vs `#/citizen`), shared design tokens,
-and a single Vite proxy to the FastAPI backend. The standalone citizen directory
-has been removed.
-
----
-
-## Part 12 — Citizen Mode
-
-### 12.1 The vision
-
-Extends AQI Sentinel beyond monitoring into answering: *"Which Bengaluru
-neighbourhood should I live in, given my budget, health, family, and commute?"*
-Every locality gets a feature vector (AQI, rent, hospital/school/park scores,
-metro distance, noise, construction activity); every user gets a matching profile
-(budget, family size, health conditions, workplace location, commute tolerance,
-priorities); a radius pre-filter narrows candidates before a transparent, weighted
-matching engine ranks them — every recommendation shows *why*, never a bare score.
-
-### 12.2 Real data secured
-
-A genuine 12,951-row MagicBricks rental dataset (independently verified — median
-rent ₹50,000, 97.19% real lat/lon coverage), obtained deliberately *without*
-relying on live scraping of commercial portals as an ongoing production pipeline —
-consistent with this project's preference for defensible, citable data sources
-over fragile or ToS-risky ones for anything demo-critical.
-
-### 12.3 Frontend — merged into main SPA
-
-Citizen Mode lives at `#/citizen` inside `frontend/`, reached via the TopNav
-**City Admin / Citizen** toggle. TypeScript contract: `CitizenProfile` in,
-`NeighbourhoodMatch[]` out via `POST /api/citizen/matches`, with
-`aqiIsEstimated`/`rentIsEstimated` honesty flags and a quarantined mock-data path
-that never silently substitutes for a real API failure.
-
-### 12.4 Backend — offline build + fast online matching (shipped)
-
-Offline locality registry / rent / environment / metro feature vectors under
-`pipeline/reference/`; live matching in `citizen_matching_service.py` with
-optional live AQI overlay and hybrid Google Routes commute refinement for the
-top shortlist. Endpoint: `POST /citizen/matches`.
-
----
-
-## Part 13 — Twilio WhatsApp and Multi-Language (planned)
-
-**WhatsApp, reactive-first:** a citizen texts a question; the webhook reuses
-`run_orchestrator()` directly — the same pipeline the web copilot already uses.
-Because Twilio retries a webhook that doesn't acknowledge fast enough, the design
-deliberately separates immediate acknowledgment from asynchronous reply via a
-FastAPI `BackgroundTask`, avoiding the same class of timeout risk this project
-already hit once with the copilot itself. Proactive push is intentionally
-sequenced second, and will need a phone-number-to-profile registry that doesn't
-exist yet.
-
-**Multi-language:** `language` is already wired end-to-end through the request
-schema, router, and orchestrator, with `en`/`hi`/`kn` already declared supported —
-the only missing piece is the actual Groq translation call on the final answer
-text, plus a real language selector in the web copilot UI (the API field is
-already there, currently hardcoded to `'en'` on the frontend).
-
----
-
-## Part 14 — Complete Current Issue Inventory
-
-**Actively affecting the demo:**
-1. LLM-unreachable fallback ignores query text and doesn't disclose degradation.
-2. Two parallel enforcement-priority systems, old one still reachable by the LLM.
-3. Reverse geocoding incomplete — some hexagons show real names, others show raw
-   grid IDs.
-4. Enforcement detail panel possibly not refreshing per-hexagon-click.
-
-**Diagnosed, fix scoped, not yet fully confirmed pushed/verified:**
-5. Dormant silent-coordinate-fallback risk in `geospatialService.ts`.
-6. `NeighbourhoodsPage.tsx` hardcoded example data.
-7. Wrong-tool-selection reliability once Groq is confirmed working.
-
-**Known, honest data-completeness gaps (not bugs):**
-8. Sentinel-5P now fixed (typo + performance rewrite) — re-verification of live
-   NO2 signal reaching attribution output still pending as of the last check.
-9. Three newer stations (`btmlayout`, `kasturinagar`, `rvce_mailasandra`) never
-   individually diagnosed for underperformance the way the original four were.
-10. `cpcb_bapujinagar`'s evaluation remains statistically unreliable (37 test rows).
-
-**Maintenance, low urgency:**
-11. Six date-fragile tests (hardcoded fixture dates vs. real `datetime.now()`).
-12. No comprehensive one-time gitignore/artifact audit has ever been done — each
-    of the five known instances was caught reactively, individually.
-13. The "Deep Reasoning Mode" toggle can silently misrepresent which path is
-    actually taken for unsupported queries.
-
-**Structural, deferred:**
-14. No database — not a cause of any diagnosed bug, but a real scalability gap.
-    (Frontend merge into a single SPA is done — see 11.4 / 12.3.)
-
-**Planned, not yet built:**
-15. Twilio WhatsApp integration.
-16. Web copilot multi-language translation layer.
-17. 72-hour forecast horizon.
-18. Multi-city dashboard (deliberately out of scope).
-
----
-
-## Part 15 — Problem Statement Alignment, Final Summary
-
-| Requirement | Status |
-|---|---|
-| Source attribution | ✅ Built, real, physically-motivated |
-| Hyperlocal forecast grid | ✅ Built (finer than the 1km ask); ❌ still 24h horizon only |
-| Enforcement intelligence | ✅ Built, decomposed, explainable (pending the duplicate-system fix) |
-| Satellite imagery | ✅ FIRMS and Sentinel-5P both genuinely integrated and fixed |
-| Citizen health advisories | ✅ Exist in English; ❌ regional-language delivery not yet built |
-| Multi-Agent AI Systems | ✅ Genuinely agentic (LangGraph), correctly scoped as opt-in |
-| Working prototype | ✅ Built, real pages, consistent design system; single unified SPA |
-| Multi-city dashboard | Deliberately out of scope (illustrative-only per the problem statement) |
-
----
-
-## Part 16 — Repository Layout
-
-```
-et-ai/
-├── backend/app/           FastAPI application
-│   ├── agents/             9 deterministic agents + LangGraph dynamic planner
-│   ├── routers/             HTTP endpoint definitions
-│   ├── schemas/             Pydantic request/response models
-│   └── services/           Core business logic (forecast, attribution, fusion,
-│                           enforcement, commute, weather, geospatial)
-├── pipeline/               Offline data ingestion and feature-building scripts
-│   ├── firms_ingestion.py, sentinel5p_ingestion.py, cpcb_csv_adapter.py
-│   ├── build_geospatial_context.py, build_hexagon_features.py
-│   └── station_registry.py, station_capability computation
-├── ml/                     LightGBM training, evaluation, diagnostics
-├── data/                   Raw and processed data artifacts
-├── frontend/               Unified React SPA (City Admin: Map, Enforcement,
-│                           Copilot, Neighbourhoods; Citizen: #/citizen matching)
-├── pipeline/reference/     Offline citizen locality feature-vector caches
-├── rent_dataset_generator/ Real MagicBricks rental scrape + output data
-├── knowledge_base/         Curated policy/health documents (WHO, CPCB, Karnataka)
-└── tests/                  Full backend test suite
+```powershell
+Set-Location frontend
+npm run dev
 ```
 
----
+Open `http://localhost:3000`. FastAPI’s interactive API documentation is at `http://127.0.0.1:8010/docs`.
 
-*This document reflects the verified state of the project as of the most recent
-independently-confirmed check. Anything marked "in progress" or "planned" should be
-re-verified before being treated as done — that discipline is the reason this
-project is in the shape it's in.*
+For all API-key setup, source-specific instructions, and security restrictions, see [Setup & API Keys](docs/SETUP_AND_API_KEYS.md).
 
----
+## Verification
 
-## Contributors
+```powershell
+# Backend tests
+.\.venv\Scripts\python.exe -m pytest -q
 
-- **Panshul**
-- **Tanmay Singh** (tannnmayy)
+# Frontend checks
+Set-Location frontend
+npm run lint
+npm run build
+```
+
+## Scope and responsible-use boundaries
+
+- **Current city:** Bengaluru. The registry and data layouts are multi-city-ready, but only Bengaluru is fully instrumented and documented.
+- **Forecast horizon:** 24 hours. Weather retrieval supports a 72-hour horizon; the 24–72 hour AQI forecasting extension remains future work.
+- **Source attribution:** an evidence-weighted investigation hypothesis, not an emission inventory, dispersion-model substitute, or legal causality finding.
+- **Satellite context:** Sentinel-5P NO₂ is a coarse (kilometre-scale) column-density proxy; it is not a 174 m pollution measurement.
+- **Citizen guidance:** informational only, not medical, housing, or legal advice.
+
+## Technology
+
+**Backend:** Python, FastAPI, Pandas, NumPy, LightGBM, scikit-learn, H3, GeoPandas/Shapely, Earth Engine API, LangGraph-compatible orchestration.
+
+**Frontend:** React, TypeScript, Vite, TanStack Query, Google Maps, Recharts, Tailwind CSS, Motion.
+
+**Data:** CPCB/KSPCB exports, Open-Meteo, OpenStreetMap, NASA FIRMS, Sentinel-5P TROPOMI, OpenAQ discovery/audit support, and locality/rental reference artifacts.
+

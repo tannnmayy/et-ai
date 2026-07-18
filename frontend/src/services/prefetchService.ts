@@ -140,8 +140,8 @@ export function warmAppFromLanding(queryClient: QueryClient) {
       void phase1Promise;
     };
     // Next macrotask so Landing first paint is not blocked
-    if (typeof window !== 'undefined') {
-      window.setTimeout(runPhase1, 0);
+    if (typeof globalThis !== 'undefined' && typeof globalThis.setTimeout === 'function') {
+      globalThis.setTimeout(runPhase1, 0);
     } else {
       runPhase1();
     }
@@ -157,10 +157,13 @@ export function warmAppFromLanding(queryClient: QueryClient) {
       preloadAppRouteChunks();
       void prefetchMapSecondaryData(queryClient);
     };
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(runPhase2, { timeout: 2500 });
-    } else if (typeof window !== 'undefined') {
-      window.setTimeout(runPhase2, 2000);
+    const w = typeof globalThis !== 'undefined' ? (globalThis as typeof globalThis & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    }) : undefined;
+    if (w?.requestIdleCallback) {
+      w.requestIdleCallback(runPhase2, { timeout: 2500 });
+    } else if (typeof globalThis !== 'undefined' && typeof globalThis.setTimeout === 'function') {
+      globalThis.setTimeout(runPhase2, 2000);
     } else {
       runPhase2();
     }

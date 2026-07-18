@@ -49,6 +49,9 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    // Relative asset URLs so `npm run preview` and static hosts under a subpath work.
+    // Absolute `/assets/...` breaks when opening dist incorrectly or from a nested path.
+    base: './',
     plugins: [react(), tailwindcss()],
     define,
     envDir: __dirname,
@@ -62,5 +65,17 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    preview: {
+      port: 4173,
+      // Proxy API in preview the same way as dev, so production build can talk to backend
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:8010',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/api/, ''),
+        },
+      },
+    },
   };
 });
+

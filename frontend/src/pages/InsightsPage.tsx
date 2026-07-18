@@ -293,7 +293,7 @@ function RushHourFlipCard({
                 borderRadius: 12,
                 fontSize: 12,
               }}
-              formatter={(v: number) => [`${v}%`, '']}
+              formatter={(v) => [`${Number(v ?? 0)}%`, '']}
             />
             <Legend wrapperStyle={{ fontSize: 11, color: '#8E8E93' }} />
             <Area
@@ -589,9 +589,11 @@ function PredictabilityMapCard({
                 borderRadius: 12,
                 fontSize: 12,
               }}
-              formatter={(v: number, _n, props: any) => [
-                `${v.toFixed(1)}% RMSE improvement`,
-                props?.payload?.winner === 'lightgbm' ? 'LightGBM' : 'Persistence',
+              formatter={(v, _n, item) => [
+                `${Number(v ?? 0).toFixed(1)}% RMSE improvement`,
+                (item as { payload?: { winner?: string } })?.payload?.winner === 'lightgbm'
+                  ? 'LightGBM'
+                  : 'Persistence',
               ]}
             />
             <Bar dataKey="improvement" radius={[8, 8, 4, 4]}>

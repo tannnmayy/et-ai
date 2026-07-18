@@ -167,6 +167,52 @@ export default function MapPage() {
     !extremesError &&
     !stationsError;
 
+  // Mode switch / refetch: keep map painted; show a chip, never a black full-page wipe
+  const rankingsLoading = Boolean(extremesFetching || (extremesLoading && !extremesReady));
+  const modeSwitchPending = Boolean(
+    extremesFetching && extremes && extremes.mode !== rankingMode,
+  );
+
+  /** Polluted hexes shown under Local Peaks mode get a distinct Peak badge on the map.
+   *  MUST stay above any early return (Rules of Hooks). */
+  const localPeakHexIds = useMemo(() => {
+    if (rankingMode !== 'local_peaks') return [] as string[];
+    if (extremeMode === 'best') return [] as string[];
+    return pollutedShown.map((h) => h.id).filter(Boolean);
+  }, [rankingMode, extremeMode, pollutedShown]);
+
+  const activeIsLocalPeak = Boolean(
+    activeHex && localPeakHexIds.includes(activeHex.id),
+  );
+
+  const topFive = (priorities || []).slice(0, 5);
+
+  const handleDispatch = (hex: PriorityHex) => {
+    setDispatchedUnits((prev) => ({ ...prev, [hex.id]: true }));
+    const qs = new URLSearchParams({
+      target: hex.name || hex.id,
+      hex: hex.id,
+      source: String(hex.sourceType || 'mixed'),
+      score: String(hex.priorityScore ?? hex.pm25 ?? '—'),
+      action: hex.explanation?.text || 'Inspect site for dust control compliance and document evidence.',
+    });
+    navigate(`/dispatch?${qs.toString()}`);
+  };
+
+  /** One-way Map → Copilot: stash hex (and optional nearest station) then open Copilot. */
+  const handleAskCopilot = (hex: PriorityHex) => {
+    setMapContext({
+      h3_cell: hex.id,
+      station_id: undefined,
+      label: formatLocationName(hex) || hex.name || hex.id,
+    });
+    const qs = new URLSearchParams({
+      h3_cell: hex.id,
+      label: formatLocationName(hex) || hex.name || hex.id,
+    });
+    navigate(`/copilot?${qs.toString()}`);
+  };
+
   if (stillBootstrapping) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
@@ -199,51 +245,6 @@ export default function MapPage() {
       </div>
     );
   }
-
-  // Mode switch / refetch: keep map painted; show a chip, never a black full-page wipe
-  const rankingsLoading = Boolean(extremesFetching || (extremesLoading && !extremesReady));
-  const modeSwitchPending = Boolean(
-    extremesFetching && extremes && extremes.mode !== rankingMode,
-  );
-
-  const handleDispatch = (hex: PriorityHex) => {
-    setDispatchedUnits((prev) => ({ ...prev, [hex.id]: true }));
-    const qs = new URLSearchParams({
-      target: hex.name || hex.id,
-      hex: hex.id,
-      source: String(hex.sourceType || 'mixed'),
-      score: String(hex.priorityScore ?? hex.pm25 ?? '—'),
-      action: hex.explanation?.text || 'Inspect site for dust control compliance and document evidence.',
-    });
-    navigate(`/dispatch?${qs.toString()}`);
-  };
-
-  /** One-way Map → Copilot: stash hex (and optional nearest station) then open Copilot. */
-  const handleAskCopilot = (hex: PriorityHex) => {
-    setMapContext({
-      h3_cell: hex.id,
-      station_id: undefined,
-      label: formatLocationName(hex) || hex.name || hex.id,
-    });
-    const qs = new URLSearchParams({
-      h3_cell: hex.id,
-      label: formatLocationName(hex) || hex.name || hex.id,
-    });
-    navigate(`/copilot?${qs.toString()}`);
-  };
-
-  const topFive = (priorities || []).slice(0, 5);
-
-  /** Polluted hexes shown under Local Peaks mode get a distinct Peak badge on the map. */
-  const localPeakHexIds = useMemo(() => {
-    if (rankingMode !== 'local_peaks') return [] as string[];
-    if (extremeMode === 'best') return [] as string[];
-    return pollutedShown.map((h) => h.id).filter(Boolean);
-  }, [rankingMode, extremeMode, pollutedShown]);
-
-  const activeIsLocalPeak = Boolean(
-    activeHex && localPeakHexIds.includes(activeHex.id),
-  );
 
   return (
     <div className="w-full h-full flex flex-col bg-black overflow-y-auto">
