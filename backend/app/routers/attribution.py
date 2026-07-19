@@ -114,24 +114,33 @@ def city_grid_fusion(
     "/city/{city}/extremes",
     response_model=CityExtremesResponse,
     summary="Get best and worst hexagons by fused PM2.5",
-    description="Returns the top N cleanest and top N most polluted hexagons in a city. "
-    "Only hexagons with a real fused estimate are included. "
-    "mode=global: absolute highest fused PM2.5 (may cluster around one high station). "
-    "mode=local_peaks: worst K hexes per station catchment, merged — operational city-wide peaks. "
-    "Optional simulated_hour (0–23) overrides Bengaluru local time for traffic peak weighting.",
+    description=(
+        "Map extremes — only three modes: "
+        "global_worst (n=15|30|50), "
+        "global_best (Top 30 cleanest), "
+        "local_peaks (worst 10 fused hexes per live sensor, merged). "
+        "Responses omit attribution confidence (Enforcement still has risk-adjusted confidence). "
+        "Legacy mode 'global' soft-redirects to global_worst with deprecation_warning; "
+        "other legacy names return 400."
+    ),
 )
 def city_extremes(
     city: str = "bengaluru",
-    n: int = Query(default=15, ge=1, le=100, description="Number of best/worst hexagons to return"),
+    n: int = Query(
+        default=30,
+        ge=1,
+        le=100,
+        description="global_worst: 15|30|50; global_best: ignored (always 30); local_peaks: merge cap",
+    ),
     mode: str = Query(
-        default="global",
-        description="Worst ranking: 'global' (absolute) or 'local_peaks' (per-station catchments)",
+        default="global_worst",
+        description="One of: global_worst | global_best | local_peaks",
     ),
     peak_k: int = Query(
-        default=8,
+        default=10,
         ge=1,
         le=20,
-        description="Per-station worst-hex count when mode=local_peaks",
+        description="Ignored for Map — local_peaks always uses peak_k=10",
     ),
     simulated_hour: int | None = Query(
         default=None,

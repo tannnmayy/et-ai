@@ -13,6 +13,7 @@ class ScoringBreakdown(BaseModel):
         default=None,
         description="0.35–1.0 factor from attribution confidence used in risk-adjusted score",
     )
+    # Deprecated for Map UI (often inconsistent); still used by Enforcement risk-adjust.
     attribution_confidence_score: int | None = Field(
         default=None,
         description="0–100 attribution reliability score",
@@ -59,11 +60,23 @@ class RankedHexagon(BaseModel):
     is_peak_hour: bool | None = Field(default=None)
     traffic_hour_local: int | None = Field(default=None)
     traffic_corridor_applied: bool | None = Field(default=None)
-    # Attribution confidence / reliability
-    attribution_confidence_score: int | None = None
-    attribution_confidence_level: str | None = None
-    confidence_explanation: str | None = None
-    confidence_flags: list[str] | None = None
+    # Attribution confidence — kept for Enforcement risk-adjust; deprecated on Map UI
+    attribution_confidence_score: int | None = Field(
+        default=None,
+        description="Deprecated for Map UI; 0–100 reliability used by risk-adjusted enforcement",
+    )
+    attribution_confidence_level: str | None = Field(
+        default=None,
+        description="Deprecated for Map UI; High/Medium/Low/Very Low",
+    )
+    confidence_explanation: str | None = Field(
+        default=None,
+        description="Deprecated for Map UI",
+    )
+    confidence_flags: list[str] | None = Field(
+        default=None,
+        description="Deprecated for Map UI",
+    )
     risk_confidence_factor: float | None = None
     nearest_station_distance_m: float | None = None
 

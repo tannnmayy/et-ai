@@ -149,8 +149,8 @@ class CityExtremesResponse(BaseModel):
     city: str = Field(description="City name")
     computed_at: str = Field(description="ISO timestamp of computation")
     mode: str = Field(
-        default="global",
-        description="Worst-list ranking mode: 'global' (absolute highest fused PM) or 'local_peaks'",
+        default="global_worst",
+        description="Canonical mode: global_worst | global_best | local_peaks",
     )
     mode_description: str | None = Field(
         default=None,
@@ -158,7 +158,11 @@ class CityExtremesResponse(BaseModel):
     )
     peak_k: int | None = Field(
         default=None,
-        description="Per-station worst-hex count used for local_peaks mode",
+        description="Per-station worst-hex count for local_peaks (always 10 on Map path)",
+    )
+    deprecation_warning: str | None = Field(
+        default=None,
+        description="Set when a legacy mode was soft-redirected (e.g. global → global_worst)",
     )
     best: list[HexagonExtreme] = Field(description="Top N cleanest hexagons (lowest fused PM2.5)")
     worst: list[HexagonExtreme] = Field(

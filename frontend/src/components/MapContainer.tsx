@@ -28,7 +28,8 @@ interface MapContainerProps {
   selectedHex: PriorityHex | null;
   onSelectHex: (hex: PriorityHex) => void;
   allHexes: PriorityHex[];
-  viewMode: 'aqi' | 'enforcement' | 'confidence';
+  /** Map colouring: AQI (default) or enforcement tier. Confidence layer removed. */
+  viewMode: 'aqi' | 'enforcement';
   /** Smaller map labels when showing many polluted hexes (30–100). */
   compactLabels?: boolean;
   /** H3 cell ids to emphasize from Copilot map_actions */
@@ -116,14 +117,6 @@ function MapFocusController({
   return null;
 }
 
-function confidenceColor(score: number | undefined): string {
-  const s = score ?? 0;
-  if (s >= 80) return '#34C759';
-  if (s >= 55) return '#0A84FF';
-  if (s >= 30) return '#FF9F0A';
-  return '#ff453a';
-}
-
 function aqiColor(aqi: number): string {
   if (aqi <= 50) return '#34C759';
   if (aqi <= 100) return '#FFCC00';
@@ -131,12 +124,9 @@ function aqiColor(aqi: number): string {
   return '#ff453a';
 }
 
-function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement' | 'confidence'): string {
+function hexColor(hex: PriorityHex, viewMode: 'aqi' | 'enforcement'): string {
   if (viewMode === 'enforcement') {
     return actionTierStyles(hex.actionTier || 'MONITOR').mapColor;
-  }
-  if (viewMode === 'confidence') {
-    return confidenceColor(hex.attributionConfidence ?? hex.confidence);
   }
   return aqiColor(hex.pm25);
 }
@@ -495,7 +485,6 @@ function MapContainer({
                 const isSelected = selectedHex?.id === hex.id;
                 const isCopilotHighlight = highlightSet.has(hex.id);
                 const isLocalPeak = peakSet.has(hex.id);
-                const confScore = hex.attributionConfidence ?? hex.confidence;
                 const borderColor = isCopilotHighlight
                   ? '#BF5AF2'
                   : isLocalPeak
@@ -529,7 +518,7 @@ function MapContainer({
                               ? '0 2px 8px rgba(10,132,255,0.18)'
                               : '0 1px 4px rgba(0,0,0,0.35)',
                       }}
-                      title={`${label} · ${hex.pm25} µg/m³ · conf ${confScore ?? '—'}%${isLocalPeak ? ' · Local peak (station catchment)' : ''}${isCopilotHighlight ? ' · Copilot highlight' : ''}`}
+                      title={`${label} · ${hex.pm25} µg/m³${isLocalPeak ? ' · Local peak (station catchment)' : ''}${isCopilotHighlight ? ' · Copilot highlight' : ''}`}
                     >
                       {(isLocalPeak || isCopilotHighlight) && (
                         <span
@@ -553,9 +542,7 @@ function MapContainer({
                       >
                         {viewMode === 'enforcement'
                           ? `${hex.score10?.toFixed?.(1) ?? '—'} · ${hex.pm25 || '—'} µg`
-                          : viewMode === 'confidence'
-                            ? `${confScore ?? '—'}% conf`
-                            : `${hex.pm25} µg/m³`}
+                          : `${hex.pm25} µg/m³`}
                       </div>
                     </div>
                   </AdvancedMarker>
@@ -580,7 +567,6 @@ function MapContainer({
               const isCopilotHighlight = highlightSet.has(hex.id);
               const isLocalPeak = peakSet.has(hex.id);
               const label = formatLocationName(hex);
-              const confScore = hex.attributionConfidence ?? hex.confidence;
               const strokeColor = isCopilotHighlight
                 ? '#BF5AF2'
                 : isLocalPeak
@@ -665,9 +651,7 @@ function MapContainer({
                   >
                     {viewMode === 'enforcement'
                       ? `${hex.score10?.toFixed?.(1) ?? '—'} / ${hex.pm25 || '—'}µg`
-                      : viewMode === 'confidence'
-                        ? `${confScore ?? '—'}%`
-                        : `${hex.pm25} µg/m³`}
+                      : `${hex.pm25} µg/m³`}
                   </text>
                 </g>
               );

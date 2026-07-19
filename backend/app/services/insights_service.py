@@ -163,11 +163,24 @@ def _insight_rush_hour_flip() -> dict[str, Any]:
 
     best["related_examples"] = related
     best["headline"] = f"The Rush-Hour Personality Flip — {best['location_name']}"
-    best["finding"] = (
-        f"At 8 AM, {best['location_name']} is {best['traffic_am_pct']:.0f}% traffic. "
-        f"By 2 AM, traffic falls to {best['traffic_night_pct']:.0f}% and "
-        f"{best['dominant_night']} becomes the dominant source."
-    )
+    # Honest night wording: traffic share usually falls overnight. If it remains the
+    # largest category, say so — do not claim another source "becomes" dominant.
+    am_pct = best["traffic_am_pct"]
+    night_pct = best["traffic_night_pct"]
+    loc = best["location_name"]
+    dom_night = str(best.get("dominant_night") or "traffic").lower()
+    if dom_night == "traffic":
+        best["finding"] = (
+            f"At 8 AM, {loc} is {am_pct:.0f}% traffic. "
+            f"By 2 AM, traffic share falls to {night_pct:.0f}% — less dominant overnight, "
+            f"though it remains the single largest source."
+        )
+    else:
+        best["finding"] = (
+            f"At 8 AM, {loc} is {am_pct:.0f}% traffic. "
+            f"By 2 AM, traffic share falls to {night_pct:.0f}%, and "
+            f"{best['dominant_night']} becomes the single largest source."
+        )
     best["method_note"] = (
         "Wind-weighted spatial attribution with Bengaluru TOD traffic multipliers "
         "(peak 1.4× at 07–09 & 17–19; off-peak 0.7×). Same engine as Enforcement / Map."

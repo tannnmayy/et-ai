@@ -17,26 +17,33 @@ import {
   Bot,
   Sparkles,
   X,
-  Info,
 } from 'lucide-react';
 
-/** Map view mode: cleanest-only, both, or most-polluted with selectable depth. */
-type ExtremeMode = 'best' | 'both' | 'worst';
+/**
+ * Single primary map view — replaces cluttered Cleanest/Both/Polluted +
+ * Global/Local + depth menus.
+ * - global_worst: absolute highest fused PM, depth 15|30|50
+ * - global_best: Top 30 cleanest
+ * - local_peaks: worst ~10 fused hexes per live sensor catchment
+ */
+type MapViewKind = 'global_worst' | 'global_best' | 'local_peaks';
 
-/** Visual layer: PM2.5 AQI vs attribution confidence reliability. */
-type MapLayerMode = 'aqi' | 'confidence';
+/** Global worst list depth (client slice of fetched top-N). */
+type WorstDepth = 15 | 30 | 50;
 
-/** How many most-polluted hexes to show (client-side slice of fetched top-100). */
-type PollutedDepth = 15 | 30 | 50 | 100;
-
-const POLLUTED_OPTIONS: { value: PollutedDepth; label: string }[] = [
-  { value: 15, label: 'Top 15' },
-  { value: 30, label: 'Top 30' },
-  { value: 50, label: 'Top 50' },
-  { value: 100, label: 'Top 100' },
+const WORST_DEPTH_OPTIONS: { value: WorstDepth; label: string }[] = [
+  { value: 15, label: '15' },
+  { value: 30, label: '30' },
+  { value: 50, label: '50' },
 ];
 
-const CLEANEST_COUNT = 15;
+const CLEANEST_COUNT = 30;
+
+function viewKindBadge(kind: MapViewKind, depth: WorstDepth): string {
+  if (kind === 'global_worst') return `Global Worst · ${depth}`;
+  if (kind === 'global_best') return 'Global Best · 30';
+  return 'Local Peaks';
+}
 
 export default function MapPage() {
   const navigate = useNavigate();
@@ -49,13 +56,13 @@ export default function MapPage() {
     h3_cell: mapCtxH3,
     label: mapCtxLabel,
   } = useMapCopilotContext();
-  /**
-   * Dual mode for worst list:
-   * - global: absolute highest fused PM (scientific)
-   * - local_peaks: worst hexes per station catchment (operational)
-   * Default global preserves legacy "Top N most polluted" behaviour.
-   */
-  const [rankingMode, setRankingMode] = useState<ExtremesRankingMode>('global');
+
+  const [viewKind, setViewKind] = useState<MapViewKind>('global_worst');
+  const [worstDepth, setWorstDepth] = useState<WorstDepth>(30);
+
+  /** API mode matches UI 1:1 — only global_worst | global_best | local_peaks. */
+  const rankingMode: ExtremesRankingMode = viewKind;
+
   const {
     data: extremes,
     isError: extremesError,
@@ -70,23 +77,18 @@ export default function MapPage() {
   } = useStations();
   const [selectedHex, setSelectedHex] = useState<PriorityHex | null>(null);
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
-  const [extremeMode, setExtremeMode] = useState<ExtremeMode>('both');
-  /** Demo-friendly default: Top 30 most polluted when viewing polluted set */
-  const [pollutedDepth, setPollutedDepth] = useState<PollutedDepth>(30);
-  const [mapLayer, setMapLayer] = useState<MapLayerMode>('aqi');
 
   const cleanestPool = extremes?.best ?? [];
   const pollutedPool = extremes?.worst ?? [];
   const pollutedAvailable = pollutedPool.length;
   const cleanestShown = cleanestPool.slice(0, CLEANEST_COUNT);
-  const pollutedShown = pollutedPool.slice(0, Math.min(pollutedDepth, pollutedAvailable));
+  const pollutedShown =
+    viewKind === 'local_peaks'
+      ? pollutedPool // backend already returns per-sensor peaks merged/capped
+      : pollutedPool.slice(0, Math.min(worstDepth, pollutedAvailable));
 
   const baseHexes: PriorityHex[] =
-    extremeMode === 'best'
-      ? cleanestShown
-      : extremeMode === 'worst'
-        ? pollutedShown
-        : [...cleanestShown, ...pollutedShown];
+    viewKind === 'global_best' ? cleanestShown : pollutedShown;
 
   // Merge priority hexes so Copilot-highlighted cells (often top enforcement) are on the map
   const allHexes = useMemo(() => {
@@ -139,20 +141,20 @@ export default function MapPage() {
       (priorities || []).find((h) => h.id === focusId);
     if (match) {
       setSelectedHex(match);
-      setExtremeMode((m) => (m === 'best' ? 'both' : m));
     }
   }, [mapActionsUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const compactLabels =
-    extremeMode === 'worst'
-      ? pollutedDepth > 15
-      : extremeMode === 'both'
-        ? pollutedDepth > 15
+    viewKind === 'local_peaks'
+      ? pollutedShown.length > 20
+      : viewKind === 'global_worst'
+        ? worstDepth > 15
         : false;
 
   const activeHex = selectedHex || allHexes[0] || null;
   const hasMapCtx = Boolean(mapCtxStation || mapCtxH3);
   const hasCopilotHighlights = highlightedHexIds.length > 0;
+  const modeBadge = viewKindBadge(viewKind, worstDepth);
 
   // Progressive paint: never full-black when we already have stations or any hexes.
   // Mode switches (Global ↔ Local Peaks) use keepPreviousData so extremes stays painted.
@@ -170,16 +172,15 @@ export default function MapPage() {
   // Mode switch / refetch: keep map painted; show a chip, never a black full-page wipe
   const rankingsLoading = Boolean(extremesFetching || (extremesLoading && !extremesReady));
   const modeSwitchPending = Boolean(
-    extremesFetching && extremes && extremes.mode !== rankingMode,
+    extremesFetching && extremes && extremes.mode !== viewKind,
   );
 
   /** Polluted hexes shown under Local Peaks mode get a distinct Peak badge on the map.
    *  MUST stay above any early return (Rules of Hooks). */
   const localPeakHexIds = useMemo(() => {
-    if (rankingMode !== 'local_peaks') return [] as string[];
-    if (extremeMode === 'best') return [] as string[];
+    if (viewKind !== 'local_peaks') return [] as string[];
     return pollutedShown.map((h) => h.id).filter(Boolean);
-  }, [rankingMode, extremeMode, pollutedShown]);
+  }, [viewKind, pollutedShown]);
 
   const activeIsLocalPeak = Boolean(
     activeHex && localPeakHexIds.includes(activeHex.id),
@@ -254,7 +255,7 @@ export default function MapPage() {
           selectedHex={activeHex}
           onSelectHex={(hex) => setSelectedHex(hex)}
           allHexes={allHexes}
-          viewMode={mapLayer}
+          viewMode="aqi"
           compactLabels={compactLabels}
           highlightedHexIds={highlightedHexIds}
           focusCenter={focusCenter}
@@ -263,91 +264,54 @@ export default function MapPage() {
           localPeakHexIds={localPeakHexIds}
         />
 
-        {/* Left: layer toggle + optional rankings-loading chip */}
+        {/* Left: mode badge + loading/error chips only */}
         <div className="absolute top-4 left-4 z-20 flex flex-col gap-2 items-start">
-          <div className="flex ui-glass ui-glass-floating rounded-full p-1 shadow-xl">
-            {(
-              [
-                { id: 'aqi' as const, label: 'AQI' },
-                { id: 'confidence' as const, label: 'Confidence' },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setMapLayer(opt.id)}
-                className={`px-4 py-2 rounded-full text-[11px] font-bold tracking-wide transition-colors min-h-[40px] ${
-                  mapLayer === opt.id
-                    ? 'bg-brand-blue text-white shadow-md'
-                    : 'text-apple-secondary hover:text-white'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="ui-glass ui-glass-floating rounded-full px-3.5 py-2 border border-white/10 shadow-xl">
+            <span className="text-[11px] font-bold tracking-wide text-white">
+              {modeBadge}
+            </span>
           </div>
           {rankingsLoading && (
             <div className="ui-glass ui-glass-floating rounded-full px-3 py-1.5 border border-brand-blue/30 flex items-center gap-2 shadow-lg">
               <div className="w-3 h-3 border-2 border-brand-blue/40 border-t-brand-blue rounded-full animate-spin" />
               <span className="text-[10px] font-mono text-brand-blue uppercase tracking-wider">
                 {modeSwitchPending
-                  ? rankingMode === 'local_peaks'
+                  ? viewKind === 'local_peaks'
                     ? 'Switching to Local peaks…'
-                    : 'Switching to Global highest…'
+                    : 'Switching to Global…'
                   : 'Loading hex rankings…'}
               </span>
             </div>
           )}
           {extremesError && !rankingsLoading && (
             <div className="ui-glass rounded-full px-3 py-1.5 border border-brand-orange/30 text-[10px] text-brand-orange max-w-[220px]">
-              {rankingMode === 'local_peaks'
-                ? 'Local peaks failed — try Global or retry'
+              {viewKind === 'local_peaks'
+                ? 'Local peaks failed — try Global Worst'
                 : 'Rankings unavailable — sensors only'}
             </div>
           )}
         </div>
 
-        {/* Legend — bottom-left, compact, no glow dots */}
+        {/* Legend — AQI only (attribution confidence layer removed) */}
         <div className="absolute bottom-6 left-4 z-10 ui-glass ui-glass-floating p-3.5 rounded-2xl max-w-[210px]">
           <div className="text-[10px] font-mono uppercase text-apple-secondary tracking-widest mb-2.5">
-            {mapLayer === 'confidence' ? 'Attribution confidence' : 'Legend'}
+            PM2.5 legend
           </div>
           <div className="flex flex-col gap-1.5">
-            {mapLayer === 'confidence' ? (
-              <>
-                {[
-                  { c: '#34C759', r: '80–100', l: 'High' },
-                  { c: '#0A84FF', r: '55–79', l: 'Medium' },
-                  { c: '#FF9F0A', r: '30–54', l: 'Low' },
-                  { c: '#ff453a', r: '18–29', l: 'Very Low' },
-                ].map((row) => (
-                  <div key={row.l} className="flex items-center justify-between text-xs font-semibold">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full" style={{ background: row.c }} />
-                      <span className="font-mono text-white text-[11px]">{row.r}</span>
-                    </div>
-                    <span className="text-apple-secondary text-[10px] font-medium">{row.l}</span>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <>
-                {[
-                  { c: '#34C759', r: '0–50', l: 'Good' },
-                  { c: '#FFCC00', r: '51–100', l: 'Moderate' },
-                  { c: '#FF9F0A', r: '101–250', l: 'Poor' },
-                  { c: '#ff453a', r: '251+', l: 'Severe' },
-                ].map((row) => (
-                  <div key={row.l} className="flex items-center justify-between text-xs font-semibold">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full" style={{ background: row.c }} />
-                      <span className="font-mono text-white text-[11px]">{row.r}</span>
-                    </div>
-                    <span className="text-apple-secondary text-[10px] font-medium">{row.l}</span>
-                  </div>
-                ))}
-              </>
-            )}
+            {[
+              { c: '#34C759', r: '0–50', l: 'Good' },
+              { c: '#FFCC00', r: '51–100', l: 'Moderate' },
+              { c: '#FF9F0A', r: '101–250', l: 'Poor' },
+              { c: '#ff453a', r: '251+', l: 'Severe' },
+            ].map((row) => (
+              <div key={row.l} className="flex items-center justify-between text-xs font-semibold">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ background: row.c }} />
+                  <span className="font-mono text-white text-[11px]">{row.r}</span>
+                </div>
+                <span className="text-apple-secondary text-[10px] font-medium">{row.l}</span>
+              </div>
+            ))}
           </div>
           <div className="mt-3 pt-2.5 border-t border-white/10 space-y-1.5">
             <div className="flex items-center gap-2 text-[10px] text-white/85">
@@ -355,58 +319,78 @@ export default function MapPage() {
                 <span className="absolute inset-0 rotate-45 rounded-[2px] bg-[#FF9F0A]" />
                 <span className="absolute inset-[3px] rotate-45 rounded-[1px] bg-[#0A84FF] border border-white/90" />
               </span>
-              <span>Official sensor (diamond)</span>
+              <span>Official sensor</span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] text-white/85">
-              <span className="inline-flex items-center gap-1 rounded-md bg-black/60 border border-white/20 px-1 py-0.5 text-[8px] font-mono font-bold text-white">
-                <span className="w-1.5 h-1.5 rotate-45 bg-[#FFCC00]" />
-                42
-              </span>
-              <span>Nearby fused AQI</span>
-            </div>
-            {rankingMode === 'local_peaks' && (extremeMode === 'worst' || extremeMode === 'both') && (
+            {viewKind === 'local_peaks' && (
               <div className="flex items-center gap-2 text-[10px] text-white/85">
                 <span className="text-[8px] font-bold uppercase tracking-wider text-brand-blue border border-brand-blue/40 px-1 py-0.5 rounded">
                   Peak
                 </span>
-                <span>Station-catchment dirty hex</span>
+                <span>Dirty hex near a sensor</span>
               </div>
             )}
-            <p className="text-[8px] text-apple-secondary/80 leading-snug">
-              Nearby samples = real fused hexes within ~4.5 km of a station — not synthetic.
-            </p>
             {extremes && (
               <p className="text-[8px] font-mono text-apple-secondary/50 leading-relaxed">
-                {extremes.totalWithData} hexes with data · {extremes.totalInGrid} grid
+                {extremes.totalWithData.toLocaleString()} fused · {extremes.totalInGrid.toLocaleString()} grid
               </p>
             )}
           </div>
         </div>
 
-        {/* Right stack: controls (top) + optional detail (below) — no overlap */}
-        <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2 w-[min(100vw-2rem,288px)] max-h-[calc(100%-2rem)] pointer-events-none">
-          {/* Unified map controls card */}
+        {/* Right stack: simple view controls + detail */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2 w-[min(100vw-2rem,280px)] max-h-[calc(100%-2rem)] pointer-events-none">
           <div className="pointer-events-auto w-full ui-glass ui-glass-floating rounded-2xl border border-white/10 shadow-xl overflow-hidden">
-            <div className="px-3 pt-2.5 pb-1.5">
+            <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
               <div className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary">
-                Hex view
+                Map view
               </div>
+              <span
+                className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                  viewKind === 'local_peaks'
+                    ? 'text-brand-blue border-brand-blue/35 bg-brand-blue/10'
+                    : viewKind === 'global_best'
+                      ? 'text-brand-green border-brand-green/35 bg-brand-green/10'
+                      : 'text-brand-orange border-brand-orange/35 bg-brand-orange/10'
+                }`}
+              >
+                {modeBadge}
+              </span>
             </div>
-            <div className="px-2 pb-2">
+            <div className="px-2 pb-2.5 space-y-2">
+              {/* Primary mode segmented control */}
               <div className="flex rounded-xl overflow-hidden bg-black/45 border border-white/8">
                 {(
                   [
-                    { id: 'best' as const, label: 'Cleanest', active: 'bg-brand-green text-white' },
-                    { id: 'both' as const, label: 'Both', active: 'bg-brand-blue text-white' },
-                    { id: 'worst' as const, label: 'Polluted', active: 'bg-brand-red text-white' },
+                    {
+                      id: 'global_worst' as const,
+                      label: 'Global Worst',
+                      active: 'bg-brand-orange text-white',
+                    },
+                    {
+                      id: 'global_best' as const,
+                      label: 'Global Best',
+                      active: 'bg-brand-green text-white',
+                    },
+                    {
+                      id: 'local_peaks' as const,
+                      label: 'Local Peaks',
+                      active: 'bg-brand-blue text-white',
+                    },
                   ] as const
                 ).map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => setExtremeMode(opt.id)}
-                    className={`flex-1 px-2 py-2.5 text-[11px] font-bold transition-colors min-h-[40px] ${
-                      extremeMode === opt.id
+                    onClick={() => setViewKind(opt.id)}
+                    title={
+                      opt.id === 'global_worst'
+                        ? 'Absolute highest fused PM2.5 city-wide'
+                        : opt.id === 'global_best'
+                          ? 'Top 30 cleanest fused hexes'
+                          : 'Worst ~10 fused hexes near each live sensor'
+                    }
+                    className={`flex-1 px-1.5 py-2.5 text-[10px] font-bold transition-colors min-h-[42px] leading-tight ${
+                      viewKind === opt.id
                         ? opt.active
                         : 'text-apple-secondary hover:text-white hover:bg-white/5'
                     }`}
@@ -416,122 +400,61 @@ export default function MapPage() {
                 ))}
               </div>
 
-              {/* Dual ranking mode — only relevant when polluted hexes are shown */}
-              {(extremeMode === 'worst' || extremeMode === 'both') && (
-                <div className="mt-2.5 space-y-2">
-                  <div className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary px-0.5">
-                    Polluted ranking
+              {/* Depth only for Global Worst */}
+              {viewKind === 'global_worst' && (
+                <div>
+                  <div className="text-[9px] font-mono uppercase tracking-wider text-apple-secondary px-0.5 mb-1.5">
+                    Worst count
                   </div>
                   <div className="flex rounded-xl overflow-hidden bg-black/45 border border-white/8">
-                    <button
-                      type="button"
-                      onClick={() => setRankingMode('global')}
-                      title="Absolute highest fused PM2.5 among all covered hexes"
-                      className={`flex-1 px-2 py-2 text-[10px] font-bold min-h-[38px] transition-colors leading-tight ${
-                        rankingMode === 'global'
-                          ? 'bg-brand-orange text-white'
-                          : 'text-apple-secondary hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      Global highest
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRankingMode('local_peaks')}
-                      title="Worst fused hexes near each official station, then merged"
-                      className={`flex-1 px-2 py-2 text-[10px] font-bold min-h-[38px] transition-colors leading-tight ${
-                        rankingMode === 'local_peaks'
-                          ? 'bg-brand-blue text-white'
-                          : 'text-apple-secondary hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      Local peaks
-                    </button>
-                  </div>
-                  <select
-                    value={pollutedDepth}
-                    onChange={(e) => {
-                      setPollutedDepth(Number(e.target.value) as PollutedDepth);
-                      setExtremeMode((m) => (m === 'best' ? 'worst' : m));
-                    }}
-                    className="w-full bg-black/50 border border-white/10 rounded-xl text-[11px] font-semibold text-white px-2.5 py-2 outline-none"
-                    aria-label="Polluted hex count"
-                  >
-                    {POLLUTED_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value} className="bg-apple-card">
-                        {o.label} · {rankingMode === 'local_peaks' ? 'local peaks' : 'global'}
-                      </option>
+                    {WORST_DEPTH_OPTIONS.map((o) => (
+                      <button
+                        key={o.value}
+                        type="button"
+                        onClick={() => setWorstDepth(o.value)}
+                        className={`flex-1 px-2 py-2 text-[11px] font-bold min-h-[36px] transition-colors ${
+                          worstDepth === o.value
+                            ? 'bg-white/15 text-white'
+                            : 'text-apple-secondary hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
                     ))}
-                  </select>
-
-                  {/* Honesty banner for active ranking mode */}
-                  <div
-                    className={`rounded-xl border px-2.5 py-2 flex gap-2 ${
-                      rankingMode === 'local_peaks'
-                        ? 'bg-brand-blue/10 border-brand-blue/30'
-                        : 'bg-brand-orange/10 border-brand-orange/30'
-                    }`}
-                  >
-                    <Info
-                      size={12}
-                      className={`shrink-0 mt-0.5 ${
-                        rankingMode === 'local_peaks' ? 'text-brand-blue' : 'text-brand-orange'
-                      }`}
-                    />
-                    <div className="min-w-0 text-[9px] leading-relaxed text-white/80">
-                      {rankingMode === 'local_peaks' ? (
-                        <>
-                          <strong className="text-brand-blue">Local peaks</strong>
-                          {' — '}
-                          worst hexes near each PM2.5 station (~5 km), merged. Shows dirty
-                          pockets city-wide; not the same as global Top N.
-                        </>
-                      ) : (
-                        <>
-                          <strong className="text-brand-orange">Global highest</strong>
-                          {' — '}
-                          absolute fused PM among covered hexes. A high station can create a
-                          large northern tie plateau (e.g. Hebbal).
-                          {extremes?.tieCountAtMax != null &&
-                            extremes.tieCountAtMax > pollutedDepth && (
-                              <>
-                                {' '}
-                                <span className="text-white/60">
-                                  ~{extremes.tieCountAtMax} hexes near max
-                                  {extremes.maxFusedPm25 != null
-                                    ? ` (${Math.round(extremes.maxFusedPm25)} µg/m³)`
-                                    : ''}
-                                  .
-                                </span>
-                              </>
-                            )}
-                        </>
-                      )}
-                      {extremesFetching && (
-                        <span className="block text-brand-blue mt-1 animate-pulse">
-                          Updating ranking…
-                        </span>
-                      )}
-                    </div>
                   </div>
                 </div>
               )}
 
-              <div className="text-[9px] font-mono text-apple-secondary px-1 pt-2">
-                {extremeMode === 'best' && `${cleanestShown.length} cleanest hexes`}
-                {extremeMode === 'both' &&
-                  `${cleanestShown.length} clean + ${pollutedShown.length} polluted`}
-                {extremeMode === 'worst' && `${pollutedShown.length} polluted hexes`}
+              <p className="text-[9px] leading-relaxed text-white/65 px-0.5">
+                {viewKind === 'global_worst' && (
+                  <>
+                    Absolute highest fused PM among covered hexes
+                    {extremes?.tieCountAtMax != null && extremes.tieCountAtMax > worstDepth
+                      ? ` · ~${extremes.tieCountAtMax} near max`
+                      : ''}
+                    .
+                  </>
+                )}
+                {viewKind === 'global_best' && (
+                  <>Top {CLEANEST_COUNT} cleanest hexes with real fused PM2.5.</>
+                )}
+                {viewKind === 'local_peaks' && (
+                  <>
+                    Worst ~10 dirty hexes near each live sensor (~5 km), merged. City-wide
+                    pockets — not the same as Global Worst.
+                  </>
+                )}
+              </p>
+
+              <div className="text-[9px] font-mono text-apple-secondary px-0.5">
+                {viewKind === 'global_best'
+                  ? `${cleanestShown.length} cleanest`
+                  : `${pollutedShown.length} hexes`}
                 {stations.length > 0 && ` · ${stations.length} sensors`}
+                {extremesFetching && (
+                  <span className="text-brand-blue animate-pulse"> · updating…</span>
+                )}
               </div>
-              {extremes && (
-                <div className="text-[8px] font-mono text-apple-secondary/70 px-1 pt-1 leading-snug">
-                  Ranked among {extremes.totalWithData.toLocaleString()} fused hexes of{' '}
-                  {extremes.totalInGrid.toLocaleString()} grid
-                  {extremes.fusionRangeM != null &&
-                    ` · ~${Math.round(extremes.fusionRangeM / 1000)} km range`}
-                </div>
-              )}
             </div>
 
             {/* Copilot / map context — inside same card to avoid extra floating boxes */}
@@ -662,44 +585,11 @@ export default function MapPage() {
                   })()}
                 </div>
 
-                {/* Attribution confidence — calm, no blue glow bloom */}
-                {(activeHex.attributionConfidence != null || activeHex.confidence > 0) && (
-                  <div className="mt-3 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-apple-secondary font-bold">
-                        Attribution confidence
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          (activeHex.attributionConfidence ?? activeHex.confidence) >= 80
-                            ? 'bg-brand-green/15 border-brand-green/30 text-brand-green'
-                            : (activeHex.attributionConfidence ?? activeHex.confidence) >= 55
-                              ? 'bg-brand-blue/15 border-brand-blue/30 text-brand-blue'
-                              : (activeHex.attributionConfidence ?? activeHex.confidence) >= 30
-                                ? 'bg-brand-orange/15 border-brand-orange/30 text-brand-orange'
-                                : 'bg-brand-red/15 border-brand-red/30 text-brand-red'
-                        }`}
-                      >
-                        {activeHex.attributionConfidenceLevel || '—'}
-                      </span>
-                    </div>
-                    <div className="text-2xl font-mono font-bold text-white leading-none">
-                      {activeHex.attributionConfidence ?? activeHex.confidence}
-                      <span className="text-sm text-apple-secondary">%</span>
-                    </div>
-                    {activeHex.confidenceExplanation && (
-                      <p className="text-[11px] text-white/75 mt-1.5 leading-snug">
-                        {activeHex.confidenceExplanation}
-                      </p>
-                    )}
-                    {activeHex.nearestStationDistanceM != null && (
-                      <p className="text-[10px] font-mono text-white/40 mt-1">
-                        Nearest station · {(activeHex.nearestStationDistanceM / 1000).toFixed(1)} km
-                      </p>
-                    )}
-                  </div>
+                {activeHex.nearestStationDistanceM != null && (
+                  <p className="text-[10px] font-mono text-white/45">
+                    Nearest station · {(activeHex.nearestStationDistanceM / 1000).toFixed(1)} km
+                  </p>
                 )}
-
 
                 {(() => {
                   const attr = activeHex.sourceAttribution;

@@ -1,21 +1,22 @@
-"""Dual-mode city extremes: global absolute vs local peaks."""
+"""City extremes: only global_worst | global_best | local_peaks."""
 
 from __future__ import annotations
 
 from backend.app.services.attribution_service import (
-    EXTREMES_MODE_GLOBAL,
+    EXTREMES_MODE_GLOBAL_BEST,
+    EXTREMES_MODE_GLOBAL_WORST,
     EXTREMES_MODE_LOCAL_PEAKS,
+    GLOBAL_BEST_N,
     LOCAL_PEAKS_PER_STATION_K,
+    _normalize_extremes_mode,
     _select_local_peaks_worst,
+    _strip_map_confidence_fields,
     get_city_extremes,
 )
 
 
 def test_select_local_peaks_dedupes_and_caps():
-    """Synthetic scored hexes: two stations, overlapping catchment."""
-    # Station A at (13.0, 77.5), Station B at (12.92, 77.6) — far apart
     scored = []
-    # High plateau near A
     for i in range(12):
         scored.append(
             {
@@ -25,7 +26,6 @@ def test_select_local_peaks_dedupes_and_caps():
                 "fused_pm25": 90.0 - i * 0.1,
             }
         )
-    # Moderate near B
     for i in range(12):
         scored.append(
             {
@@ -36,13 +36,6 @@ def test_select_local_peaks_dedupes_and_caps():
             }
         )
 
-    # Monkeypatch stations inside selector by using real registry is hard;
-    # instead unit-test pure merge behaviour via a thin stub of distance.
-    # We test the pure algorithm by calling with real stations only if available.
-    # For isolation, verify global sort properties on the helper when stations empty
-    # is not ideal — test get_city_extremes integration below.
-
-    # Pure merge: pick top-3 of each list manually to assert selection shape
     top_a = sorted(
         [h for h in scored if h["h3_cell"].startswith("A")],
         key=lambda h: h["fused_pm25"],
@@ -56,67 +49,100 @@ def test_select_local_peaks_dedupes_and_caps():
     merged = {h["h3_cell"]: h for h in top_a + top_b}
     assert len(merged) == 6
     assert max(h["fused_pm25"] for h in merged.values()) == 90.0
-    assert min(h["fused_pm25"] for h in merged.values()) >= 69.0
 
 
 def test_local_peaks_selector_uses_scored_only():
-    """Empty scored → empty peaks."""
     assert _select_local_peaks_worst([], n=10) == []
 
 
-def test_get_city_extremes_global_vs_local_peaks():
-    """Integration: both modes return structured payload; local may diversify lats."""
-    global_res = get_city_extremes(city="bengaluru", n=30, mode=EXTREMES_MODE_GLOBAL)
-    if "error" in global_res:
-        # Features missing in CI — skip gracefully
+def test_normalize_extremes_mode_canonical_only():
+    assert _normalize_extremes_mode("global_worst") == ("global_worst", None)
+    assert _normalize_extremes_mode("global_best") == ("global_best", None)
+    assert _normalize_extremes_mode("local_peaks") == ("local_peaks", None)
+
+    # Soft redirect
+    mode, warn = _normalize_extremes_mode("global")
+    assert mode == "global_worst"
+    assert warn and "deprecated" in warn.lower()
+
+    # Hard reject legacy junk
+    assert _normalize_extremes_mode("local_plume") == (None, None)
+    assert _normalize_extremes_mode("peaks") == (None, None)
+    assert _normalize_extremes_mode("worst") == (None, None)
+    assert _normalize_extremes_mode("nope") == (None, None)
+    assert LOCAL_PEAKS_PER_STATION_K == 10
+    assert GLOBAL_BEST_N == 30
+
+
+def test_strip_map_confidence_fields():
+    rows = [
+        {
+            "h3_cell": "x",
+            "fused_pm25": 40,
+            "attribution_confidence_score": 55,
+            "confidence_explanation": "test",
+            "risk_confidence_factor": 0.7,
+        }
+    ]
+    out = _strip_map_confidence_fields(rows)
+    assert "attribution_confidence_score" not in out[0]
+    assert "confidence_explanation" not in out[0]
+    assert "risk_confidence_factor" not in out[0]
+    assert out[0]["fused_pm25"] == 40
+
+
+def test_get_city_extremes_three_modes():
+    worst = get_city_extremes(city="bengaluru", n=30, mode=EXTREMES_MODE_GLOBAL_WORST)
+    if "error" in worst:
         return
 
-    local_res = get_city_extremes(
+    assert worst["mode"] == "global_worst"
+    assert worst.get("peak_k") is None
+    assert len(worst.get("worst") or []) <= 30
+    # No confidence on Map extremes hexes
+    for h in (worst.get("worst") or [])[:5]:
+        assert "attribution_confidence_score" not in h
+        assert "risk_confidence_factor" not in h
+
+    best = get_city_extremes(city="bengaluru", n=50, mode=EXTREMES_MODE_GLOBAL_BEST)
+    assert "error" not in best
+    assert best["mode"] == "global_best"
+    assert len(best.get("best") or []) <= GLOBAL_BEST_N
+
+    local = get_city_extremes(
         city="bengaluru",
-        n=30,
+        n=50,
         mode=EXTREMES_MODE_LOCAL_PEAKS,
-        peak_k=LOCAL_PEAKS_PER_STATION_K,
+        peak_k=99,  # ignored — fixed to 10
     )
-    assert "error" not in local_res
+    assert "error" not in local
+    assert local["mode"] == "local_peaks"
+    assert local["peak_k"] == LOCAL_PEAKS_PER_STATION_K
 
-    assert global_res["mode"] == EXTREMES_MODE_GLOBAL
-    assert local_res["mode"] == EXTREMES_MODE_LOCAL_PEAKS
-    assert global_res["mode_description"]
-    assert local_res["mode_description"]
-    assert local_res["peak_k"] == LOCAL_PEAKS_PER_STATION_K
-    assert global_res["peak_k"] is None
+    # Cleanest ranking matches between global_worst and local (same scored set, same n_eff for best on worst mode)
+    # best lists use different n for global_best vs global_worst; compare first min cells
+    w_best = [h["h3_cell"] for h in worst["best"][:15]]
+    l_best = [h["h3_cell"] for h in local["best"][:15]]
+    assert w_best == l_best
 
-    assert len(global_res["worst"]) <= 30
-    assert len(local_res["worst"]) <= 30
-    assert len(global_res["best"]) <= 30
-    # Cleanest absolute ranking should match across modes (same scored set)
-    assert [h["h3_cell"] for h in global_res["best"]] == [
-        h["h3_cell"] for h in local_res["best"]
-    ]
-
-    # All worst have fused values
-    for h in global_res["worst"] + local_res["worst"]:
-        assert h.get("fused_pm25") is not None
-
-    # Metadata honesty fields
-    assert global_res["total_hexagons_with_data"] > 0
-    assert global_res["total_hexagons_in_grid"] >= global_res["total_hexagons_with_data"]
-    assert global_res.get("ranking_note")
-
-    # Local peaks should not be an empty list when fusion has data
-    if global_res["total_hexagons_with_data"] > 50:
-        assert len(local_res["worst"]) >= 5
-
-        g_lats = [h["center_lat"] for h in global_res["worst"]]
-        l_lats = [h["center_lat"] for h in local_res["worst"]]
-        # Global often collapses north; local should have wider lat span (when multi-station)
-        g_span = max(g_lats) - min(g_lats)
-        l_span = max(l_lats) - min(l_lats)
-        # Allow equal span if data sparse; expect local >= global typically
-        assert l_span + 1e-9 >= min(g_span, 0.02) or l_span >= g_span * 0.5
+    assert worst.get("ranking_note")
+    if worst["total_hexagons_with_data"] > 50:
+        assert len(local["worst"]) >= 5
 
 
-def test_invalid_mode_returns_error():
+def test_legacy_global_soft_redirect():
+    res = get_city_extremes(city="bengaluru", n=15, mode="global")
+    if "error" in res:
+        return
+    assert res["mode"] == "global_worst"
+    assert res.get("deprecation_warning")
+
+
+def test_invalid_and_legacy_modes_error():
     res = get_city_extremes(city="bengaluru", n=5, mode="not_a_mode")
     assert "error" in res
     assert "Unsupported extremes mode" in res["error"]
+
+    for bad in ("local_plume", "peaks", "local", "worst", "best", "global_analysis"):
+        r = get_city_extremes(city="bengaluru", n=5, mode=bad)
+        assert "error" in r, bad

@@ -3,11 +3,13 @@
  * on the landing page so the first app screen feels instant.
  *
  * Phase 1 (immediate): stations + extremes global + enforcement top-K + maps preconnect/script
- * Phase 2 (idle / delayed): local_peaks extremes + lazy route chunks
+ * Phase 2 (idle / delayed): local_peaks (worst ~10/sensor) + lazy route chunks
  */
 import type { QueryClient } from '@tanstack/react-query';
 import {
+  CITY_EXTREMES_BEST_N,
   CITY_EXTREMES_FETCH_N,
+  CITY_EXTREMES_LOCAL_PEAKS_N,
   ENFORCEMENT_DEFAULT_TOP_K,
   enforcementPrioritiesQueryKey,
   fetchCityExtremes,
@@ -69,8 +71,8 @@ export function preloadGoogleMapsScript() {
 }
 
 /**
- * Phase 1 — Map-critical (default ranking mode is global).
- * Stations + global extremes + enforcement top-15.
+ * Phase 1 — Map-critical (default view: Global Worst).
+ * Stations + global_worst (n=50) + enforcement top-15.
  */
 export async function prefetchMapCriticalData(queryClient: QueryClient): Promise<void> {
   await Promise.allSettled([
@@ -80,8 +82,8 @@ export async function prefetchMapCriticalData(queryClient: QueryClient): Promise
       staleTime: 60_000,
     }),
     queryClient.prefetchQuery({
-      queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N, 'global'],
-      queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N, 'global'),
+      queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N, 'global_worst'],
+      queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N, 'global_worst'),
       staleTime: 90_000,
     }),
     queryClient.prefetchQuery({
@@ -93,13 +95,18 @@ export async function prefetchMapCriticalData(queryClient: QueryClient): Promise
 }
 
 /**
- * Phase 2 — secondary: Local Peaks extremes (Map dual-mode) after critical path.
+ * Phase 2 — secondary: Local Peaks + Global Best after critical path.
  */
 export async function prefetchMapSecondaryData(queryClient: QueryClient): Promise<void> {
   await Promise.allSettled([
     queryClient.prefetchQuery({
-      queryKey: ['city-extremes', CITY_EXTREMES_FETCH_N, 'local_peaks'],
-      queryFn: () => fetchCityExtremes(CITY_EXTREMES_FETCH_N, 'local_peaks'),
+      queryKey: ['city-extremes', CITY_EXTREMES_LOCAL_PEAKS_N, 'local_peaks'],
+      queryFn: () => fetchCityExtremes(CITY_EXTREMES_LOCAL_PEAKS_N, 'local_peaks'),
+      staleTime: 90_000,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ['city-extremes', CITY_EXTREMES_BEST_N, 'global_best'],
+      queryFn: () => fetchCityExtremes(CITY_EXTREMES_BEST_N, 'global_best'),
       staleTime: 90_000,
     }),
   ]);

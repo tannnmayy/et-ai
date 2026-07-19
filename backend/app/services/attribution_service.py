@@ -669,25 +669,96 @@ def _estimate_fused_pm25_for_grid(hex_df: pd.DataFrame) -> np.ndarray:
 
 
 # Worst-hex count pulled per station catchment for Local Peaks mode.
-LOCAL_PEAKS_PER_STATION_K: int = 8
+LOCAL_PEAKS_PER_STATION_K: int = 10
+# Canonical Global Best depth (Top 30 cleanest).
+GLOBAL_BEST_N: int = 30
+# Allowed Global Worst depths (Map depth selector).
+GLOBAL_WORST_NS: frozenset[int] = frozenset({15, 30, 50})
 
-EXTREMES_MODE_GLOBAL = "global"
+# Only three Map-facing modes (no legacy aliases in the public contract).
+EXTREMES_MODE_GLOBAL_WORST = "global_worst"
+EXTREMES_MODE_GLOBAL_BEST = "global_best"
 EXTREMES_MODE_LOCAL_PEAKS = "local_peaks"
-EXTREMES_MODES = frozenset({EXTREMES_MODE_GLOBAL, EXTREMES_MODE_LOCAL_PEAKS})
+# Backward-compat constant: old code/tests that imported EXTREMES_MODE_GLOBAL
+# should migrate to GLOBAL_WORST. Kept as an alias name only for imports.
+EXTREMES_MODE_GLOBAL = EXTREMES_MODE_GLOBAL_WORST
+
+EXTREMES_MODES = frozenset(
+    {
+        EXTREMES_MODE_GLOBAL_WORST,
+        EXTREMES_MODE_GLOBAL_BEST,
+        EXTREMES_MODE_LOCAL_PEAKS,
+    }
+)
+
+# Soft-redirect only: legacy names → canonical mode + deprecation_warning.
+# Everything else is rejected with a clear error (no silent local_plume, etc.).
+_LEGACY_MODE_REDIRECTS: dict[str, str] = {
+    "global": EXTREMES_MODE_GLOBAL_WORST,
+}
 
 _MODE_DESCRIPTIONS = {
-    EXTREMES_MODE_GLOBAL: (
-        "Global highest fused PM2.5 among hexes with station fusion "
+    EXTREMES_MODE_GLOBAL_WORST: (
+        "Global worst: absolute highest fused PM2.5 among covered hexes "
         f"(within ~{int(FUSION_STATION_RANGE_METERS / 1000)} km of an eligible PM2.5 station). "
-        "A single high station can create a large tied plateau of identical worst ranks."
+        "Use n=15|30|50 for list depth."
+    ),
+    EXTREMES_MODE_GLOBAL_BEST: (
+        "Global best: absolute lowest fused PM2.5 among covered hexes "
+        f"(within ~{int(FUSION_STATION_RANGE_METERS / 1000)} km). "
+        f"Top {GLOBAL_BEST_N} cleanest hexes."
     ),
     EXTREMES_MODE_LOCAL_PEAKS: (
-        "Local peaks: for each eligible PM2.5 station, take the worst "
+        "Local peaks: for each eligible PM2.5 station with a live reading, take the worst "
         f"{LOCAL_PEAKS_PER_STATION_K} fused hexes in its ~{int(FUSION_STATION_RANGE_METERS / 1000)} km "
         "catchment, merge/de-dupe, then rank by fused PM2.5. Surfaces dirty pockets city-wide "
         "without inventing values outside fusion range."
     ),
 }
+
+# Fields stripped from Map extremes hex payloads (Enforcement still computes confidence).
+_MAP_EXTREMES_STRIP_KEYS: tuple[str, ...] = (
+    "attribution_confidence_score",
+    "attribution_confidence_level",
+    "confidence_explanation",
+    "confidence_flags",
+    "risk_confidence_factor",
+)
+
+
+def _normalize_extremes_mode(mode: str | None) -> tuple[str | None, str | None]:
+    """Return (canonical_mode, deprecation_warning_or_None).
+
+    Canonical modes only: global_worst | global_best | local_peaks.
+    Legacy ``global`` soft-redirects to ``global_worst`` with a warning.
+    Other legacy names return (None, None) → caller emits a 400-style error.
+    """
+    raw = (mode or EXTREMES_MODE_GLOBAL_WORST).strip().lower().replace("-", "_")
+    if raw in EXTREMES_MODES:
+        return raw, None
+    if raw in _LEGACY_MODE_REDIRECTS:
+        target = _LEGACY_MODE_REDIRECTS[raw]
+        return (
+            target,
+            (
+                f"Mode '{raw}' is deprecated; use '{target}'. "
+                f"Supported modes: {', '.join(sorted(EXTREMES_MODES))}."
+            ),
+        )
+    return None, None
+
+
+def _strip_map_confidence_fields(hexagons: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop deprecated attribution-confidence keys from Map extremes hexes."""
+    cleaned: list[dict[str, Any]] = []
+    for h in hexagons:
+        if not isinstance(h, dict):
+            continue
+        row = dict(h)
+        for k in _MAP_EXTREMES_STRIP_KEYS:
+            row.pop(k, None)
+        cleaned.append(row)
+    return cleaned
 
 
 def _haversine_m_scalar(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -796,31 +867,77 @@ def _extremes_cache_set(key: tuple[Any, ...], payload: dict[str, Any]) -> None:
 
 def get_city_extremes(
     city: str = "bengaluru",
-    n: int = 15,
+    n: int = 30,
     simulated_hour: int | None = None,
-    mode: str = EXTREMES_MODE_GLOBAL,
+    mode: str = EXTREMES_MODE_GLOBAL_WORST,
     peak_k: int = LOCAL_PEAKS_PER_STATION_K,
 ) -> dict[str, Any]:
     if city not in SUPPORTED_CITIES:
         return {"error": f"Unsupported city: '{city}'"}
 
-    mode_norm = (mode or EXTREMES_MODE_GLOBAL).strip().lower().replace("-", "_")
-    if mode_norm in ("local", "peaks", "localpeaks"):
-        mode_norm = EXTREMES_MODE_LOCAL_PEAKS
-    if mode_norm not in EXTREMES_MODES:
+    mode_norm, deprecation_warning = _normalize_extremes_mode(mode)
+    if mode_norm is None:
         return {
             "error": (
                 f"Unsupported extremes mode '{mode}'. "
-                f"Use '{EXTREMES_MODE_GLOBAL}' or '{EXTREMES_MODE_LOCAL_PEAKS}'."
+                f"Use only: 'global_worst' (n=15|30|50), "
+                f"'global_best' (Top {GLOBAL_BEST_N}), or "
+                f"'local_peaks' (peak_k={LOCAL_PEAKS_PER_STATION_K}). "
+                f"Legacy names like local_plume/peaks/worst are no longer accepted."
             )
         }
 
-    peak_k = max(1, min(20, int(peak_k or LOCAL_PEAKS_PER_STATION_K)))
-    cache_key = (city.lower().strip(), int(n), mode_norm, int(peak_k), simulated_hour)
+    # Clamp n to mode intent (Map contract).
+    n_req = max(1, min(100, int(n or 30)))
+    if mode_norm == EXTREMES_MODE_GLOBAL_BEST:
+        n_eff = GLOBAL_BEST_N
+    elif mode_norm == EXTREMES_MODE_GLOBAL_WORST:
+        # Prefer 15|30|50; other values still capped but allowed for prefetch (e.g. 50).
+        n_eff = n_req if n_req in GLOBAL_WORST_NS else min(50, max(15, n_req))
+        if n_req not in GLOBAL_WORST_NS and n_req not in (50, 100):
+            # 100 allowed for warm prefetch headroom → treat as 50 for worst list
+            n_eff = 50 if n_req > 50 else n_eff
+    else:
+        # local_peaks: n is merge cap (headroom for many stations × peak_k)
+        n_eff = n_req
+
+    # Ranking engine: local_peaks vs absolute global ranking.
+    ranking_engine = (
+        EXTREMES_MODE_LOCAL_PEAKS
+        if mode_norm == EXTREMES_MODE_LOCAL_PEAKS
+        else EXTREMES_MODE_GLOBAL_WORST
+    )
+
+    # Local Peaks always uses fixed peak_k=10 (Map contract).
+    peak_k_eff = (
+        LOCAL_PEAKS_PER_STATION_K
+        if mode_norm == EXTREMES_MODE_LOCAL_PEAKS
+        else 0
+    )
+
+    # Cache by ranking engine + effective n (global_best/worst share absolute engine).
+    cache_key = (
+        city.lower().strip(),
+        int(n_eff),
+        ranking_engine,
+        int(peak_k_eff),
+        simulated_hour,
+    )
     cached = _extremes_cache_get(cache_key)
     if cached is not None:
         cached = dict(cached)
         cached["cache_hit"] = True
+        cached["mode"] = mode_norm
+        cached["mode_description"] = _MODE_DESCRIPTIONS[mode_norm]
+        cached["peak_k"] = (
+            peak_k_eff if ranking_engine == EXTREMES_MODE_LOCAL_PEAKS else None
+        )
+        cached["best"] = _strip_map_confidence_fields(list(cached.get("best") or []))
+        cached["worst"] = _strip_map_confidence_fields(list(cached.get("worst") or []))
+        if deprecation_warning:
+            cached["deprecation_warning"] = deprecation_warning
+        else:
+            cached.pop("deprecation_warning", None)
         return cached
 
     hex_df = _load_hexagon_features()
@@ -833,9 +950,9 @@ def get_city_extremes(
 
     fused_arr = _estimate_fused_pm25_for_grid(hex_df)
 
-    # Pre-compute nearest eligible station distance for confidence decay
+    # Nearest-station distances for coverage honesty only.
+    # Attribution confidence is NOT attached on the Map extremes path.
     from backend.app.services.attribution_confidence_service import (
-        attach_confidence_to_hex_payload,
         nearest_station_distances_m,
     )
 
@@ -888,23 +1005,28 @@ def get_city_extremes(
             "nearest_station_distance_m": round(nd, 1) if in_range else None,
             "fusion_method": "idw_nearest_station" if not np.isnan(fusion_val) else "unavailable",
         }
-        attach_confidence_to_hex_payload(
-            entry, wind_speed_kmh=wind_data.get("speed_kmh")
-        )
+        # Do NOT call attach_confidence_to_hex_payload — Map extremes omit confidence.
         hexagon_results.append(entry)
 
     scored = [h for h in hexagon_results if h.get("fused_pm25") is not None]
     scored_asc = sorted(scored, key=lambda h: float(h["fused_pm25"]))
-    # Cleanest: always absolute lowest fused (same for both modes)
-    best = scored_asc[:n]
 
-    # Global worst: absolute highest fused (unchanged math)
-    worst_global = list(reversed(scored_asc[-n:])) if n else []
+    # Cleanest: absolute lowest fused
+    best_n = GLOBAL_BEST_N if mode_norm == EXTREMES_MODE_GLOBAL_BEST else n_eff
+    best = scored_asc[:best_n]
+
+    # Global worst: absolute highest fused
+    worst_global = list(reversed(scored_asc[-n_eff:])) if n_eff else []
     # Local peaks worst: per-station catchment top-K merge
-    worst_local = _select_local_peaks_worst(scored, n=n, peak_k=peak_k)
+    worst_local = _select_local_peaks_worst(
+        scored, n=n_eff, peak_k=peak_k_eff or LOCAL_PEAKS_PER_STATION_K
+    )
 
-    if mode_norm == EXTREMES_MODE_LOCAL_PEAKS:
+    if ranking_engine == EXTREMES_MODE_LOCAL_PEAKS:
         worst = worst_local
+    elif mode_norm == EXTREMES_MODE_GLOBAL_BEST:
+        # Best-focused response: still include a small worst sample for nearby-sensor chips
+        worst = worst_global[: min(15, len(worst_global))]
     else:
         worst = worst_global
 
@@ -926,6 +1048,9 @@ def get_city_extremes(
 
     _add_names(best)
     _add_names(worst)
+
+    best = _strip_map_confidence_fields(best)
+    worst = _strip_map_confidence_fields(worst)
 
     max_fused = float(scored_asc[-1]["fused_pm25"]) if scored_asc else None
     tie_count = 0
@@ -951,7 +1076,7 @@ def get_city_extremes(
         "computed_at": datetime.now(tz=timezone.utc).isoformat(),
         "mode": mode_norm,
         "mode_description": _MODE_DESCRIPTIONS[mode_norm],
-        "peak_k": peak_k if mode_norm == EXTREMES_MODE_LOCAL_PEAKS else None,
+        "peak_k": peak_k_eff if ranking_engine == EXTREMES_MODE_LOCAL_PEAKS else None,
         "best": best,
         "worst": worst,
         "total_hexagons_with_data": len(scored),
@@ -962,9 +1087,19 @@ def get_city_extremes(
         "max_station_id": max_station_id,
         "ranking_note": (
             "Only hexes with real fused PM2.5 (station in range) are ranked. "
-            "Uncovered grid cells are not scored as clean — they are unmeasured."
+            "Uncovered grid cells are unmeasured, not clean. "
+            "Map extremes omit attribution confidence; use Enforcement risk-adjusted view for that."
         ),
         "cache_hit": False,
     }
+    if deprecation_warning:
+        payload["deprecation_warning"] = deprecation_warning
+
     _extremes_cache_set(cache_key, payload)
-    return payload
+    out = dict(payload)
+    out["mode"] = mode_norm
+    out["mode_description"] = _MODE_DESCRIPTIONS[mode_norm]
+    out["peak_k"] = (
+        peak_k_eff if ranking_engine == EXTREMES_MODE_LOCAL_PEAKS else None
+    )
+    return out
