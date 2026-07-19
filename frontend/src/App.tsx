@@ -8,6 +8,7 @@ import { SessionProvider, useSession, defaultPathForRole } from './context/Sessi
 import { MapCopilotProvider } from './context/MapCopilotContext';
 
 const EnforcementPage = lazy(() => import('./pages/EnforcementPage'));
+const EnforcementDetailPage = lazy(() => import('./pages/EnforcementDetailPage'));
 const CopilotPage = lazy(() => import('./pages/CopilotPage'));
 const NeighbourhoodsPage = lazy(() => import('./pages/NeighbourhoodsPage'));
 const CitizenModePage = lazy(() => import('./pages/CitizenModePage'));
@@ -84,6 +85,14 @@ export default function App() {
                 element={
                   <Suspense fallback={<RouteFallback />}>
                     <EnforcementPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="enforcement/detail/:h3Cell"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <EnforcementDetailPage />
                   </Suspense>
                 }
               />

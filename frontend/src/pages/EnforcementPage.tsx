@@ -545,9 +545,9 @@ export default function EnforcementPage() {
           />
         </div>
 
-        {/* Desktop: docked glass detail strip */}
+        {/* Desktop: docked glass detail strip (quick preview — expand opens full page) */}
         {activeHex && (
-          <div className="hidden md:block shrink-0 max-h-[52%] overflow-hidden border-t border-white/10">
+          <div className="hidden md:block shrink-0 max-h-[55%] overflow-hidden border-t border-white/10">
             <Suspense
               fallback={
                 <div className="p-6 ui-glass ui-glass-strong text-xs text-apple-secondary text-center">
@@ -557,6 +557,7 @@ export default function EnforcementPage() {
             >
               <EnforcementDetailPanel
                 hex={activeHex}
+                variant="panel"
                 onClose={handleCloseDetail}
                 dispatched={!!dispatchedUnits[activeHex.id]}
                 onDispatch={handleDispatchActive}
@@ -579,6 +580,7 @@ export default function EnforcementPage() {
               <Suspense fallback={<p className="text-xs text-apple-secondary py-6">Loading…</p>}>
                 <EnforcementDetailPanel
                   hex={activeHex}
+                  variant="panel"
                   onClose={handleCloseDetail}
                   dispatched={!!dispatchedUnits[activeHex.id]}
                   onDispatch={handleDispatchActive}

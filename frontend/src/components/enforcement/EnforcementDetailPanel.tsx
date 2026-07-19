@@ -1,4 +1,5 @@
-import React, { Suspense, lazy, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useMemo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ShieldAlert,
   Shield,
@@ -10,6 +11,7 @@ import {
   Database,
   Gauge,
   SlidersHorizontal,
+  Expand,
 } from 'lucide-react';
 import type { PriorityHex } from '../../types';
 import SourceIcon from '../SourceIcon';
@@ -23,6 +25,7 @@ import {
   rankDelta,
   simulateConstructionCounterfactual,
 } from '../../services/enforcementUtils';
+import { cacheEnforcementDetailHex } from '../../services/enforcementDetailCache';
 
 // Recharts is heavy — only load when the detail panel is open (this file is
 // already lazy-loaded from EnforcementPage).
@@ -33,6 +36,20 @@ interface Props {
   onClose: () => void;
   dispatched: boolean;
   onDispatch: () => void;
+  /**
+   * panel = docked preview (expandable)
+   * page = full-route spacious layout
+   */
+  variant?: 'panel' | 'page';
+}
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      'button, a, input, select, textarea, summary, details, label, [role="button"], [data-no-expand]',
+    ),
+  );
 }
 
 export default function EnforcementDetailPanel({
@@ -40,7 +57,10 @@ export default function EnforcementDetailPanel({
   onClose,
   dispatched,
   onDispatch,
+  variant = 'panel',
 }: Props) {
+  const navigate = useNavigate();
+  const isPage = variant === 'page';
   const [copied, setCopied] = useState(false);
   /** 100 = baseline construction intensity */
   const [constructionPct, setConstructionPct] = useState(100);
@@ -53,6 +73,13 @@ export default function EnforcementDetailPanel({
     [hex, constructionPct],
   );
   const confPct = hex.attributionConfidence ?? hex.confidence;
+
+  const openFullPage = useCallback(() => {
+    cacheEnforcementDetailHex(hex);
+    navigate(`/enforcement/detail/${encodeURIComponent(hex.id)}`, {
+      state: { hex },
+    });
+  }, [hex, navigate]);
 
   const copyReport = async () => {
     const lines = [
@@ -81,24 +108,51 @@ export default function EnforcementDetailPanel({
     }
   };
 
+  const handleBodyClick = (e: React.MouseEvent) => {
+    if (isPage) return;
+    if (isInteractiveTarget(e.target)) return;
+    openFullPage();
+  };
+
   return (
     <div
-      className="p-4 sm:p-5 ui-glass ui-glass-strong z-20 relative max-h-full overflow-y-auto border-0 md:border-t md:border-white/10"
+      className={
+        isPage
+          ? 'p-5 sm:p-8 md:p-10 z-20 relative min-h-full'
+          : 'p-4 sm:p-5 ui-glass ui-glass-strong z-20 relative max-h-full overflow-y-auto border-0 md:border-t md:border-white/10 cursor-pointer'
+      }
       role="region"
-      aria-label="Enforcement detail panel"
+      aria-label={isPage ? 'Enforcement detail page' : 'Enforcement detail panel'}
+      onClick={handleBodyClick}
+      title={isPage ? undefined : 'Click to open full detail page'}
     >
-      <div className="max-w-xl mx-auto flex flex-col gap-4">
+      <div
+        className={
+          isPage
+            ? 'max-w-4xl mx-auto flex flex-col gap-6 pb-12'
+            : 'max-w-xl mx-auto flex flex-col gap-4'
+        }
+      >
         {/* Header */}
-        <div className="flex justify-between items-start border-b border-apple-border/50 pb-3">
+        <div className="flex justify-between items-start border-b border-apple-border/50 pb-3 gap-2">
           <div className="flex gap-3 items-start min-w-0">
             <div
-              className={`h-11 w-11 rounded-xl border flex items-center justify-center shrink-0 ${tierStyle.bg}`}
+              className={`rounded-xl border flex items-center justify-center shrink-0 ${tierStyle.bg} ${
+                isPage ? 'h-14 w-14' : 'h-11 w-11'
+              }`}
             >
-              <ShieldAlert size={20} className={hex.actionTier === 'IMMEDIATE' ? 'animate-pulse' : ''} />
+              <ShieldAlert
+                size={isPage ? 24 : 20}
+                className={hex.actionTier === 'IMMEDIATE' ? 'animate-pulse' : ''}
+              />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-bold text-white tracking-tight truncate">
+                <h3
+                  className={`font-bold text-white tracking-tight truncate ${
+                    isPage ? 'text-xl sm:text-2xl' : 'text-sm'
+                  }`}
+                >
                   {location}
                 </h3>
                 <span
@@ -108,7 +162,9 @@ export default function EnforcementDetailPanel({
                 </span>
               </div>
               <p
-                className="text-[10px] text-apple-secondary font-mono mt-0.5 truncate"
+                className={`text-apple-secondary font-mono mt-0.5 truncate ${
+                  isPage ? 'text-xs' : 'text-[10px]'
+                }`}
                 title={formatHexIdSubtitle(hex)}
               >
                 Score {hex.score10}/10 · Rank #{String(hex.rank).padStart(2, '0')}
@@ -116,8 +172,13 @@ export default function EnforcementDetailPanel({
                   <> · Risk-adj {hex.riskAdjustedScore10}/10</>
                 )}
               </p>
-              <p className="text-[9px] font-mono text-apple-secondary/50 mt-0.5 truncate" title={hex.id}>
-                H3 {hex.id.slice(0, 8)}…{hex.id.slice(-4)}
+              <p
+                className={`font-mono text-apple-secondary/50 mt-0.5 ${
+                  isPage ? 'text-[11px] break-all' : 'text-[9px] truncate'
+                }`}
+                title={hex.id}
+              >
+                {isPage ? `H3 ${hex.id}` : `H3 ${hex.id.slice(0, 8)}…${hex.id.slice(-4)}`}
               </p>
               {hex.isPeakHour && (
                 <p className="text-[10px] text-brand-blue mt-1 flex items-center gap-1">
@@ -133,24 +194,63 @@ export default function EnforcementDetailPanel({
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-apple-card hover:bg-apple-border/20 border border-apple-border flex items-center justify-center text-apple-secondary hover:text-white transition-colors"
-            aria-label="Close detail panel"
-          >
-            <X size={14} />
-          </button>
+
+          <div className="flex items-center gap-1.5 shrink-0" data-no-expand>
+            {!isPage && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openFullPage();
+                }}
+                className="w-8 h-8 rounded-full bg-brand-blue/15 hover:bg-brand-blue/25 border border-brand-blue/40 flex items-center justify-center text-brand-blue hover:text-white transition-colors"
+                aria-label="Expand to full detail page"
+                title="Expand full detail"
+              >
+                <Expand size={14} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+              className="w-8 h-8 rounded-full bg-apple-card hover:bg-apple-border/20 border border-apple-border flex items-center justify-center text-apple-secondary hover:text-white transition-colors"
+              aria-label={isPage ? 'Back to enforcement list' : 'Close detail panel'}
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
 
+        {!isPage && (
+          <button
+            type="button"
+            data-no-expand
+            onClick={(e) => {
+              e.stopPropagation();
+              openFullPage();
+            }}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-brand-blue/30 bg-brand-blue/10 hover:bg-brand-blue/15 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-blue transition-colors"
+          >
+            <Expand size={12} />
+            Open full detail page
+          </button>
+        )}
+
         {/* Metrics row */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className={`grid grid-cols-3 ${isPage ? 'gap-6' : 'gap-4'}`}>
           <div>
             <span className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary">
               PM2.5
             </span>
             <div className="flex items-end gap-1 mt-1">
-              <span className="font-mono text-xl font-bold text-brand-red leading-none">
+              <span
+                className={`font-mono font-bold text-brand-red leading-none ${
+                  isPage ? 'text-3xl' : 'text-xl'
+                }`}
+              >
                 {hex.pm25 || '—'}
               </span>
               <span className="text-[9px] text-apple-secondary pb-0.5">µg/m³</span>
@@ -160,8 +260,12 @@ export default function EnforcementDetailPanel({
             <span className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary">
               Primary Source
             </span>
-            <div className="text-xs font-semibold text-white flex items-center gap-1.5 mt-1">
-              <SourceIcon sourceType={hex.primarySource} size={16} />
+            <div
+              className={`font-semibold text-white flex items-center gap-1.5 mt-1 ${
+                isPage ? 'text-sm' : 'text-xs'
+              }`}
+            >
+              <SourceIcon sourceType={hex.primarySource} size={isPage ? 18 : 16} />
               {hex.primarySource}
             </div>
           </div>
@@ -169,11 +273,15 @@ export default function EnforcementDetailPanel({
             <span className="text-[9px] font-mono uppercase tracking-widest text-apple-secondary">
               Exposure
             </span>
-            <div className="text-xs font-semibold text-white mt-1">{hex.exposure}</div>
+            <div
+              className={`font-semibold text-white mt-1 ${isPage ? 'text-sm' : 'text-xs'}`}
+            >
+              {hex.exposure}
+            </div>
           </div>
         </div>
 
-        {/* Corridor badge — visible whenever product flag or major-road flag is set */}
+        {/* Corridor badge */}
         {(hex.isTrafficCorridor || hex.isMajorRoadCorridor) && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-brand-blue/10 border border-brand-blue/25 text-brand-blue text-[11px] font-semibold">
             <Car size={14} />
@@ -193,7 +301,7 @@ export default function EnforcementDetailPanel({
               rankDelta(hex) != null && Math.abs(rankDelta(hex)!) >= 2
                 ? 'bg-brand-blue/10 border-brand-blue/35 shadow-lg shadow-brand-blue/10'
                 : 'bg-white/[0.04] border-white/12'
-            }`}
+            } ${isPage ? 'sm:p-5' : ''}`}
           >
             <div className="text-[10px] font-mono uppercase tracking-wider text-brand-blue mb-2 font-bold">
               Rank impact · risk adjustment
@@ -201,14 +309,16 @@ export default function EnforcementDetailPanel({
             <div className="flex items-center justify-center gap-2 text-center">
               <div>
                 <div className="text-[9px] font-mono uppercase text-apple-secondary">Base rank</div>
-                <div className="text-2xl font-mono font-bold text-white">
+                <div className={`font-mono font-bold text-white ${isPage ? 'text-3xl' : 'text-2xl'}`}>
                   #{String(hex.baseRank).padStart(2, '0')}
                 </div>
               </div>
               <div className="text-xl text-apple-secondary px-1">→</div>
               <div>
                 <div className="text-[9px] font-mono uppercase text-brand-blue">Risk-adj rank</div>
-                <div className="text-2xl font-mono font-bold text-brand-blue">
+                <div
+                  className={`font-mono font-bold text-brand-blue ${isPage ? 'text-3xl' : 'text-2xl'}`}
+                >
                   #{String(hex.rank).padStart(2, '0')}
                 </div>
               </div>
@@ -247,9 +357,9 @@ export default function EnforcementDetailPanel({
           </div>
         )}
 
-        {/* Attribution confidence — highlighted card */}
+        {/* Attribution confidence — Enforcement only */}
         <div
-          className="rounded-2xl border px-4 py-3.5"
+          className={`rounded-2xl border px-4 py-3.5 ${isPage ? 'sm:px-5 sm:py-4' : ''}`}
           style={{
             borderColor: `${confidenceLevelColor(hex.attributionConfidenceLevel, confPct)}55`,
             background: `${confidenceLevelColor(hex.attributionConfidenceLevel, confPct)}12`,
@@ -258,7 +368,10 @@ export default function EnforcementDetailPanel({
         >
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-white/80">
-              <Gauge size={13} style={{ color: confidenceLevelColor(hex.attributionConfidenceLevel, confPct) }} />
+              <Gauge
+                size={13}
+                style={{ color: confidenceLevelColor(hex.attributionConfidenceLevel, confPct) }}
+              />
               Attribution confidence
             </div>
             <span
@@ -274,7 +387,7 @@ export default function EnforcementDetailPanel({
           </div>
           <div className="flex items-end gap-2">
             <span
-              className="text-3xl font-mono font-bold leading-none"
+              className={`font-mono font-bold leading-none ${isPage ? 'text-4xl' : 'text-3xl'}`}
               style={{ color: confidenceLevelColor(hex.attributionConfidenceLevel, confPct) }}
             >
               {confPct != null ? confPct : '—'}
@@ -298,8 +411,14 @@ export default function EnforcementDetailPanel({
           )}
         </div>
 
-        {/* Bounded what-if: construction intensity */}
-        <div className="rounded-2xl bg-gradient-to-br from-brand-orange/10 to-brand-blue/5 border border-brand-orange/30 p-4 space-y-3 shadow-lg shadow-brand-orange/5">
+        {/* What-if */}
+        <div
+          className={`rounded-2xl bg-gradient-to-br from-brand-orange/10 to-brand-blue/5 border border-brand-orange/30 space-y-3 shadow-lg shadow-brand-orange/5 ${
+            isPage ? 'p-5 sm:p-6' : 'p-4'
+          }`}
+          data-no-expand
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-brand-orange font-bold">
               <SlidersHorizontal size={13} />
@@ -397,8 +516,12 @@ export default function EnforcementDetailPanel({
           </details>
         </div>
 
-        {/* Attribution chart — full 4-source mix always shown */}
-        <div className="bg-apple-card/60 border border-apple-border rounded-xl p-4">
+        {/* Attribution chart */}
+        <div
+          className={`bg-apple-card/60 border border-apple-border rounded-xl ${isPage ? 'p-5' : 'p-4'}`}
+          data-no-expand
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-apple-secondary">
               Source Attribution
@@ -425,70 +548,87 @@ export default function EnforcementDetailPanel({
         </div>
 
         {/* Recommendations */}
-        <div className="space-y-3">
+        <div className="space-y-3" data-no-expand onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-2">
             <Shield size={14} className="text-brand-blue" />
             <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-brand-blue">
               Enforcement Recommendations
             </span>
           </div>
-          {recs.map((rec) => (
-            <div
-              key={rec.title}
-              className="bg-apple-card/60 border border-apple-border rounded-xl p-3 space-y-2"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-xs font-bold text-white">{rec.title}</h4>
-                <span
-                  className={`text-[8px] font-bold px-1.5 py-0.5 rounded border ${actionTierStyles(rec.urgency).bg}`}
-                >
-                  {actionTierLabel(rec.urgency)}
-                </span>
+          <div className={isPage ? 'grid sm:grid-cols-2 gap-3' : 'space-y-3'}>
+            {recs.map((rec) => (
+              <div
+                key={rec.title}
+                className="bg-apple-card/60 border border-apple-border rounded-xl p-3 sm:p-4 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className={`font-bold text-white ${isPage ? 'text-sm' : 'text-xs'}`}>
+                    {rec.title}
+                  </h4>
+                  <span
+                    className={`text-[8px] font-bold px-1.5 py-0.5 rounded border ${actionTierStyles(rec.urgency).bg}`}
+                  >
+                    {actionTierLabel(rec.urgency)}
+                  </span>
+                </div>
+                <ul className="space-y-1">
+                  {rec.actions.map((a) => (
+                    <li
+                      key={a}
+                      className="text-[11px] text-apple-secondary leading-relaxed flex gap-1.5"
+                    >
+                      <span className="text-brand-blue shrink-0">•</span>
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-apple-secondary/80 italic">{rec.estimatedImpact}</p>
               </div>
-              <ul className="space-y-1">
-                {rec.actions.map((a) => (
-                  <li key={a} className="text-[11px] text-apple-secondary leading-relaxed flex gap-1.5">
-                    <span className="text-brand-blue shrink-0">•</span>
-                    {a}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[10px] text-apple-secondary/80 italic">{rec.estimatedImpact}</p>
-            </div>
-          ))}
+            ))}
+          </div>
           {hex.explanation?.text && (
-            <div className="bg-apple-card/40 border border-brand-blue/15 rounded-xl p-3">
-              <p className="text-[10px] text-apple-secondary leading-relaxed">
+            <div className="bg-apple-card/40 border border-brand-blue/15 rounded-xl p-3 sm:p-4">
+              <p className="text-[10px] sm:text-[12px] text-apple-secondary leading-relaxed">
                 {hex.explanation.text}
               </p>
               {hex.explanation.generated_by === 'llm' && (
-                <span className="text-[8px] font-mono text-brand-blue/60 mt-1 inline-block">AI guidance</span>
+                <span className="text-[8px] font-mono text-brand-blue/60 mt-1 inline-block">
+                  AI guidance
+                </span>
               )}
             </div>
           )}
         </div>
 
         {/* Evidence metadata */}
-        <div className="bg-black/30 border border-apple-border/60 rounded-xl p-3 space-y-1.5">
+        <div
+          className="bg-black/30 border border-apple-border/60 rounded-xl p-3 sm:p-4 space-y-1.5"
+          data-no-expand
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-apple-secondary">
             <Database size={12} /> Evidence & metadata
           </div>
-          <p className="text-[10px] text-apple-secondary leading-relaxed">
+          <p className="text-[10px] sm:text-[11px] text-apple-secondary leading-relaxed">
             Sources: CPCB/KSPCB stations · OSM land-use & roads · Sentinel-5P NO₂ (attribution path) ·
             FIRMS when available. Corridor:{' '}
             {hex.trafficCorridorApplied ? 'applied' : 'not applied / unavailable'}. TOD multiplier:{' '}
             {hex.trafficTimeMultiplier ?? '—'}
             {hex.isPeakHour ? ' (peak)' : ''}.
           </p>
-          <p className="text-[9px] font-mono text-apple-secondary/70 truncate">Cell {hex.id}</p>
+          <p className="text-[9px] font-mono text-apple-secondary/70 break-all">Cell {hex.id}</p>
         </div>
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-2 justify-end">
+        <div
+          className={`flex flex-wrap gap-2 ${isPage ? 'justify-start pt-2' : 'justify-end'}`}
+          data-no-expand
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={copyReport}
-            className="px-4 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-apple-border bg-apple-card text-white hover:bg-apple-border/30 flex items-center gap-1.5"
+            className="px-4 py-2.5 min-h-[44px] rounded-full text-[10px] font-bold uppercase tracking-wider border border-apple-border bg-apple-card text-white hover:bg-apple-border/30 flex items-center gap-1.5"
           >
             <FileText size={12} />
             {copied ? 'Copied' : 'Copy Brief'}
@@ -497,7 +637,7 @@ export default function EnforcementDetailPanel({
             type="button"
             onClick={onDispatch}
             disabled={dispatched}
-            className={`px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-md ${
+            className={`px-5 py-2.5 min-h-[44px] rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-md ${
               dispatched
                 ? 'bg-brand-green/20 text-brand-green border border-brand-green/30 cursor-not-allowed'
                 : 'bg-brand-blue hover:bg-blue-600 text-white'
